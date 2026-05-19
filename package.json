@@ -1,0 +1,52 @@
+{
+  "name": "neurarch-mcp",
+  "version": "0.1.1",
+  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Gives the agent structural awareness of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams.",
+  "type": "module",
+  "bin": {
+    "neurarch-mcp": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "neural-network",
+    "pytorch",
+    "machine-learning",
+    "claude",
+    "cursor",
+    "windsurf",
+    "neurarch"
+  ],
+  "author": "neurarch-ai",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/neurarch-ai/neurarch-mcp.git"
+  },
+  "homepage": "https://github.com/neurarch-ai/neurarch-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/neurarch-ai/neurarch-mcp/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
+}
