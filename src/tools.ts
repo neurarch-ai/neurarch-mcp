@@ -4,11 +4,15 @@ import { estimateLayerParams, fmtParams } from './lib/paramEstimator.js';
 import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js';
 import { renderMermaid } from './mermaid.js';
 
+export interface ToolContext {
+  modelPath: string;
+}
+
 export interface ToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  handler: (args: any, model: ModelArchitecture) => unknown;
+  handler: (args: any, model: ModelArchitecture, ctx: ToolContext) => unknown | Promise<unknown>;
 }
 
 // ── get_model_summary ────────────────────────────────────────────────────────
