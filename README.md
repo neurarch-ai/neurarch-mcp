@@ -56,6 +56,22 @@ The agent calls `get_model_summary`, then `param_count_by_block`, then `layer_im
 - **Not a generic codebase indexer.** This serves one `.neurarch.json` file. For codebase structure, use [GitNexus](https://github.com/abhigyanpatwari/GitNexus) or similar.
 - **Not connected to your Neurarch workspace.** v1 reads a saved JSON file only. Live editing happens in the Neurarch web app.
 
+## Issues & Feedback
+
+This repo is the public home for both:
+
+- **neurarch-mcp** (this MCP server): bugs, protocol changes, integration questions.
+- **[Neurarch](https://neurarch.com)** (the app): canvas bugs, agent issues, linter rules, feature requests.
+
+| | |
+|---|---|
+| 🐛 **[Report a bug](https://github.com/neurarch-ai/neurarch-mcp/issues/new?template=bug_report.yml)** | Something is broken or behaving unexpectedly. |
+| 💡 **[Request a feature](https://github.com/neurarch-ai/neurarch-mcp/issues/new?template=feature_request.yml)** | An idea that would make Neurarch or the MCP server better. |
+| ❓ **[Ask a question](https://github.com/neurarch-ai/neurarch-mcp/issues/new?template=question.yml)** | Something specific you can't figure out. |
+| 💬 **[Start a discussion](https://github.com/neurarch-ai/neurarch-mcp/discussions)** | Open-ended ideas, design feedback, "how would you…". |
+
+Please tag issues with `mcp`, `app`, `linter`, or `feature-request` so we can triage faster.
+
 ## Development
 
 ```bash

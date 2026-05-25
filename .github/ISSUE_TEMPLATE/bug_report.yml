@@ -1,0 +1,96 @@
+name: 🐛 Bug report
+description: Something in Neurarch is broken or behaving unexpectedly.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! The more detail you give, the faster we can fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect to happen, and what actually happened?
+      placeholder: "When I clicked Generate Code, the panel showed an empty file instead of the exported model."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so we can hit the same bug on our end.
+      placeholder: |
+        1. Sign in with Google
+        2. Open a new canvas, drop a Conv2D node
+        3. Click Generate Code in the right panel
+        4. See empty output
+    validations:
+      required: true
+
+  - type: input
+    id: url
+    attributes:
+      label: URL where it happened
+      description: If reproducible at a specific URL, paste it here.
+      placeholder: "https://neurarch.ai/app"
+
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Safari
+        - Firefox
+        - Edge
+        - Arc / Brave / other Chromium
+        - Mobile browser
+        - Other (mention in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - iOS
+        - Android
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: plan
+    attributes:
+      label: Account tier
+      description: Helps us reproduce on the same plan.
+      options:
+        - Not signed in
+        - Free (signed in)
+        - Pro
+        - Pro Plus
+        - Not sure
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Console errors / screenshots
+      description: Open DevTools → Console and paste any red errors. Screenshots or short screen recordings help a lot.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Final checks
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I can reproduce this consistently (or noted that I can't in the description).
+          required: true

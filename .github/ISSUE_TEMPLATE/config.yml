@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Questions & open-ended discussion
+    url: https://github.com/neurarch-ai/neurarch-mcp/discussions
+    about: For "how do I…", design feedback, or general chat, please use Discussions instead of an issue.
+  - name: 📧 Private / security report
+    url: mailto:neurarch.ai@gmail.com
+    about: For security reports, billing/account issues, or anything you don't want to discuss publicly.

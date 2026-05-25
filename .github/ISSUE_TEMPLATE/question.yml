@@ -1,0 +1,35 @@
+name: ❓ Question about Neurarch
+description: Something about how Neurarch works that you can't figure out from the docs / app.
+title: "[Question]: "
+labels: ["question", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a question:
+        - **Open-ended discussion** ("what would be the best way to…", "what do you think of X") fits better in [Discussions](https://github.com/neurarch-ai/neurarch-feedback/discussions).
+        - **General ML / PyTorch help** is out of scope — this tracker is for Neurarch the product.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and where are you stuck?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you've already tried
+      description: Docs you've read, things you've clicked, search terms you tried.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Final checks
+      options:
+        - label: I searched existing issues / discussions and didn't find an answer.
+          required: true
+        - label: This is about Neurarch the product, not generic ML help.
+          required: true
