@@ -1,7 +1,7 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.2.0",
-  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Gives the agent structural awareness of your neural network: query the layer list, parameters, FLOPs, blast-radius impact, Mermaid topology, and (with --write) mutate the graph via add_layer / modify_layer / add_connection / save_model.",
+  "version": "0.3.0",
+  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Structural awareness of your neural network: layer list, parameters, FLOPs, blast-radius impact, validation (cycles / orphans / dangling edges), shortest path, connection listing, Mermaid topology, hyperparameters, design notes, and (with --write) mutations via add_layer / modify_layer / add_connection / delete_layer / delete_connection / save_model. Supports --watch for live reload.",
   "type": "module",
   "bin": {
     "neurarch-mcp": "dist/index.js"

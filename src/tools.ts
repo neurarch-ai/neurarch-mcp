@@ -2,6 +2,7 @@ import type { MLComponent, ModelArchitecture } from './lib/types.js';
 import { analyzeImpact, resolveTargets, resolveByPattern } from './lib/modelImpact.js';
 import { estimateLayerParams, fmtParams } from './lib/paramEstimator.js';
 import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js';
+import { validateModel } from './lib/validation.js';
 import { renderMermaid } from './mermaid.js';
 
 export interface ToolContext {
@@ -271,6 +272,150 @@ const listBlocks: ToolDef = {
   },
 };
 
+// ── validate_model ───────────────────────────────────────────────────────────
+const validateModelTool: ToolDef = {
+  name: 'validate_model',
+  description: 'Run structural invariants over the model: cycles, dangling connection refs, duplicate ids/names, and orphan layers (no upstream / no downstream). Call before recommending a destructive edit so you can flag pre-existing issues separate from your change. Returns a list of findings with severity error|warn.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  handler: (_args, model) => validateModel(model),
+};
+
+// ── find_path ────────────────────────────────────────────────────────────────
+const findPath: ToolDef = {
+  name: 'find_path',
+  description: 'BFS shortest directed path from one layer to another. Answers "does encoder.0.attention reach lm_head?" — returns the ordered list of layer names along the path, or null when unreachable. Useful before recommending an edit to confirm two layers are actually on the same flow.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      from: { type: 'string', description: 'Source layer name or id.' },
+      to:   { type: 'string', description: 'Target layer name or id.' },
+    },
+    required: ['from', 'to'],
+    additionalProperties: false,
+  },
+  handler: ({ from, to }: { from: string; to: string }, model) => {
+    const { resolved: fromList, unresolved: fromUnresolved } = resolveTargets(model, [from]);
+    if (fromUnresolved.length || !fromList[0]) {
+      return { error: `Cannot find "from" layer "${from}".` };
+    }
+    const { resolved: toList, unresolved: toUnresolved } = resolveTargets(model, [to]);
+    if (toUnresolved.length || !toList[0]) {
+      return { error: `Cannot find "to" layer "${to}".` };
+    }
+    const src = fromList[0];
+    const dst = toList[0];
+
+    const adj = new Map<string, string[]>();
+    for (const c of model.components) adj.set(c.id, []);
+    for (const e of model.connections) adj.get(e.from)?.push(e.to);
+
+    const prev = new Map<string, string | null>();
+    prev.set(src.id, null);
+    const queue: string[] = [src.id];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (id === dst.id) break;
+      for (const n of adj.get(id) ?? []) {
+        if (prev.has(n)) continue;
+        prev.set(n, id);
+        queue.push(n);
+      }
+    }
+    if (!prev.has(dst.id)) {
+      return { reachable: false, path: null };
+    }
+    const ids: string[] = [];
+    let cur: string | null = dst.id;
+    while (cur !== null) {
+      ids.unshift(cur);
+      cur = prev.get(cur) ?? null;
+    }
+    const compById = new Map(model.components.map(c => [c.id, c]));
+    return {
+      reachable: true,
+      length: ids.length - 1,
+      path: ids.map(id => {
+        const c = compById.get(id)!;
+        return { name: c.name, type: c.type };
+      }),
+    };
+  },
+};
+
+// ── list_connections ─────────────────────────────────────────────────────────
+const listConnections: ToolDef = {
+  name: 'list_connections',
+  description: 'Return every connection as {from, to, label?}, with optional filters by source or target layer name. Useful when get_layer\'s upstream/downstream is not enough and the agent needs a flat edge list (e.g. for "what are all the residual links?").',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      from:  { type: 'string', description: 'Optional source layer name or id filter.' },
+      to:    { type: 'string', description: 'Optional target layer name or id filter.' },
+      limit: { type: 'number', description: 'Max results (default 200).' },
+    },
+    additionalProperties: false,
+  },
+  handler: ({ from, to, limit }: { from?: string; to?: string; limit?: number }, model) => {
+    const compById = new Map(model.components.map(c => [c.id, c]));
+    let edges = model.connections.map(e => ({
+      from: compById.get(e.from)?.name ?? e.from,
+      to:   compById.get(e.to)?.name ?? e.to,
+      label: e.label ?? null,
+    }));
+    if (from) {
+      const { resolved } = resolveTargets(model, [from]);
+      const names = new Set(resolved.map(r => r.name));
+      edges = edges.filter(e => names.has(e.from));
+    }
+    if (to) {
+      const { resolved } = resolveTargets(model, [to]);
+      const names = new Set(resolved.map(r => r.name));
+      edges = edges.filter(e => names.has(e.to));
+    }
+    const cap = typeof limit === 'number' && limit > 0 ? limit : 200;
+    return {
+      count: edges.length,
+      truncated: edges.length > cap,
+      connections: edges.slice(0, cap),
+    };
+  },
+};
+
+// ── list_hyperparams ─────────────────────────────────────────────────────────
+const listHyperparams: ToolDef = {
+  name: 'list_hyperparams',
+  description: 'Dump the model-level hyperparameter table (learning rate, batch size, dropout, etc.) the user has set in the Neurarch hyperparams panel. Empty object when none defined. These are training-config knobs, NOT per-layer params.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  handler: (_args, model) => ({
+    count: Object.keys(model.hyperparams ?? {}).length,
+    hyperparams: model.hyperparams ?? {},
+  }),
+};
+
+// ── get_design_notes ─────────────────────────────────────────────────────────
+const getDesignNotes: ToolDef = {
+  name: 'get_design_notes',
+  description: 'Return the model\'s pinned design rationale: notes the user promoted from advisor warnings or agent replies, or typed manually. Each note has source/title/body/createdAt and optional affected layer ids. Use this to ground recommendations in the user\'s stated intent for the architecture before suggesting a change.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      layer: { type: 'string', description: 'Optional layer name or id. When set, return only notes affecting that layer.' },
+    },
+    additionalProperties: false,
+  },
+  handler: ({ layer }: { layer?: string }, model) => {
+    const notes = model.designNotes ?? [];
+    if (!layer) {
+      return { count: notes.length, notes };
+    }
+    const { resolved } = resolveTargets(model, [layer]);
+    if (!resolved.length) return { count: 0, notes: [], error: `Cannot find layer "${layer}".` };
+    const ids = new Set(resolved.map(c => c.id));
+    const filtered = notes.filter(n => n.affectedIds?.some(id => ids.has(id)));
+    return { count: filtered.length, notes: filtered };
+  },
+};
+
 // ── Shared bucketing helper ──────────────────────────────────────────────────
 function bucketize(
   model: ModelArchitecture,
@@ -326,6 +471,11 @@ export const TOOLS: ToolDef[] = [
   flopsByBlock,
   mermaidDiagram,
   listBlocks,
+  validateModelTool,
+  findPath,
+  listConnections,
+  listHyperparams,
+  getDesignNotes,
 ];
 
 // Suppress unused-export TS warning when not destructured elsewhere

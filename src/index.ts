@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { unwatchFile, watchFile } from 'node:fs';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -6,18 +7,25 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { loadModelFile } from './loader.js';
+import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 
 const HELP = `neurarch-mcp — Model Context Protocol server for a Neurarch model file.
 
 Usage:
-  npx neurarch-mcp <path-to-model.neurarch.json> [--write]
+  npx neurarch-mcp <path-to-model.neurarch.json> [--write] [--watch]
 
 Flags:
   --write   Enable mutation tools (add_layer, modify_layer, add_connection,
-            save_model). Default is read-only — writes are opt-in so accidental
-            mutations cannot clobber the file you are editing in the app.
+            delete_layer, delete_connection, save_model). Default is read-only
+            so accidental mutations cannot clobber the file you are editing in
+            the app.
+  --watch   Reload the model file from disk when it changes. Useful when you
+            are editing in the Neurarch app and want the MCP to track your
+            saves without restarting the server. Incompatible with in-memory
+            edits from --write that have not been persisted: an external save
+            will overwrite them.
 
 Read tools (always available):
 ${TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
@@ -36,11 +44,17 @@ Example Claude Code config (~/.claude/mcp_servers.json):
 }
 `;
 
+function takeFlag(argv: string[], name: string): boolean {
+  const idx = argv.indexOf(name);
+  if (idx === -1) return false;
+  argv.splice(idx, 1);
+  return true;
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const writeIdx = argv.indexOf('--write');
-  const writeEnabled = writeIdx !== -1;
-  if (writeEnabled) argv.splice(writeIdx, 1);
+  const writeEnabled = takeFlag(argv, '--write');
+  const watchEnabled = takeFlag(argv, '--watch');
 
   const arg = argv[0];
   if (!arg || arg === '-h' || arg === '--help') {
@@ -50,9 +64,9 @@ async function main(): Promise<void> {
 
   const modelPath = resolve(arg);
 
-  let model;
+  let currentModel: ModelArchitecture;
   try {
-    model = await loadModelFile(modelPath);
+    currentModel = await loadModelFile(modelPath);
   } catch (e) {
     process.stderr.write(`neurarch-mcp: ${(e as Error).message}\n`);
     process.exit(1);
@@ -67,8 +81,32 @@ async function main(): Promise<void> {
     );
   }
 
+  if (watchEnabled) {
+    process.stderr.write(`neurarch-mcp: watch mode enabled. Polling ${modelPath} for changes.\n`);
+    let reloading = false;
+    watchFile(modelPath, { interval: 1000 }, async (curr, prev) => {
+      if (curr.mtimeMs === prev.mtimeMs) return;
+      if (reloading) return;
+      reloading = true;
+      try {
+        const next = await loadModelFile(modelPath);
+        currentModel = next;
+        process.stderr.write(
+          `neurarch-mcp: reloaded model (${next.components.length} layers, ${next.connections.length} connections).\n`,
+        );
+      } catch (e) {
+        process.stderr.write(`neurarch-mcp: reload failed, keeping previous model: ${(e as Error).message}\n`);
+      } finally {
+        reloading = false;
+      }
+    });
+    const stop = () => { unwatchFile(modelPath); process.exit(0); };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+  }
+
   const server = new Server(
-    { name: 'neurarch-mcp', version: '0.2.0' },
+    { name: 'neurarch-mcp', version: '0.3.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -93,7 +131,7 @@ async function main(): Promise<void> {
       };
     }
     try {
-      const result = await tool.handler(req.params.arguments ?? {}, model, ctx);
+      const result = await tool.handler(req.params.arguments ?? {}, currentModel, ctx);
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };

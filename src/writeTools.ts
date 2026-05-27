@@ -1,6 +1,12 @@
 import { writeFile } from 'node:fs/promises';
 import type { ToolDef } from './tools.js';
-import { addLayer, modifyLayer, addConnection } from './lib/writeOps.js';
+import {
+  addLayer,
+  modifyLayer,
+  addConnection,
+  deleteLayer,
+  deleteConnection,
+} from './lib/writeOps.js';
 
 const addLayerTool: ToolDef = {
   name: 'add_layer',
@@ -71,6 +77,37 @@ const addConnectionTool: ToolDef = {
   handler: (args, model) => addConnection(model, args),
 };
 
+const deleteLayerTool: ToolDef = {
+  name: 'delete_layer',
+  description:
+    'Remove a layer and every connection touching it. Cached shapes on former downstream layers are invalidated and the layer is removed from any groups it belonged to. Returns the list of layers whose shape contracts must be recomputed and the groups affected. Call save_model afterwards. WARNING: this is destructive. Call layer_impact first if the layer sits in the middle of an active path.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Layer name or id to delete.' },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+  handler: (args, model) => deleteLayer(model, args),
+};
+
+const deleteConnectionTool: ToolDef = {
+  name: 'delete_connection',
+  description:
+    'Remove a single directed edge between two existing layers. The target layer\'s cached shape is invalidated. Fails when no such edge exists. Call save_model afterwards.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      from: { type: 'string', description: 'Source layer name or id.' },
+      to:   { type: 'string', description: 'Target layer name or id.' },
+    },
+    required: ['from', 'to'],
+    additionalProperties: false,
+  },
+  handler: (args, model) => deleteConnection(model, args),
+};
+
 const saveModelTool: ToolDef = {
   name: 'save_model',
   description:
@@ -98,5 +135,7 @@ export const WRITE_TOOLS: ToolDef[] = [
   addLayerTool,
   modifyLayerTool,
   addConnectionTool,
+  deleteLayerTool,
+  deleteConnectionTool,
   saveModelTool,
 ];

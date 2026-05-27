@@ -146,6 +146,125 @@ export interface AddConnectionResult {
   to: string;
 }
 
+export interface DeleteLayerInput {
+  name: string;
+}
+
+export interface DeleteLayerResult {
+  id: string;
+  name: string;
+  type: string;
+  removedConnections: number;
+  invalidatedDownstream: string[];
+  removedFromGroups: string[];
+}
+
+export function deleteLayer(
+  model: ModelArchitecture,
+  input: DeleteLayerInput,
+): DeleteLayerResult {
+  const { name } = input;
+  if (!name) throw new Error('delete_layer: "name" is required.');
+
+  const { resolved, unresolved } = resolveTargets(model, [name]);
+  if (unresolved.length || !resolved[0]) {
+    throw new Error(`delete_layer: cannot find layer "${name}".`);
+  }
+  const comp = resolved[0];
+
+  const removedConns = model.connections.filter(
+    c => c.from === comp.id || c.to === comp.id,
+  );
+  const downstreamIds = removedConns
+    .filter(c => c.from === comp.id)
+    .map(c => c.to);
+  const upstreamIds = removedConns
+    .filter(c => c.to === comp.id)
+    .map(c => c.from);
+
+  model.connections = model.connections.filter(
+    c => c.from !== comp.id && c.to !== comp.id,
+  );
+  model.components = model.components.filter(c => c.id !== comp.id);
+
+  const invalidatedDownstream: string[] = [];
+  for (const id of downstreamIds) {
+    const d = model.components.find(c => c.id === id);
+    if (!d) continue;
+    d.inputs = d.inputs.filter(x => x !== comp.id);
+    delete d.inputShape;
+    delete d.outputShape;
+    invalidatedDownstream.push(d.name);
+  }
+  for (const id of upstreamIds) {
+    const u = model.components.find(c => c.id === id);
+    if (!u) continue;
+    u.outputs = u.outputs.filter(x => x !== comp.id);
+  }
+
+  const removedFromGroups: string[] = [];
+  for (const g of model.groups ?? []) {
+    if (g.componentIds.includes(comp.id)) {
+      g.componentIds = g.componentIds.filter(x => x !== comp.id);
+      removedFromGroups.push(g.name);
+    }
+  }
+
+  return {
+    id: comp.id,
+    name: comp.name,
+    type: comp.type,
+    removedConnections: removedConns.length,
+    invalidatedDownstream,
+    removedFromGroups,
+  };
+}
+
+export interface DeleteConnectionInput {
+  from: string;
+  to: string;
+}
+
+export interface DeleteConnectionResult {
+  id: string;
+  from: string;
+  to: string;
+}
+
+export function deleteConnection(
+  model: ModelArchitecture,
+  input: DeleteConnectionInput,
+): DeleteConnectionResult {
+  const { from, to } = input;
+  if (!from || !to) throw new Error('delete_connection: "from" and "to" are required.');
+
+  const { resolved: fromList, unresolved: fromUnresolved } = resolveTargets(model, [from]);
+  if (fromUnresolved.length || !fromList[0]) {
+    throw new Error(`delete_connection: cannot find "from" layer "${from}".`);
+  }
+  const { resolved: toList, unresolved: toUnresolved } = resolveTargets(model, [to]);
+  if (toUnresolved.length || !toList[0]) {
+    throw new Error(`delete_connection: cannot find "to" layer "${to}".`);
+  }
+  const fromComp = fromList[0];
+  const toComp = toList[0];
+
+  const conn = model.connections.find(c => c.from === fromComp.id && c.to === toComp.id);
+  if (!conn) {
+    throw new Error(
+      `delete_connection: no edge from "${fromComp.name}" to "${toComp.name}".`,
+    );
+  }
+
+  model.connections = model.connections.filter(c => c.id !== conn.id);
+  fromComp.outputs = fromComp.outputs.filter(x => x !== toComp.id);
+  toComp.inputs = toComp.inputs.filter(x => x !== fromComp.id);
+  delete toComp.inputShape;
+  delete toComp.outputShape;
+
+  return { id: conn.id, from: fromComp.name, to: toComp.name };
+}
+
 export function addConnection(
   model: ModelArchitecture,
   input: AddConnectionInput,

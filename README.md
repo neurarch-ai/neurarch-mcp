@@ -30,18 +30,41 @@ To produce the model file: open your model in the [Neurarch](https://neurarch.co
 
 ## Tools
 
+### Read (always available)
+
 | Tool | What it does |
 |---|---|
 | `get_model_summary` | One-shot overview: layer count, total params, dominant types, input/output shape. |
 | `get_layer` | Full definition of one layer by name: params, shapes, notes, upstream/downstream ids. |
 | `find_layers` | Search layers by type and/or name regex. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
+| `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
+| `find_path` | Shortest directed path between two layers, or `null` when unreachable. |
+| `list_connections` | Flat edge list with optional `from` / `to` filters. |
 | `param_count_by_block` | Parameter counts grouped by block / scope / type. |
 | `flops_by_block` | MAC counts (FLOPs ÷ 2) grouped by block / scope / type. |
 | `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax. Truncates past 60 layers. |
 | `list_blocks` | List collapsed groups (or scope-derived blocks if none): members, params, FLOPs. |
+| `list_hyperparams` | Model-level hyperparameters (learning rate, batch size, ...) the user set in the app. |
+| `get_design_notes` | Pinned design rationale: agent / advisor / manual notes, optionally filtered by layer. |
 
-`layer_impact` is the headline tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild."
+### Write (opt in with `--write`)
+
+| Tool | What it does |
+|---|---|
+| `add_layer` | Insert a new layer, optionally auto-wired downstream of an existing one. |
+| `modify_layer` | Shallow-merge params, rename, or change scope. Returns a before/after diff. |
+| `add_connection` | Wire two existing layers. Fails on self-loops and duplicate edges. |
+| `delete_layer` | Remove a layer and every connection touching it. Invalidates downstream shapes. |
+| `delete_connection` | Remove a single directed edge. Invalidates the target's cached shape. |
+| `save_model` | Persist the in-memory model to disk. Call this after any mutation. |
+
+`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change.
+
+### Flags
+
+- `--write` — expose mutation tools. Off by default so accidental writes can't clobber a file you're editing in the Neurarch app.
+- `--watch` — poll the model file for changes and reload on save. Pair with the Neurarch app: edit visually, agent sees the latest graph without restarting the MCP server. Note: an external save will overwrite any unsaved in-memory edits made via `--write`.
 
 ## Example prompt (Claude Code)
 
