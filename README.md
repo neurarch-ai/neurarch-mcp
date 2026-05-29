@@ -118,6 +118,10 @@ Please tag issues with `mcp`, `app`, `linter`, or `feature-request` so we can tr
 
 If `neurarch-mcp` saved you from pasting an `nn.Module` into chat, a ⭐ helps other ML engineers find it. It is the lowest-effort way to support the project.
 
+## Contributing
+
+A new tool is a small, self-contained PR. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the 3-step "add a tool" guide.
+
 ## Development
 
 ```bash
