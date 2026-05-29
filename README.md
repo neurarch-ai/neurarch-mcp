@@ -1,8 +1,20 @@
 # neurarch-mcp
 
+[![npm version](https://img.shields.io/npm/v/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Model Context Protocol](https://img.shields.io/badge/MCP-server-7c3aed.svg)](https://modelcontextprotocol.io)
+[![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
+
 Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Cursor, Windsurf, Codex, and any other MCP-aware AI agent.
 
 The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
+
+<!-- Demo (highest-converting element for stars): record a 15-30s clip of the agent answering a
+     model-structure question inside Claude Code or Cursor, save it to docs/demo.gif, then uncomment:
+![neurarch-mcp answering a model-structure question inside Claude Code](docs/demo.gif)
+-->
+
 
 ## Why
 
@@ -24,7 +36,14 @@ No install. Just point your MCP client at it via `npx`:
 }
 ```
 
-Cursor (`.cursor/mcp.json`), Windsurf, and Codex use the same `command` + `args` shape under their respective config keys.
+Every MCP-aware client uses the same `command` + `args` shape, only the config file differs:
+
+| Client | MCP config |
+|---|---|
+| Claude Code | `~/.claude/mcp_servers.json` |
+| Cursor | `.cursor/mcp.json` |
+| Windsurf | its MCP config (same `command` + `args`) |
+| Codex | its MCP config (same `command` + `args`) |
 
 To produce the model file: open your model in the [Neurarch](https://neurarch.com) app, then **File → Save (.json)**. The MCP server reads that file directly.
 
@@ -94,6 +113,10 @@ This repo is the public home for both:
 | 💬 **[Start a discussion](https://github.com/neurarch-ai/neurarch-mcp/discussions)** | Open-ended ideas, design feedback, "how would you…". |
 
 Please tag issues with `mcp`, `app`, `linter`, or `feature-request` so we can triage faster.
+
+## Star this repo
+
+If `neurarch-mcp` saved you from pasting an `nn.Module` into chat, a ⭐ helps other ML engineers find it. It is the lowest-effort way to support the project.
 
 ## Development
 
