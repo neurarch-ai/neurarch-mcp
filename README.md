@@ -7,9 +7,11 @@
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 [![Try Neurarch](https://img.shields.io/badge/Neurarch-try_it-7c3aed)](https://neurarch.com)
 
-Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Cursor, Windsurf, Codex, and any other MCP-aware AI agent.
+**Your coding agent reads your model as text, so it guesses at shapes and parameter counts. `neurarch-mcp` gives it the structured graph instead.**
 
-The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
+A Model Context Protocol server that plugs your [Neurarch](https://neurarch.com) model graph into Claude Code, Cursor, Windsurf, Codex, and any other MCP-aware agent.
+
+It gets **structural awareness** of your network: layer list, parameter counts, FLOPs, blast-radius impact, and Mermaid diagrams, without pasting 200 lines of `nn.Module` into chat.
 
 <!-- Demo (highest-converting element for stars): record a 15-30s clip of the agent answering a
      model-structure question inside Claude Code or Cursor, save it to docs/demo.gif, then uncomment:
