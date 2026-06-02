@@ -8,9 +8,11 @@
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 [![Try Neurarch](https://img.shields.io/badge/Neurarch-try_it-7c3aed)](https://neurarch.com)
 
-Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex, and any other MCP-aware AI agent.
+**Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead.**
 
-The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, offline design linting, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat. Point it at your `.py` and it reads the model straight out of the source.
+A Model Context Protocol server that plugs a PyTorch `.py` file or a [Neurarch](https://neurarch.com) model graph into Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex, and any other MCP-aware agent.
+
+The agent gets **structural awareness** of your network: layer list, parameter counts, FLOPs, blast-radius impact analysis, the design rules, the full readiness and cost verdict, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat. Point it at your `.py` and it reads the model straight out of the source. All of it runs on your machine: no API key, no account, and no network call unless you turn one on.
 
 <!-- For guaranteed inline autoplay on GitHub: drag docs/demo.webm into any GitHub
      issue or PR comment box, then replace the <video> src below with the resulting
