@@ -3,6 +3,8 @@ import { analyzeImpact, resolveTargets, resolveByPattern } from './lib/modelImpa
 import { estimateLayerParams, fmtParams } from './lib/paramEstimator.js';
 import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js';
 import { validateModel } from './lib/validation.js';
+import { describeArchitecture } from './lib/describe.js';
+import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 
 export interface ToolContext {
@@ -46,6 +48,14 @@ const getModelSummary: ToolDef = {
       dominantTypes,
     };
   },
+};
+
+// ── describe_architecture ────────────────────────────────────────────────────
+const describeArchitectureTool: ToolDef = {
+  name: 'describe_architecture',
+  description: 'One-call orientation: topologically-ordered layer pipeline, model depth (longest path), input/output shapes, total params and MACs, the top-5 heaviest layers by parameters AND by compute, and a validation rollup. Use this instead of chaining get_model_summary + param_count_by_block + flops_by_block + validate_model — it answers "what is this model and where is the budget" in a single call.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  handler: (_args, model) => describeArchitecture(model),
 };
 
 // ── get_layer ────────────────────────────────────────────────────────────────
@@ -100,7 +110,7 @@ const findLayers: ToolDef = {
     if (type) matches = matches.filter(c => c.type === type);
     if (namePattern) {
       try {
-        const re = new RegExp(namePattern);
+        const re = compileUserRegExp(namePattern);
         matches = matches.filter(c => re.test(c.name));
       } catch (e) {
         return { error: `Invalid regex: ${(e as Error).message}` };
@@ -216,14 +226,12 @@ const mermaidDiagram: ToolDef = {
     if (model.components.length <= cap) {
       return { mermaid: renderMermaid(model), truncated: false };
     }
+    const keptComponents = model.components.slice(0, cap);
+    const keptIds = new Set(keptComponents.map(c => c.id));
     const truncated: ModelArchitecture = {
       ...model,
-      components: model.components.slice(0, cap),
-      connections: model.connections.filter(c => {
-        const a = model.components.findIndex(x => x.id === c.from);
-        const b = model.components.findIndex(x => x.id === c.to);
-        return a < cap && b < cap;
-      }),
+      components: keptComponents,
+      connections: model.connections.filter(c => keptIds.has(c.from) && keptIds.has(c.to)),
     };
     return {
       mermaid: renderMermaid(truncated),
@@ -464,6 +472,7 @@ function bucketize(
 
 export const TOOLS: ToolDef[] = [
   getModelSummary,
+  describeArchitectureTool,
   getLayer,
   findLayers,
   layerImpact,

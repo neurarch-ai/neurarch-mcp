@@ -10,6 +10,7 @@
  * downstream layers" before confirming.
  */
 import type { ComponentType, MLComponent, ModelArchitecture } from './types.js';
+import { tryCompileUserRegExp } from './regexGuard.js';
 
 export interface ImpactNode {
   id: string;
@@ -142,10 +143,8 @@ export function resolveTargets(
     if (exact.length) hits.push(...exact);
 
     if (!hits.length && needle.startsWith('/') && needle.length > 2 && needle.endsWith('/')) {
-      try {
-        const re = new RegExp(needle.slice(1, -1));
-        hits.push(...model.components.filter(c => re.test(c.name)));
-      } catch { /* fall through */ }
+      const re = tryCompileUserRegExp(needle.slice(1, -1));
+      if (re) hits.push(...model.components.filter(c => re.test(c.name)));
     }
 
     if (!hits.length) {
@@ -171,12 +170,9 @@ export function resolveByPattern(
   model: ModelArchitecture,
   pattern: string,
 ): MLComponent[] {
-  try {
-    const re = new RegExp(pattern);
-    return model.components.filter(c => re.test(c.name));
-  } catch {
-    return [];
-  }
+  const re = tryCompileUserRegExp(pattern);
+  if (!re) return [];
+  return model.components.filter(c => re.test(c.name));
 }
 
 export function analyzeImpact(

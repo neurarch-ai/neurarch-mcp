@@ -176,6 +176,14 @@ export function estimateLayerFlops(
       return mha + ffn;
     }
 
+    // ── LM head (hidden -> vocab projection) ──────────────────────────────────
+    case 'lmHead': {
+      const d = n(p.embedDim ?? p.hiddenDim ?? inputShape[inputShape.length - 1]);
+      const V = n(p.vocabSize ?? p.numEmbeddings ?? outputShape[outputShape.length - 1]);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      return d > 0 && V > 0 ? T * d * V : 0;
+    }
+
     // ── Feed-forward (MLP block) ──────────────────────────────────────────────
     case 'feedForward': {
       const D  = n(p.embedDim ?? p.hiddenDim);

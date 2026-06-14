@@ -27,5 +27,16 @@ export async function loadModelFile(path: string): Promise<ModelArchitecture> {
       `Use File → Save (.json) in the Neurarch app to produce a valid file.`,
     );
   }
+  // Every tool indexes components by id; a missing/non-string id would surface
+  // later as confusing "layer not found" errors, so reject up front.
+  const badIdx = candidate.components.findIndex(
+    (c) => !c || typeof c !== 'object' || typeof (c as { id?: unknown }).id !== 'string',
+  );
+  if (badIdx !== -1) {
+    throw new Error(
+      `Model file is corrupt: components[${badIdx}] is missing a string "id". ` +
+      `Re-export from the Neurarch app with File → Save (.json).`,
+    );
+  }
   return parsed as ModelArchitecture;
 }

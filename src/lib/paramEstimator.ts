@@ -133,6 +133,14 @@ export function estimateLayerParams(
       // MHA (4d²+4d) + FFN (d·ff+ff + ff·d+d) + 2×LayerNorm (4d)
       return 4 * d * d + 4 * d + d * ff + ff + ff * d + d + 4 * d;
     }
+    case 'lmHead': {
+      // Output projection hidden -> vocab. Default bias=false (and often weight-
+      // tied with the embedding, but we count it untied unless told otherwise).
+      const d = num(p.embedDim ?? p.hiddenDim ?? lastDim);
+      const V = num(p.vocabSize ?? p.numEmbeddings);
+      const bias = p.bias === true ? V : 0;
+      return d > 0 && V > 0 ? d * V + bias : 0;
+    }
     case 'positionalEncoding':
     case 'rope':
       return 0; // learned or fixed, no gradient params

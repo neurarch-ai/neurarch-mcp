@@ -106,7 +106,7 @@ async function main(): Promise<void> {
   }
 
   const server = new Server(
-    { name: 'neurarch-mcp', version: '0.3.0' },
+    { name: 'neurarch-mcp', version: '0.4.0' },
     { capabilities: { tools: {} } },
   );
 

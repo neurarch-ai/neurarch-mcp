@@ -1,5 +1,6 @@
 # neurarch-mcp
 
+[![CI](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
@@ -55,6 +56,7 @@ To produce the model file: open your model in the [Neurarch](https://neurarch.co
 | Tool | What it does |
 |---|---|
 | `get_model_summary` | One-shot overview: layer count, total params, dominant types, input/output shape. |
+| `describe_architecture` | One-call orientation: topo-ordered pipeline, depth, IO shapes, total params/MACs, top-5 param **and** compute hotspots, validation rollup. Replaces a 4-tool chain. |
 | `get_layer` | Full definition of one layer by name: params, shapes, notes, upstream/downstream ids. |
 | `find_layers` | Search layers by type and/or name regex. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
@@ -92,7 +94,7 @@ After wiring the server, in Claude Code:
 
 > Look at the Neurarch model. Where do the parameters actually live, and which block would shrink the model fastest if I cut it in half?
 
-The agent calls `get_model_summary`, then `param_count_by_block`, then `layer_impact` on the heaviest block, and writes a recommendation grounded in the actual numbers from your model.
+The agent calls `describe_architecture` (one shot: pipeline, depth, param + compute hotspots, validation), then `layer_impact` on the heaviest block, and writes a recommendation grounded in the actual numbers from your model.
 
 ## What this is not
 
@@ -129,9 +131,13 @@ A new tool is a small, self-contained PR. See [CONTRIBUTING.md](./CONTRIBUTING.m
 git clone https://github.com/neurarch-ai/neurarch-mcp
 cd neurarch-mcp
 npm install
+npm run typecheck             # tsc --noEmit
 npm run build                 # tsup → dist/index.js
+npm test                      # vitest (≈100 unit tests)
 node dist/index.js --help     # confirm bin works
 ```
+
+CI runs `typecheck` + `build` + `test` on Node 20 and 22 for every push and PR.
 
 The package vendors a small set of pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer) from the main Neurarch repo. They live under `src/lib/` and have no runtime dependencies beyond `@modelcontextprotocol/sdk`.
 
