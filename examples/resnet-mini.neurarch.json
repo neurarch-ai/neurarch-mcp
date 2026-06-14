@@ -1,0 +1,46 @@
+{
+  "id": "example-resnet-mini",
+  "name": "resnet-mini",
+  "description": "A minimal ResNet: a conv stem and one residual block (two conv-bn stages plus an identity skip merged by an add node), then global pooling and a classifier. Hand-written example showing a branchier graph with a skip connection, so impact/validation/path tools have a merge node to reason about.",
+  "components": [
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": {}, "inputs": [], "outputs": ["stem_conv"], "outputShape": [3, 32, 32] },
+    { "id": "stem_conv", "type": "conv2d", "name": "stem_conv", "position": { "x": 0, "y": 100 }, "params": { "inChannels": 3, "outChannels": 64, "kernelSize": 3, "padding": 1 }, "inputs": ["input"], "outputs": ["stem_bn"], "scope": "stem", "inputShape": [3, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "stem_bn", "type": "batchNorm", "name": "stem_bn", "position": { "x": 0, "y": 200 }, "params": { "numFeatures": 64 }, "inputs": ["stem_conv"], "outputs": ["stem_relu"], "scope": "stem", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "stem_relu", "type": "relu", "name": "stem_relu", "position": { "x": 0, "y": 300 }, "params": {}, "inputs": ["stem_bn"], "outputs": ["conv_a", "add"], "scope": "stem", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "conv_a", "type": "conv2d", "name": "block1_conv_a", "position": { "x": -100, "y": 400 }, "params": { "inChannels": 64, "outChannels": 64, "kernelSize": 3, "padding": 1 }, "inputs": ["stem_relu"], "outputs": ["bn_a"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "bn_a", "type": "batchNorm", "name": "block1_bn_a", "position": { "x": -100, "y": 500 }, "params": { "numFeatures": 64 }, "inputs": ["conv_a"], "outputs": ["relu_a"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "relu_a", "type": "relu", "name": "block1_relu_a", "position": { "x": -100, "y": 600 }, "params": {}, "inputs": ["bn_a"], "outputs": ["conv_b"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "conv_b", "type": "conv2d", "name": "block1_conv_b", "position": { "x": -100, "y": 700 }, "params": { "inChannels": 64, "outChannels": 64, "kernelSize": 3, "padding": 1 }, "inputs": ["relu_a"], "outputs": ["bn_b"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "bn_b", "type": "batchNorm", "name": "block1_bn_b", "position": { "x": -100, "y": 800 }, "params": { "numFeatures": 64 }, "inputs": ["conv_b"], "outputs": ["add"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "add", "type": "add", "name": "block1_add", "position": { "x": 0, "y": 900 }, "params": {}, "inputs": ["bn_b", "stem_relu"], "outputs": ["block_relu"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "block_relu", "type": "relu", "name": "block1_relu_out", "position": { "x": 0, "y": 1000 }, "params": {}, "inputs": ["add"], "outputs": ["gap"], "scope": "layer1.0", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
+    { "id": "gap", "type": "globalAvgPool2d", "name": "global_avg_pool", "position": { "x": 0, "y": 1100 }, "params": {}, "inputs": ["block_relu"], "outputs": ["fc"], "scope": "head", "inputShape": [64, 32, 32], "outputShape": [64] },
+    { "id": "fc", "type": "linear", "name": "classifier", "position": { "x": 0, "y": 1200 }, "params": { "inFeatures": 64, "outFeatures": 10 }, "inputs": ["gap"], "outputs": ["output"], "scope": "head", "inputShape": [64], "outputShape": [10] },
+    { "id": "output", "type": "output", "name": "output", "position": { "x": 0, "y": 1300 }, "params": {}, "inputs": ["fc"], "outputs": [], "inputShape": [10] }
+  ],
+  "connections": [
+    { "id": "e0", "from": "input", "to": "stem_conv", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e1", "from": "stem_conv", "to": "stem_bn", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e2", "from": "stem_bn", "to": "stem_relu", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e3", "from": "stem_relu", "to": "conv_a", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e4", "from": "conv_a", "to": "bn_a", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e5", "from": "bn_a", "to": "relu_a", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e6", "from": "relu_a", "to": "conv_b", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e7", "from": "conv_b", "to": "bn_b", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e8", "from": "bn_b", "to": "add", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e9", "from": "stem_relu", "to": "add", "fromPort": "right", "toPort": "right", "label": "identity" },
+    { "id": "e10", "from": "add", "to": "block_relu", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e11", "from": "block_relu", "to": "gap", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e12", "from": "gap", "to": "fc", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e13", "from": "fc", "to": "output", "fromPort": "bottom", "toPort": "top" }
+  ],
+  "groups": [
+    { "id": "g0", "name": "layer1", "componentIds": ["conv_a", "bn_a", "relu_a", "conv_b", "bn_b", "add", "block_relu"], "collapsed": false }
+  ],
+  "hyperparams": {
+    "learningRate": { "value": 0.1, "type": "float", "description": "SGD with momentum, step decay" },
+    "momentum": { "value": 0.9, "type": "float" },
+    "weightDecay": { "value": 0.0001, "type": "float" },
+    "batchSize": { "value": 128, "type": "int" }
+  }
+}

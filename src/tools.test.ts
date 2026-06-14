@@ -70,6 +70,26 @@ describe('find_layers', () => {
     const r = call('find_layers', { namePattern: '(' });
     expect(r.error).toMatch(/Invalid regex/);
   });
+  it('filters by scope prefix (including nested scopes)', () => {
+    const r = call('find_layers', { scope: 'encoder' });
+    // embed (encoder.embed), block_0/1 (encoder.layer.N), final_norm (encoder.norm)
+    expect(r.layers.map((l: any) => l.name).sort()).toEqual(['block_0', 'block_1', 'embed', 'final_norm']);
+    const exact = call('find_layers', { scope: 'encoder.layer.0' });
+    expect(exact.layers.map((l: any) => l.name)).toEqual(['block_0']);
+  });
+  it('filters by applied augmentation', () => {
+    const m = makeModel();
+    m.components.find(c => c.name === 'block_0')!.augmentations = ['freeze'];
+    const r = call('find_layers', { augmentation: 'freeze' }, m);
+    expect(r.layers.map((l: any) => l.name)).toEqual(['block_0']);
+    expect(r.layers[0].augmentations).toContain('freeze');
+  });
+  it('ranks by parameter count when sortByParams is set', () => {
+    const r = call('find_layers', { sortByParams: true, limit: 3 });
+    const params = r.layers.map((l: any) => l.paramCount);
+    expect(params).toEqual([...params].sort((a, b) => b - a));
+    expect(r.layers[0].name).toBe('embed'); // 32000 x 256 dominates
+  });
 });
 
 describe('layer_impact', () => {

@@ -66,6 +66,7 @@ This repo ships runnable example models under [`examples/`](./examples). Point t
 
 - [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json) — a small GPT-style decoder (embedding, 2 transformer blocks, LM head).
 - [`examples/tiny-cnn.neurarch.json`](./examples/tiny-cnn.neurarch.json) — a CIFAR-style CNN (2 conv stages + classifier).
+- [`examples/resnet-mini.neurarch.json`](./examples/resnet-mini.neurarch.json) — a residual block with a skip/merge node (a branchier graph for impact and path tools).
 
 Then ask: *"describe the architecture, and tell me where the parameter budget lives."*
 
@@ -78,7 +79,7 @@ Then ask: *"describe the architecture, and tell me where the parameter budget li
 | `get_model_summary` | One-shot overview: layer count, total params, dominant types, input/output shape. |
 | `describe_architecture` | One-call orientation: topo-ordered pipeline, depth, IO shapes, total params/MACs, top-5 param **and** compute hotspots, validation rollup. Replaces a 4-tool chain. |
 | `get_layer` | Full definition of one layer by name: params, shapes, notes, upstream/downstream ids. |
-| `find_layers` | Search layers by type and/or name regex. |
+| `find_layers` | Search layers by type, name regex, scope prefix, or augmentation (e.g. frozen layers); optionally rank by parameter count. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
 | `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
 | `find_path` | Shortest directed path between two layers, or `null` when unreachable. |

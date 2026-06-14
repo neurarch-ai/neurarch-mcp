@@ -4,6 +4,19 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0]
+
+### Added
+- **`find_layers` filters** — beyond type and name regex, the tool now filters
+  by `scope` prefix (e.g. `encoder.layer.3` and anything nested under it) and by
+  applied `augmentation` (e.g. `freeze`, `quantize_int8`), and can rank results
+  by parameter count via `sortByParams`. Results now also carry each layer's
+  scope, parameter count, and augmentations. Answers "which layers under X are
+  frozen?" and "what are the biggest layers?" directly. Backward compatible.
+- **`examples/resnet-mini.neurarch.json`** — a residual block with a skip/merge
+  (`add`) node, giving the example set a branchier graph for the impact, path,
+  and validation tools.
+
 ## [0.5.0]
 
 ### Added

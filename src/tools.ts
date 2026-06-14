@@ -96,19 +96,28 @@ const getLayer: ToolDef = {
 // ── find_layers ──────────────────────────────────────────────────────────────
 const findLayers: ToolDef = {
   name: 'find_layers',
-  description: 'Search layers by type and/or name regex. Use this to answer "where are all the convolutions?" or "find every layer matching ^encoder_". Returns names + types — call get_layer for details.',
+  description: 'Search layers by type, name regex, scope prefix, and/or applied augmentation, then optionally rank by parameter count. Answers "where are all the convolutions?", "which layers under encoder.layer.3 are frozen?", or "what are the 5 biggest layers?". Returns name, type, scope, param count, and any augmentations — call get_layer for full detail.',
   inputSchema: {
     type: 'object',
     properties: {
       type:         { type: 'string', description: 'Exact component type (e.g. "conv2d", "linear", "multiHeadAttention").' },
       namePattern:  { type: 'string', description: 'Regex source matched against layer name.' },
+      scope:        { type: 'string', description: 'Scope prefix, e.g. "encoder.layer.3" (matches that scope and anything nested under it).' },
+      augmentation: { type: 'string', description: 'Only layers carrying this augmentation overlay, e.g. "freeze", "quantize_int8", "gradient_checkpoint", "amp".' },
+      sortByParams: { type: 'boolean', description: 'When true, rank results by estimated parameter count (largest first) before applying limit.' },
       limit:        { type: 'number', description: 'Max results (default 100).' },
     },
     additionalProperties: false,
   },
-  handler: ({ type, namePattern, limit }: { type?: string; namePattern?: string; limit?: number }, model) => {
+  handler: (
+    { type, namePattern, scope, augmentation, sortByParams, limit }:
+      { type?: string; namePattern?: string; scope?: string; augmentation?: string; sortByParams?: boolean; limit?: number },
+    model,
+  ) => {
     let matches: MLComponent[] = model.components;
     if (type) matches = matches.filter(c => c.type === type);
+    if (scope) matches = matches.filter(c => c.scope === scope || (c.scope?.startsWith(scope + '.') ?? false));
+    if (augmentation) matches = matches.filter(c => c.augmentations?.includes(augmentation) ?? false);
     if (namePattern) {
       try {
         const re = compileUserRegExp(namePattern);
@@ -117,14 +126,23 @@ const findLayers: ToolDef = {
         return { error: `Invalid regex: ${(e as Error).message}` };
       }
     }
+    const withParams = matches.map(c => ({
+      c,
+      params: estimateLayerParams(c.type, c.params, c.inputShape ?? []),
+    }));
+    if (sortByParams) withParams.sort((a, b) => b.params - a.params);
     const cap = typeof limit === 'number' && limit > 0 ? limit : 100;
     return {
-      count: matches.length,
-      truncated: matches.length > cap,
-      layers: matches.slice(0, cap).map(c => ({
+      count: withParams.length,
+      truncated: withParams.length > cap,
+      layers: withParams.slice(0, cap).map(({ c, params }) => ({
         name: c.name,
         type: c.type,
+        scope: c.scope ?? null,
         outputShape: c.outputShape ?? null,
+        paramCount: params,
+        paramCountFormatted: fmtParams(params),
+        augmentations: c.augmentations ?? [],
       })),
     };
   },
