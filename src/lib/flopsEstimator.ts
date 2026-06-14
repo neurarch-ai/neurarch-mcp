@@ -162,7 +162,12 @@ export function estimateLayerFlops(
       const H = n(p.hiddenSize, 128);
       const I = n(p.inputSize ?? inputShape[inputShape.length - 1], H);
       const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return 2 * 4 * T * (I * H + H * H);
+      const L = n(p.numLayers, 1);
+      // Mirror the unidirectional lstm case but with 2 directions; stacked
+      // layers consume the 2H concatenated input.
+      const layer0 = 2 * 4 * T * (I * H + H * H);
+      const layerRest = L > 1 ? (L - 1) * 2 * 4 * T * (2 * H * H + H * H) : 0;
+      return layer0 + layerRest;
     }
 
     // ── Transformer block ─────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { analyzeImpact, resolveTargets, resolveByPattern } from './lib/modelImpa
 import { estimateLayerParams, fmtParams } from './lib/paramEstimator.js';
 import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js';
 import { validateModel } from './lib/validation.js';
-import { describeArchitecture } from './lib/describe.js';
+import { describeArchitecture, topoOrder } from './lib/describe.js';
 import { getBlock } from './lib/blocks.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
@@ -245,7 +245,9 @@ const mermaidDiagram: ToolDef = {
     if (model.components.length <= cap) {
       return { mermaid: renderMermaid(model), truncated: false };
     }
-    const keptComponents = model.components.slice(0, cap);
+    // Keep the topological head, not an arbitrary file-order prefix, so the
+    // truncated diagram starts at the input and stays connected.
+    const keptComponents = topoOrder(model).order.slice(0, cap);
     const keptIds = new Set(keptComponents.map(c => c.id));
     const truncated: ModelArchitecture = {
       ...model,

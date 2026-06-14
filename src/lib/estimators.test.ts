@@ -28,6 +28,26 @@ describe('estimateLayerParams', () => {
     expect(estimateLayerParams('lmHead', { embedDim: 256, vocabSize: 32000, bias: true })).toBe(256 * 32000 + 32000);
   });
 
+  it('conv2d divides input channels by groups (matches FLOPs convention)', () => {
+    const dense = estimateLayerParams('conv2d', { inChannels: 64, outChannels: 64, kernelSize: 3 });
+    const grouped = estimateLayerParams('conv2d', { inChannels: 64, outChannels: 64, kernelSize: 3, groups: 2 });
+    expect(dense).toBe(64 * 64 * 9 + 64);
+    expect(grouped).toBe(32 * 64 * 9 + 64); // inC/groups
+  });
+
+  it('bidirectionalLSTM counts stacked layers; L=1 matches the legacy formula', () => {
+    const single = estimateLayerParams('bidirectionalLSTM', { hiddenSize: 128, inputSize: 64 });
+    expect(single).toBe(2 * (4 * (64 * 128 + 128 * 128 + 2 * 128)));
+    const stacked = estimateLayerParams('bidirectionalLSTM', { hiddenSize: 128, inputSize: 64, numLayers: 3 });
+    expect(stacked).toBeGreaterThan(single);
+  });
+
+  it('lmHead returns 0 new params when weight-tied to the embedding', () => {
+    expect(estimateLayerParams('lmHead', { embedDim: 256, vocabSize: 32000, weightTied: true })).toBe(0);
+    expect(estimateLayerParams('lmHead', { embedDim: 256, vocabSize: 32000, tied: true })).toBe(0);
+    expect(estimateLayerParams('lmHead', { embedDim: 256, vocabSize: 32000 })).toBe(256 * 32000);
+  });
+
   it('parameter-free ops return 0', () => {
     expect(estimateLayerParams('relu', {})).toBe(0);
     expect(estimateLayerParams('maxpool2d', {})).toBe(0);
@@ -62,6 +82,13 @@ describe('estimateLayerFlops', () => {
   it('conv2d MACs scale with output spatial size', () => {
     const macs = estimateLayerFlops('conv2d', { inChannels: 3, outChannels: 16, kernelSize: 3 }, [3, 32, 32], [16, 32, 32]);
     expect(macs).toBe((3 / 1) * 16 * 3 * 3 * 32 * 32);
+  });
+
+  it('bidirectionalLSTM FLOPs scale with numLayers; L=1 matches legacy', () => {
+    const single = estimateLayerFlops('bidirectionalLSTM', { hiddenSize: 128, inputSize: 64 }, [10, 64], [10, 256]);
+    expect(single).toBe(2 * 4 * 10 * (64 * 128 + 128 * 128));
+    const stacked = estimateLayerFlops('bidirectionalLSTM', { hiddenSize: 128, inputSize: 64, numLayers: 2 }, [10, 64], [10, 256]);
+    expect(stacked).toBeGreaterThan(single);
   });
 
   it('activations and embeddings are cheap / free', () => {

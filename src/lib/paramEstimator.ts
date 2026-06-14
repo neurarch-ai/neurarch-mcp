@@ -35,7 +35,10 @@ export function estimateLayerParams(
       const inC = num(p.inChannels ?? ch, 1);
       const outC = num(p.outChannels);
       const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k * k + outC : 0;
+      const g = num(p.groups, 1) || 1;
+      // Grouped conv: each output channel sees only inC/groups input channels.
+      // Matches the FLOPs estimator, which also divides by groups.
+      return outC > 0 ? Math.floor(inC / g) * outC * k * k + outC : 0;
     }
     case 'conv1d': {
       const inC = num(p.inChannels ?? ch, 1);
@@ -107,7 +110,12 @@ export function estimateLayerParams(
     case 'bidirectionalLSTM': {
       const H = num(p.hiddenSize, 128);
       const I = num(p.inputSize ?? lastDim, H);
-      return 2 * (4 * (I * H + H * H + 2 * H)); // 2× single LSTM
+      const L = num(p.numLayers, 1);
+      // Layer 0: 2 directions × single-LSTM cost. Stacked layers take the
+      // concatenated 2H input, so input2hidden grows to 2H·H per direction.
+      const layer0 = 2 * (4 * (I * H + H * H + 2 * H));
+      const layerRest = L > 1 ? (L - 1) * 2 * (4 * (2 * H * H + H * H + 2 * H)) : 0;
+      return layer0 + layerRest;
     }
     case 'attention':
     case 'selfAttention':
@@ -134,10 +142,12 @@ export function estimateLayerParams(
       return 4 * d * d + 4 * d + d * ff + ff + ff * d + d + 4 * d;
     }
     case 'lmHead': {
-      // Output projection hidden -> vocab. Default bias=false (and often weight-
-      // tied with the embedding, but we count it untied unless told otherwise).
+      // Output projection hidden -> vocab. Default bias=false. When weight-tied
+      // with the token embedding (the common case for modern LLMs), the
+      // projection reuses the embedding matrix and adds no new parameters.
       const d = num(p.embedDim ?? p.hiddenDim ?? lastDim);
       const V = num(p.vocabSize ?? p.numEmbeddings);
+      if (p.weightTied === true || p.tied === true) return p.bias === true ? V : 0;
       const bias = p.bias === true ? V : 0;
       return d > 0 && V > 0 ? d * V + bias : 0;
     }

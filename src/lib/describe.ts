@@ -49,7 +49,7 @@ const HOTSPOT_COUNT = 5;
  * full ordering, any leftover nodes are appended in array order and acyclic is
  * false so the caller can decline to report depth.
  */
-function topoOrder(model: ModelArchitecture): { order: MLComponent[]; acyclic: boolean } {
+export function topoOrder(model: ModelArchitecture): { order: MLComponent[]; acyclic: boolean } {
   const indeg = new Map<string, number>();
   const adj = new Map<string, string[]>();
   for (const c of model.components) { indeg.set(c.id, 0); adj.set(c.id, []); }

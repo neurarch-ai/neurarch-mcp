@@ -190,6 +190,16 @@ describe('mermaid_diagram', () => {
     expect(r.shown).toBe(3);
     expect(r.total).toBe(7);
   });
+  it('truncates from the topological head even when file order differs', () => {
+    // Shuffle so the input layer is LAST in the components array.
+    const m = makeModel();
+    m.components.reverse();
+    const r = call('mermaid_diagram', { maxLayers: 2 }, m);
+    expect(r.truncated).toBe(true);
+    // topo head is input -> embed, so the input layer must still appear
+    expect(r.mermaid).toContain('input');
+    expect(r.mermaid).toContain('embed');
+  });
 });
 
 describe('list_hyperparams / get_design_notes', () => {
