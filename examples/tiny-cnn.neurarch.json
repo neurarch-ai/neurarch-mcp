@@ -1,0 +1,43 @@
+{
+  "id": "example-tiny-cnn",
+  "name": "tiny-cnn",
+  "description": "A small CIFAR-style CNN: two conv-relu-pool stages, flatten, then a classifier head. Hand-written example so you can try neurarch-mcp without the app.",
+  "components": [
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": {}, "inputs": [], "outputs": ["conv1"], "outputShape": [3, 32, 32] },
+    { "id": "conv1", "type": "conv2d", "name": "conv1", "position": { "x": 0, "y": 100 }, "params": { "inChannels": 3, "outChannels": 32, "kernelSize": 3, "padding": 1 }, "inputs": ["input"], "outputs": ["relu1"], "scope": "features.0", "inputShape": [3, 32, 32], "outputShape": [32, 32, 32] },
+    { "id": "relu1", "type": "relu", "name": "relu1", "position": { "x": 0, "y": 200 }, "params": {}, "inputs": ["conv1"], "outputs": ["pool1"], "scope": "features.0", "inputShape": [32, 32, 32], "outputShape": [32, 32, 32] },
+    { "id": "pool1", "type": "maxpool2d", "name": "pool1", "position": { "x": 0, "y": 300 }, "params": { "kernelSize": 2, "stride": 2 }, "inputs": ["relu1"], "outputs": ["conv2"], "scope": "features.0", "inputShape": [32, 32, 32], "outputShape": [32, 16, 16] },
+    { "id": "conv2", "type": "conv2d", "name": "conv2", "position": { "x": 0, "y": 400 }, "params": { "inChannels": 32, "outChannels": 64, "kernelSize": 3, "padding": 1 }, "inputs": ["pool1"], "outputs": ["relu2"], "scope": "features.1", "inputShape": [32, 16, 16], "outputShape": [64, 16, 16] },
+    { "id": "relu2", "type": "relu", "name": "relu2", "position": { "x": 0, "y": 500 }, "params": {}, "inputs": ["conv2"], "outputs": ["pool2"], "scope": "features.1", "inputShape": [64, 16, 16], "outputShape": [64, 16, 16] },
+    { "id": "pool2", "type": "maxpool2d", "name": "pool2", "position": { "x": 0, "y": 600 }, "params": { "kernelSize": 2, "stride": 2 }, "inputs": ["relu2"], "outputs": ["flatten"], "scope": "features.1", "inputShape": [64, 16, 16], "outputShape": [64, 8, 8] },
+    { "id": "flatten", "type": "flatten", "name": "flatten", "position": { "x": 0, "y": 700 }, "params": {}, "inputs": ["pool2"], "outputs": ["fc1"], "inputShape": [64, 8, 8], "outputShape": [4096] },
+    { "id": "fc1", "type": "linear", "name": "fc1", "position": { "x": 0, "y": 800 }, "params": { "inFeatures": 4096, "outFeatures": 256 }, "inputs": ["flatten"], "outputs": ["relu3"], "scope": "classifier", "inputShape": [4096], "outputShape": [256] },
+    { "id": "relu3", "type": "relu", "name": "relu3", "position": { "x": 0, "y": 900 }, "params": {}, "inputs": ["fc1"], "outputs": ["dropout"], "scope": "classifier", "inputShape": [256], "outputShape": [256] },
+    { "id": "dropout", "type": "dropout", "name": "dropout", "position": { "x": 0, "y": 1000 }, "params": { "p": 0.5 }, "inputs": ["relu3"], "outputs": ["fc2"], "scope": "classifier", "inputShape": [256], "outputShape": [256] },
+    { "id": "fc2", "type": "linear", "name": "fc2", "position": { "x": 0, "y": 1100 }, "params": { "inFeatures": 256, "outFeatures": 10 }, "inputs": ["dropout"], "outputs": ["output"], "scope": "classifier", "inputShape": [256], "outputShape": [10] },
+    { "id": "output", "type": "output", "name": "output", "position": { "x": 0, "y": 1200 }, "params": {}, "inputs": ["fc2"], "outputs": [], "inputShape": [10] }
+  ],
+  "connections": [
+    { "id": "e0", "from": "input", "to": "conv1", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e1", "from": "conv1", "to": "relu1", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e2", "from": "relu1", "to": "pool1", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e3", "from": "pool1", "to": "conv2", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e4", "from": "conv2", "to": "relu2", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e5", "from": "relu2", "to": "pool2", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e6", "from": "pool2", "to": "flatten", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e7", "from": "flatten", "to": "fc1", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e8", "from": "fc1", "to": "relu3", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e9", "from": "relu3", "to": "dropout", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e10", "from": "dropout", "to": "fc2", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e11", "from": "fc2", "to": "output", "fromPort": "bottom", "toPort": "top" }
+  ],
+  "groups": [
+    { "id": "g0", "name": "features", "componentIds": ["conv1", "relu1", "pool1", "conv2", "relu2", "pool2"], "collapsed": false },
+    { "id": "g1", "name": "classifier", "componentIds": ["fc1", "relu3", "dropout", "fc2"], "collapsed": false }
+  ],
+  "hyperparams": {
+    "learningRate": { "value": 0.001, "type": "float", "description": "Adam learning rate" },
+    "batchSize": { "value": 128, "type": "int" },
+    "epochs": { "value": 30, "type": "int" }
+  }
+}

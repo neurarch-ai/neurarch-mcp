@@ -4,6 +4,7 @@ import { estimateLayerParams, fmtParams } from './lib/paramEstimator.js';
 import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js';
 import { validateModel } from './lib/validation.js';
 import { describeArchitecture } from './lib/describe.js';
+import { getBlock } from './lib/blocks.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 
@@ -280,6 +281,21 @@ const listBlocks: ToolDef = {
   },
 };
 
+// ── get_block ─────────────────────────────────────────────────────────────────
+const getBlockTool: ToolDef = {
+  name: 'get_block',
+  description: 'Drill into one block (named group, or a scope prefix like "encoder.layer.0"): its member layers with per-layer params and FLOPs, the block totals, and the edges crossing the block boundary — what feeds the block and what it feeds. Use after list_blocks to understand how a block connects to the rest of the graph before recommending extracting, replacing, or freezing it. Returns null when the name resolves to no group or scope.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Group name or id, or a scope prefix (e.g. "encoder" matches "encoder.layer.0").' },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+  handler: ({ name }: { name: string }, model) => getBlock(model, name),
+};
+
 // ── validate_model ───────────────────────────────────────────────────────────
 const validateModelTool: ToolDef = {
   name: 'validate_model',
@@ -480,6 +496,7 @@ export const TOOLS: ToolDef[] = [
   flopsByBlock,
   mermaidDiagram,
   listBlocks,
+  getBlockTool,
   validateModelTool,
   findPath,
   listConnections,

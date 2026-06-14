@@ -49,6 +49,26 @@ Every MCP-aware client uses the same `command` + `args` shape, only the config f
 
 To produce the model file: open your model in the [Neurarch](https://neurarch.com) app, then **File → Save (.json)**. The MCP server reads that file directly.
 
+## Try it in 30 seconds (no app needed)
+
+This repo ships runnable example models under [`examples/`](./examples). Point the server at one and your agent can immediately answer structural questions:
+
+```jsonc
+{
+  "mcpServers": {
+    "neurarch": {
+      "command": "npx",
+      "args": ["-y", "neurarch-mcp", "./examples/tiny-gpt.neurarch.json"]
+    }
+  }
+}
+```
+
+- [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json) — a small GPT-style decoder (embedding, 2 transformer blocks, LM head).
+- [`examples/tiny-cnn.neurarch.json`](./examples/tiny-cnn.neurarch.json) — a CIFAR-style CNN (2 conv stages + classifier).
+
+Then ask: *"describe the architecture, and tell me where the parameter budget lives."*
+
 ## Tools
 
 ### Read (always available)
@@ -67,6 +87,7 @@ To produce the model file: open your model in the [Neurarch](https://neurarch.co
 | `flops_by_block` | MAC counts (FLOPs ÷ 2) grouped by block / scope / type. |
 | `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax. Truncates past 60 layers. |
 | `list_blocks` | List collapsed groups (or scope-derived blocks if none): members, params, FLOPs. |
+| `get_block` | Drill into one block (group or scope prefix): per-layer params/FLOPs, totals, and the edges crossing the block boundary (what feeds it, what it feeds). |
 | `list_hyperparams` | Model-level hyperparameters (learning rate, batch size, ...) the user set in the app. |
 | `get_design_notes` | Pinned design rationale: agent / advisor / manual notes, optionally filtered by layer. |
 
@@ -87,6 +108,7 @@ To produce the model file: open your model in the [Neurarch](https://neurarch.co
 
 - `--write` — expose mutation tools. Off by default so accidental writes can't clobber a file you're editing in the Neurarch app.
 - `--watch` — poll the model file for changes and reload on save. Pair with the Neurarch app: edit visually, agent sees the latest graph without restarting the MCP server. Note: an external save will overwrite any unsaved in-memory edits made via `--write`.
+- `--version` (alias `-v`) — print the version and exit. `--help` (`-h`) prints usage and the full tool list.
 
 ## Example prompt (Claude Code)
 

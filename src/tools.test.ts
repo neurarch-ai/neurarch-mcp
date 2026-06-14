@@ -140,6 +140,18 @@ describe('list_blocks', () => {
   });
 });
 
+describe('get_block', () => {
+  it('drills into a group with members, totals, and boundary edges', () => {
+    const b = call('get_block', { name: 'encoder' });
+    expect(b.memberCount).toBe(2);
+    expect(b.inputs.length).toBeGreaterThan(0);
+    expect(b.outputs.length).toBeGreaterThan(0);
+  });
+  it('returns null for an unknown block', () => {
+    expect(call('get_block', { name: 'nope_xyz' })).toBeNull();
+  });
+});
+
 describe('validate_model tool', () => {
   it('passes the fixture', () => {
     expect(call('validate_model', {}).ok).toBe(true);

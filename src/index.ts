@@ -10,6 +10,9 @@ import { loadModelFile } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
+import pkg from '../package.json';
+
+const VERSION: string = pkg.version;
 
 const HELP = `neurarch-mcp — Model Context Protocol server for a Neurarch model file.
 
@@ -17,6 +20,7 @@ Usage:
   npx neurarch-mcp <path-to-model.neurarch.json> [--write] [--watch]
 
 Flags:
+  --version Print the neurarch-mcp version and exit (alias: -v).
   --write   Enable mutation tools (add_layer, modify_layer, add_connection,
             delete_layer, delete_connection, save_model). Default is read-only
             so accidental mutations cannot clobber the file you are editing in
@@ -53,6 +57,10 @@ function takeFlag(argv: string[], name: string): boolean {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  if (takeFlag(argv, '--version') || takeFlag(argv, '-v')) {
+    process.stdout.write(`neurarch-mcp ${VERSION}\n`);
+    process.exit(0);
+  }
   const writeEnabled = takeFlag(argv, '--write');
   const watchEnabled = takeFlag(argv, '--watch');
 
@@ -106,7 +114,7 @@ async function main(): Promise<void> {
   }
 
   const server = new Server(
-    { name: 'neurarch-mcp', version: '0.4.0' },
+    { name: 'neurarch-mcp', version: VERSION },
     { capabilities: { tools: {} } },
   );
 

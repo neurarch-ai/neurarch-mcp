@@ -1,0 +1,33 @@
+{
+  "id": "example-tiny-gpt",
+  "name": "tiny-gpt",
+  "description": "A small GPT-style decoder: token embedding, two transformer blocks, a final norm, and an LM head. Hand-written example so you can try neurarch-mcp without the app.",
+  "components": [
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": { "seqLen": 256 }, "inputs": [], "outputs": ["tok_emb"], "outputShape": [256] },
+    { "id": "tok_emb", "type": "embedding", "name": "token_embedding", "position": { "x": 0, "y": 100 }, "params": { "vocabSize": 50257, "embeddingDim": 512 }, "inputs": ["input"], "outputs": ["pos_emb"], "scope": "embed", "inputShape": [256], "outputShape": [256, 512] },
+    { "id": "pos_emb", "type": "positionalEncoding", "name": "positional_encoding", "position": { "x": 0, "y": 200 }, "params": { "maxLen": 256, "embedDim": 512 }, "inputs": ["tok_emb"], "outputs": ["block0"], "scope": "embed", "inputShape": [256, 512], "outputShape": [256, 512] },
+    { "id": "block0", "type": "transformerBlock", "name": "block_0", "position": { "x": 0, "y": 300 }, "params": { "embedDim": 512, "numHeads": 8, "ffDim": 2048 }, "inputs": ["pos_emb"], "outputs": ["block1"], "scope": "decoder.layer.0", "inputShape": [256, 512], "outputShape": [256, 512] },
+    { "id": "block1", "type": "transformerBlock", "name": "block_1", "position": { "x": 0, "y": 400 }, "params": { "embedDim": 512, "numHeads": 8, "ffDim": 2048 }, "inputs": ["block0"], "outputs": ["final_norm"], "scope": "decoder.layer.1", "inputShape": [256, 512], "outputShape": [256, 512] },
+    { "id": "final_norm", "type": "layerNorm", "name": "final_norm", "position": { "x": 0, "y": 500 }, "params": { "normalizedShape": 512 }, "inputs": ["block1"], "outputs": ["lm_head"], "scope": "decoder.norm", "inputShape": [256, 512], "outputShape": [256, 512] },
+    { "id": "lm_head", "type": "lmHead", "name": "lm_head", "position": { "x": 0, "y": 600 }, "params": { "embedDim": 512, "vocabSize": 50257 }, "inputs": ["final_norm"], "outputs": ["output"], "inputShape": [256, 512], "outputShape": [256, 50257] },
+    { "id": "output", "type": "output", "name": "output", "position": { "x": 0, "y": 700 }, "params": {}, "inputs": ["lm_head"], "outputs": [], "inputShape": [256, 50257] }
+  ],
+  "connections": [
+    { "id": "e0", "from": "input", "to": "tok_emb", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e1", "from": "tok_emb", "to": "pos_emb", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e2", "from": "pos_emb", "to": "block0", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e3", "from": "block0", "to": "block1", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e4", "from": "block1", "to": "final_norm", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e5", "from": "final_norm", "to": "lm_head", "fromPort": "bottom", "toPort": "top" },
+    { "id": "e6", "from": "lm_head", "to": "output", "fromPort": "bottom", "toPort": "top" }
+  ],
+  "groups": [
+    { "id": "g0", "name": "decoder", "componentIds": ["block0", "block1"], "collapsed": false }
+  ],
+  "hyperparams": {
+    "learningRate": { "value": 0.0003, "type": "float", "description": "AdamW peak LR with cosine decay" },
+    "batchSize": { "value": 32, "type": "int" },
+    "contextLength": { "value": 256, "type": "int" },
+    "dropout": { "value": 0.1, "type": "float" }
+  }
+}

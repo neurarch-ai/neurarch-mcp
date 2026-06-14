@@ -32,11 +32,12 @@ interface ToolDef {
 - `src/index.ts` registers `ListTools` / `CallTool` and dispatches by `name`. Adding a tool to the right array is all the wiring you need.
 - Pure model logic (params, FLOPs, impact, validation) lives in `src/lib/`. Reuse those estimators rather than recomputing.
 
-## Add a read tool in 3 steps
+## Add a read tool in 4 steps
 
-1. **Define** a `ToolDef` in `src/tools.ts`. Write the `description` for the *agent*: say plainly when it should call the tool and what it gets back.
+1. **Define** a `ToolDef` in `src/tools.ts`. Write the `description` for the *agent*: say plainly when it should call the tool and what it gets back. Put non-trivial logic in a unit-testable helper under `src/lib/` (see `lib/describe.ts`, `lib/blocks.ts`).
 2. **Register** it by adding the object to the `TOOLS` array.
-3. **Build and try it** (`npm run build`, then ask your agent a question that should trigger it). Add it to the README tool table.
+3. **Test it.** Add a `*.test.ts` next to the source and a handler case to `src/tools.test.ts`, reusing `makeModel()` from `src/test/fixtures.ts`. Run `npm test`.
+4. **Build and try it** (`npm run build`, then ask your agent a question that should trigger it). Add it to the README tool table.
 
 A write tool is the same, in `WRITE_TOOLS`. Mutations must go through the helpers in `src/lib/writeOps.ts` so shape invalidation and id/name handling stay consistent, and must never write to disk except via `save_model`.
 
@@ -50,7 +51,7 @@ A write tool is the same, in `WRITE_TOOLS`. Mutations must go through the helper
 ## Pull requests
 
 - Branch, commit, open a PR. One tool or one fix per PR.
-- `npm run build` must pass.
+- `npm run typecheck`, `npm run build`, and `npm test` must pass (CI runs all three on Node 20 and 22).
 - Not sure if a tool belongs here or in the app? Open an issue and we will help scope it.
 
 ## Scope

@@ -4,6 +4,20 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0]
+
+### Added
+- **`get_block` tool** — drill into one block (named group or scope prefix):
+  member layers with per-layer params/FLOPs, block totals, and the edges
+  crossing the block boundary (what feeds the block and what it feeds). Pairs
+  with `list_blocks` for high-level → detail navigation.
+- **Runnable example models** under `examples/` (`tiny-gpt`, `tiny-cnn`) so the
+  server can be tried without exporting from the app. A test guards that every
+  shipped example loads and validates with zero errors.
+- **`--version` flag** (alias `-v`) prints the version and exits. The version is
+  now sourced from `package.json`, so the CLI, the MCP handshake, and the
+  package no longer drift.
+
 ## [0.4.0]
 
 ### Added
