@@ -25,6 +25,21 @@ describe('renderMermaid', () => {
     expect(renderMermaid(m)).toContain('in\\"jected');
   });
 
+  it('wraps grouped layers in a Mermaid subgraph', () => {
+    const out = renderMermaid(makeModel());
+    expect(out).toContain('subgraph G0["encoder"]');
+    expect(out).toContain('end');
+    // both block members are declared exactly once (inside the subgraph)
+    const blockNodeDecls = out.match(/N\d+\["block_\d/g) ?? [];
+    expect(blockNodeDecls).toHaveLength(2);
+  });
+
+  it('renders no subgraph when the model has no groups', () => {
+    const m = makeModel();
+    delete m.groups;
+    expect(renderMermaid(m)).not.toContain('subgraph');
+  });
+
   it('skips edges with dangling endpoints', () => {
     const m = makeModel();
     m.connections.push({ id: 'x', from: 'ghost', to: 'in', fromPort: 'bottom', toPort: 'top' });

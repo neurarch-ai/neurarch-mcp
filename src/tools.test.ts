@@ -160,6 +160,16 @@ describe('list_blocks', () => {
   });
 });
 
+describe('compare_layers', () => {
+  it('reports identical sibling blocks', () => {
+    const c = call('compare_layers', { a: 'block_0', b: 'block_1' });
+    expect(c.identical).toBe(true);
+  });
+  it('returns null when a layer is missing', () => {
+    expect(call('compare_layers', { a: 'block_0', b: 'nope_xyz' })).toBeNull();
+  });
+});
+
 describe('get_block', () => {
   it('drills into a group with members, totals, and boundary edges', () => {
     const b = call('get_block', { name: 'encoder' });

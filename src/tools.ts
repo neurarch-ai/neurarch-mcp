@@ -5,6 +5,7 @@ import { estimateLayerFlops, fmtFlops, fmtBytes } from './lib/flopsEstimator.js'
 import { validateModel } from './lib/validation.js';
 import { describeArchitecture, topoOrder } from './lib/describe.js';
 import { getBlock } from './lib/blocks.js';
+import { compareLayers } from './lib/compareLayers.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 
@@ -301,6 +302,22 @@ const listBlocks: ToolDef = {
   },
 };
 
+// ── compare_layers ────────────────────────────────────────────────────────────
+const compareLayersTool: ToolDef = {
+  name: 'compare_layers',
+  description: 'Structurally diff two layers: whether they are the same type, their parameter-count delta, whether input/output shapes match, and exactly which param keys differ (only-in-a, only-in-b, and changed values). Use to answer "are block_0 and block_1 identical?" before deciding whether an edit to one should mirror to the other, or whether two blocks can share an implementation. Returns null when either layer cannot be resolved.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      a: { type: 'string', description: 'First layer name or id.' },
+      b: { type: 'string', description: 'Second layer name or id.' },
+    },
+    required: ['a', 'b'],
+    additionalProperties: false,
+  },
+  handler: ({ a, b }: { a: string; b: string }, model) => compareLayers(model, a, b),
+};
+
 // ── get_block ─────────────────────────────────────────────────────────────────
 const getBlockTool: ToolDef = {
   name: 'get_block',
@@ -511,6 +528,7 @@ export const TOOLS: ToolDef[] = [
   describeArchitectureTool,
   getLayer,
   findLayers,
+  compareLayersTool,
   layerImpact,
   paramCountByBlock,
   flopsByBlock,

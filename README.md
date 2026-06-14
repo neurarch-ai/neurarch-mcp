@@ -79,6 +79,7 @@ Then ask: *"describe the architecture, and tell me where the parameter budget li
 | `get_model_summary` | One-shot overview: layer count, total params, dominant types, input/output shape. |
 | `describe_architecture` | One-call orientation: topo-ordered pipeline, depth, IO shapes, total params/MACs, top-5 param **and** compute hotspots, validation rollup. Replaces a 4-tool chain. |
 | `get_layer` | Full definition of one layer by name: params, shapes, notes, upstream/downstream ids. |
+| `compare_layers` | Structural diff of two layers: same-type, param-count delta, shape match, and exactly which param keys differ. |
 | `find_layers` | Search layers by type, name regex, scope prefix, or augmentation (e.g. frozen layers); optionally rank by parameter count. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
 | `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
@@ -86,7 +87,7 @@ Then ask: *"describe the architecture, and tell me where the parameter budget li
 | `list_connections` | Flat edge list with optional `from` / `to` filters. |
 | `param_count_by_block` | Parameter counts grouped by block / scope / type. |
 | `flops_by_block` | MAC counts (FLOPs ÷ 2) grouped by block / scope / type. |
-| `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax. Truncates past 60 layers. |
+| `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax; groups render as labelled subgraphs. Truncates past 60 layers (keeping the topological head). |
 | `list_blocks` | List collapsed groups (or scope-derived blocks if none): members, params, FLOPs. |
 | `get_block` | Drill into one block (group or scope prefix): per-layer params/FLOPs, totals, and the edges crossing the block boundary (what feeds it, what it feeds). |
 | `list_hyperparams` | Model-level hyperparameters (learning rate, batch size, ...) the user set in the app. |

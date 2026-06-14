@@ -4,6 +4,28 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0]
+
+### Added
+- **`compare_layers` tool** — structural diff of two layers: same-type, the
+  parameter-count delta, whether input/output shapes match, and exactly which
+  param keys differ (only-in-a, only-in-b, changed values). Answers "are
+  block_0 and block_1 identical?" before mirroring an edit or sharing an
+  implementation.
+- **`mermaid_diagram` renders groups as subgraphs** — grouped layers are wrapped
+  in labelled Mermaid `subgraph` blocks so the diagram mirrors the model's
+  blocks; ungrouped layers stay at the top level.
+
+### Fixed
+- `conv2d` parameter count now divides input channels by `groups`, matching the
+  FLOPs estimator (grouped convs were overstated by `groups`×).
+- `bidirectionalLSTM` params and FLOPs now honor `numLayers` (the unidirectional
+  `lstm` case already did); `numLayers: 1` is unchanged.
+- `lmHead` returns no new parameters when `weightTied`/`tied` is set, so
+  weight-tied LLMs no longer inflate the headline parameter total.
+- `mermaid_diagram` truncation keeps the topological head instead of an
+  arbitrary file-order prefix, so the truncated diagram starts at the input.
+
 ## [0.6.0]
 
 ### Added
