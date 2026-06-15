@@ -4,6 +4,21 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0]
+
+### Added
+- **`diff_models` tool** — structurally diff the current model against another
+  `.neurarch.json` file: layers only in current / only in the other / modified
+  (with field-level changes), plus added and removed connections. Layers are
+  matched by name; duplicate names are reported as ambiguous rather than guessed.
+  Use to review what an agent changed, or how the model differs from a checkpoint.
+- **README "what it looks like"** transcript showing a real tool-grounded exchange.
+
+### Changed
+- CLI argument parsing and tool-dispatch gating extracted into a pure,
+  unit-tested `src/cli.ts` (`parseFlags`, `selectTools`, `resolveToolCall`). The
+  write-tool-gating hint ("restart with --write") is now covered by tests.
+
 ## [0.7.0]
 
 ### Added

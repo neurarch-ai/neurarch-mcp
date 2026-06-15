@@ -22,6 +22,30 @@ The agent gets **structural awareness** of your neural network: layer list, para
 
 When you ask Claude Code "rewrite the training loop for my new encoder block", it sees your `train.py` but not your model. It guesses at shapes and parameter counts. `neurarch-mcp` plugs the structured model graph into the same conversation so the agent can answer "what depends on `attn_8`?" or "where does the parameter budget actually live?" with one call instead of ten.
 
+## What it looks like
+
+A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json):
+
+```
+You ▸ Where does the parameter budget live, and is it safe to drop block_1?
+
+Claude ▸ (calls describe_architecture)
+  tiny-gpt — 8 layers, depth 7, 57.8M params, 8.27 GMACs.
+  Heaviest by params: token_embedding (25.7M, 44%), lm_head (25.7M), block_0/1 (3.1M each).
+  Heaviest by compute: lm_head, then the two decoder blocks. Validation: clean.
+
+  (calls layer_impact { names: ["block_1"] })
+  Downstream of block_1: final_norm and lm_head (shape-sensitive, weight-carrying), then output.
+
+  The budget is dominated by the embedding + LM head (~89%), not the decoder blocks,
+  so dropping block_1 frees only ~3.1M params (~5%) while removing one of just two
+  decoder layers. It is structurally safe (final_norm just re-reads block_0's output),
+  but it is the wrong lever if your goal is shrinking the model — quantizing the
+  embedding/head would do far more.
+```
+
+Numbers above are produced by the tools, not estimated by the model.
+
 ## Install
 
 No install. Just point your MCP client at it via `npx`:
@@ -90,6 +114,7 @@ Then ask: *"describe the architecture, and tell me where the parameter budget li
 | `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax; groups render as labelled subgraphs. Truncates past 60 layers (keeping the topological head). |
 | `list_blocks` | List collapsed groups (or scope-derived blocks if none): members, params, FLOPs. |
 | `get_block` | Drill into one block (group or scope prefix): per-layer params/FLOPs, totals, and the edges crossing the block boundary (what feeds it, what it feeds). |
+| `diff_models` | Structurally diff the current model against another `.neurarch.json` file: layers added / removed / modified (field-level) and connection changes. |
 | `list_hyperparams` | Model-level hyperparameters (learning rate, batch size, ...) the user set in the app. |
 | `get_design_notes` | Pinned design rationale: agent / advisor / manual notes, optionally filtered by layer. |
 

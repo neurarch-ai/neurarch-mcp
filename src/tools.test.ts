@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { TOOLS, type ToolContext } from './tools.js';
 import { makeModel } from './test/fixtures.js';
 import type { ModelArchitecture } from './lib/types.js';
@@ -179,6 +182,28 @@ describe('get_block', () => {
   });
   it('returns null for an unknown block', () => {
     expect(call('get_block', { name: 'nope_xyz' })).toBeNull();
+  });
+});
+
+describe('diff_models', () => {
+  it('diffs the current model against a file on disk', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'neurarch-diff-'));
+    try {
+      const other = makeModel();
+      other.components = other.components.filter(c => c.name !== 'final_norm');
+      const p = join(dir, 'other.neurarch.json');
+      await writeFile(p, JSON.stringify(other), 'utf-8');
+      const d = await call('diff_models', { path: p });
+      expect(d.layers.onlyInCurrent.map((l: any) => l.name)).toContain('final_norm');
+      expect(d.identical).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns an error object when the other file cannot be loaded', async () => {
+    const d = await call('diff_models', { path: '/no/such/file.neurarch.json' });
+    expect(d.error).toMatch(/cannot load/);
   });
 });
 

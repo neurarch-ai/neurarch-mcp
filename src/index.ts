@@ -8,8 +8,9 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { loadModelFile } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
-import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
+import { TOOLS, type ToolContext } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
+import { parseFlags, selectTools, resolveToolCall } from './cli.js';
 import pkg from '../package.json';
 
 const VERSION: string = pkg.version;
@@ -48,29 +49,20 @@ Example Claude Code config (~/.claude/mcp_servers.json):
 }
 `;
 
-function takeFlag(argv: string[], name: string): boolean {
-  const idx = argv.indexOf(name);
-  if (idx === -1) return false;
-  argv.splice(idx, 1);
-  return true;
-}
-
 async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
-  if (takeFlag(argv, '--version') || takeFlag(argv, '-v')) {
+  const { versionRequested, helpRequested, writeEnabled, watchEnabled, modelArg } =
+    parseFlags(process.argv.slice(2));
+
+  if (versionRequested) {
     process.stdout.write(`neurarch-mcp ${VERSION}\n`);
     process.exit(0);
   }
-  const writeEnabled = takeFlag(argv, '--write');
-  const watchEnabled = takeFlag(argv, '--watch');
-
-  const arg = argv[0];
-  if (!arg || arg === '-h' || arg === '--help') {
+  if (helpRequested || !modelArg) {
     process.stdout.write(HELP);
-    process.exit(arg ? 0 : 1);
+    process.exit(helpRequested ? 0 : 1);
   }
 
-  const modelPath = resolve(arg);
+  const modelPath = resolve(modelArg);
 
   let currentModel: ModelArchitecture;
   try {
@@ -80,7 +72,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const tools: ToolDef[] = writeEnabled ? [...TOOLS, ...WRITE_TOOLS] : TOOLS;
+  const tools = selectTools(writeEnabled);
   const ctx: ToolContext = { modelPath };
 
   if (writeEnabled) {
@@ -127,15 +119,11 @@ async function main(): Promise<void> {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    const tool = tools.find(t => t.name === req.params.name);
+    const { tool, errorText } = resolveToolCall(req.params.name, writeEnabled);
     if (!tool) {
-      const isWriteTool = WRITE_TOOLS.some(t => t.name === req.params.name);
-      const hint = isWriteTool && !writeEnabled
-        ? ' Restart the MCP server with --write to enable mutation tools.'
-        : '';
       return {
         isError: true,
-        content: [{ type: 'text', text: `Unknown tool: ${req.params.name}.${hint}` }],
+        content: [{ type: 'text', text: errorText! }],
       };
     }
     try {

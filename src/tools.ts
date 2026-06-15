@@ -6,6 +6,8 @@ import { validateModel } from './lib/validation.js';
 import { describeArchitecture, topoOrder } from './lib/describe.js';
 import { getBlock } from './lib/blocks.js';
 import { compareLayers } from './lib/compareLayers.js';
+import { diffModels } from './lib/diffModels.js';
+import { loadModelFile } from './loader.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 
@@ -333,6 +335,30 @@ const getBlockTool: ToolDef = {
   handler: ({ name }: { name: string }, model) => getBlock(model, name),
 };
 
+// ── diff_models ───────────────────────────────────────────────────────────────
+const diffModelsTool: ToolDef = {
+  name: 'diff_models',
+  description: 'Structurally diff the current model against another .neurarch.json file: layers only in current, only in the other, and modified (with field-level changes), plus added/removed connections. Layers are matched by name. Use to review what changed between the model and a saved checkpoint or variant. "current" is the loaded model; the file you pass is "other", so onlyInCurrent is what this model adds relative to it.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Path to the other .neurarch.json file to compare against.' },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  handler: async ({ path }: { path: string }, model) => {
+    if (!path || typeof path !== 'string') return { error: 'diff_models: "path" is required.' };
+    let other;
+    try {
+      other = await loadModelFile(path);
+    } catch (e) {
+      return { error: `diff_models: cannot load "${path}": ${(e as Error).message}` };
+    }
+    return diffModels(model, other);
+  },
+};
+
 // ── validate_model ───────────────────────────────────────────────────────────
 const validateModelTool: ToolDef = {
   name: 'validate_model',
@@ -535,6 +561,7 @@ export const TOOLS: ToolDef[] = [
   mermaidDiagram,
   listBlocks,
   getBlockTool,
+  diffModelsTool,
   validateModelTool,
   findPath,
   listConnections,
