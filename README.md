@@ -12,7 +12,19 @@ Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) mo
 
 The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
 
-[![neurarch-mcp answering a model-structure question, grounded in real tool output](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
+<!-- For guaranteed inline autoplay on GitHub: drag docs/demo.webm into any GitHub
+     issue or PR comment box, then replace the <video> src below with the resulting
+     https://github.com/user-attachments/assets/... URL. The raw URL works as a
+     poster + download fallback until then. -->
+<video
+  src="https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm"
+  poster="https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png"
+  autoplay muted loop playsinline width="900">
+  <a href="https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm">
+    <img src="https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png"
+         alt="neurarch-mcp answering a model-structure question, grounded in real tool output" width="900">
+  </a>
+</video>
 
 <sub>▶ [Watch the 13s demo](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm) — every number above is produced by the tools, not guessed by the model.</sub>
 
