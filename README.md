@@ -12,11 +12,9 @@ Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) mo
 
 The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
 
-<!-- Demo (highest-converting element for stars): record a 15-30s clip of the agent answering a
-     model-structure question inside Claude Code or Cursor, save it to docs/demo.gif, then uncomment:
-![neurarch-mcp answering a model-structure question inside Claude Code](docs/demo.gif)
--->
+[![neurarch-mcp answering a model-structure question, grounded in real tool output](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
 
+<sub>▶ [Watch the 13s demo](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm) — every number above is produced by the tools, not guessed by the model.</sub>
 
 ## Why
 
