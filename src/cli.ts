@@ -11,25 +11,48 @@ export interface ParsedFlags {
   helpRequested: boolean;
   writeEnabled: boolean;
   watchEnabled: boolean;
+  /** Serve over Streamable HTTP instead of stdio (`--http` / `--http=PORT`). */
+  httpEnabled: boolean;
+  /** Port from `--http=PORT`; undefined falls back to the default. */
+  httpPort?: number;
+  /** Bind address from `--host=ADDR`; undefined falls back to loopback. */
+  httpHost?: string;
   /** First non-flag token — the model file path, or undefined if none given. */
   modelArg?: string;
   /** Flags we did not recognise (e.g. "--frobnicate"). */
   unknownFlags: string[];
 }
 
-const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch']);
+const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host']);
+
+/** Base name of a flag token, dropping any `=value` (so `--http=8787` → `--http`). */
+function flagName(token: string): string {
+  const eq = token.indexOf('=');
+  return eq === -1 ? token : token.slice(0, eq);
+}
 
 /** Parse argv (already sliced past `node script`). Pure — does not mutate input. */
 export function parseFlags(argv: string[]): ParsedFlags {
   const flags = argv.filter(a => a.startsWith('-'));
-  const has = (...names: string[]) => names.some(n => flags.includes(n));
+  const has = (...names: string[]) => flags.some(f => names.includes(flagName(f)));
+  const valueOf = (name: string): string | undefined => {
+    const hit = flags.find(f => flagName(f) === name && f.includes('='));
+    return hit ? hit.slice(hit.indexOf('=') + 1) : undefined;
+  };
+
+  const portRaw = valueOf('--http');
+  const port = portRaw !== undefined ? Number(portRaw) : undefined;
+
   return {
     versionRequested: has('--version', '-v'),
     helpRequested: has('--help', '-h'),
     writeEnabled: has('--write'),
     watchEnabled: has('--watch'),
+    httpEnabled: has('--http'),
+    httpPort: port !== undefined && Number.isInteger(port) && port > 0 && port < 65536 ? port : undefined,
+    httpHost: valueOf('--host') || undefined,
     modelArg: argv.find(a => !a.startsWith('-')),
-    unknownFlags: flags.filter(f => !KNOWN_FLAGS.has(f)),
+    unknownFlags: flags.filter(f => !KNOWN_FLAGS.has(flagName(f))),
   };
 }
 

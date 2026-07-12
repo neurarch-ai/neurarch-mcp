@@ -4,6 +4,25 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0]
+
+### Added
+- **Remote transport (`--http`)** — serve the same MCP tools over Streamable
+  HTTP instead of stdio, so a hosted or phone-based agent can drive a model
+  running on your machine (e.g. behind a Cloudflare/Tailscale tunnel). Stateful
+  `Mcp-Session-Id` sessions, `GET /health` liveness probe, zero new runtime
+  deps. `--host=ADDR` sets the bind address (default `127.0.0.1`).
+  - **Auth & safety:** loopback-only by default with DNS-rebinding protection and
+    no CORS; `NEURARCH_MCP_TOKEN` enables constant-time bearer auth and is
+    required before `--write` may bind to a non-loopback host (the server
+    refuses to start otherwise).
+
+### Changed
+- Server wiring extracted into a transport-agnostic `createMcpServer`
+  (`src/server.ts`), shared by the stdio and HTTP paths; the model is now read
+  through a getter so `--watch` reloads are always seen. `parseFlags` gains
+  `--http` / `--host` parsing (unit-tested).
+
 ## [0.8.0]
 
 ### Added

@@ -35,6 +35,35 @@ describe('parseFlags', () => {
     parseFlags(argv);
     expect(argv).toEqual(['--write', 'm.json']);
   });
+
+  it('parses --http as a bare flag (no port) without stealing the model path', () => {
+    const f = parseFlags(['m.json', '--http']);
+    expect(f.httpEnabled).toBe(true);
+    expect(f.httpPort).toBeUndefined();
+    expect(f.modelArg).toBe('m.json');
+    expect(f.unknownFlags).toEqual([]);
+  });
+
+  it('parses --http=PORT and --host=ADDR key/value flags', () => {
+    const f = parseFlags(['m.json', '--http=9000', '--host=0.0.0.0']);
+    expect(f.httpEnabled).toBe(true);
+    expect(f.httpPort).toBe(9000);
+    expect(f.httpHost).toBe('0.0.0.0');
+    expect(f.unknownFlags).toEqual([]);
+  });
+
+  it('rejects an out-of-range or non-numeric http port (falls back to default)', () => {
+    expect(parseFlags(['m.json', '--http=0']).httpPort).toBeUndefined();
+    expect(parseFlags(['m.json', '--http=70000']).httpPort).toBeUndefined();
+    expect(parseFlags(['m.json', '--http=abc']).httpPort).toBeUndefined();
+  });
+
+  it('defaults http off and leaves host/port unset', () => {
+    const f = parseFlags(['m.json']);
+    expect(f.httpEnabled).toBe(false);
+    expect(f.httpPort).toBeUndefined();
+    expect(f.httpHost).toBeUndefined();
+  });
 });
 
 describe('selectTools', () => {
