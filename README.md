@@ -145,7 +145,31 @@ Then ask: *"describe the architecture, and tell me where the parameter budget li
 
 - `--write` — expose mutation tools. Off by default so accidental writes can't clobber a file you're editing in the Neurarch app.
 - `--watch` — poll the model file for changes and reload on save. Pair with the Neurarch app: edit visually, agent sees the latest graph without restarting the MCP server. Note: an external save will overwrite any unsaved in-memory edits made via `--write`.
+- `--http[=PORT]` — serve over Streamable HTTP instead of stdio (default port `8787`). See [Remote access](#remote-access) below.
+- `--host=ADDR` — bind address for `--http`. Defaults to `127.0.0.1` (loopback only).
 - `--version` (alias `-v`) — print the version and exit. `--help` (`-h`) prints usage and the full tool list.
+
+## Remote access
+
+By default the server talks stdio, so the agent and the model file live on the same machine. `--http` serves the same tools over Streamable HTTP, so a **hosted or phone-based agent can drive a model running on your machine** — e.g. behind a Cloudflare or Tailscale tunnel.
+
+```bash
+# local only (safe default: loopback, no auth needed)
+npx neurarch-mcp model.neurarch.json --http
+
+# expose to a tunnel with a bearer token and write tools
+NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
+  npx neurarch-mcp model.neurarch.json --write --http --host=0.0.0.0
+# then point cloudflared / tailscale funnel at :8787 and connect the agent to
+# https://<tunnel>/mcp with the same token.
+```
+
+`POST` JSON-RPC to `/mcp`; `GET /health` is a liveness probe. Sessions follow the standard Streamable HTTP handshake (`Mcp-Session-Id`), so any MCP-aware client connects unchanged.
+
+**Security:**
+
+- Binds to `127.0.0.1` by default. Without a token, the `Host` header is checked against a loopback allowlist (DNS-rebinding protection) and no CORS headers are sent.
+- Set `NEURARCH_MCP_TOKEN` to require `Authorization: Bearer <token>` on every request (constant-time checked). It is **required** before `--write` may bind to a non-loopback host — the server refuses to start otherwise.
 
 ## Example prompt (Claude Code)
 
