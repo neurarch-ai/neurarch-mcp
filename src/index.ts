@@ -47,6 +47,12 @@ Environment:
   NEURARCH_MCP_TOKEN  When set, --http requires 'Authorization: Bearer <token>'
                       on every request (constant-time checked). Required before
                       --write may bind to a non-loopback host.
+  NEURARCH_REPORT     Set to 1 to opt in to anonymous corpus reporting: each
+                      validate_model call shares its structural fingerprint,
+                      layer-type histogram, edge count, and (rule, severity)
+                      pairs. Never the graph, params, names, or any identity.
+                      Off by default; without it this server makes no network
+                      calls at all. Errors never affect the tool call.
 
 Read tools (always available):
 ${TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}

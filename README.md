@@ -171,6 +171,20 @@ NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
 - Binds to `127.0.0.1` by default. Without a token, the `Host` header is checked against a loopback allowlist (DNS-rebinding protection) and no CORS headers are sent.
 - Set `NEURARCH_MCP_TOKEN` to require `Authorization: Bearer <token>` on every request (constant-time checked). It is **required** before `--write` may bind to a non-loopback host — the server refuses to start otherwise.
 
+## Sharing results with the corpus (opt-in)
+
+Set `NEURARCH_REPORT=1` to share one anonymous structure+verdict row per
+`validate_model` call with the Neurarch corpus: the structural fingerprint
+(8-char hash), the layer-type histogram and edge count that let the server
+verify it, and the finding (rule id, severity) pairs. Never the graph,
+parameter values, layer names, file paths, or any identity: the payload shape
+cannot carry them, and the server rejects rows whose fingerprint does not
+recompute from the histogram it came with.
+
+Off by default: without the flag this server makes **no network calls at
+all**. Reporting is fire-and-forget with a 5-second cap, so it can never slow
+or fail a tool call. Policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+
 ## Example prompt (Claude Code)
 
 After wiring the server, in Claude Code:
