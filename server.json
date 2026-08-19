@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.neurarch-ai/neurarch-mcp",
+  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Structural awareness of your neural network: layer list, parameters, FLOPs, blast-radius impact, validation (cycles / orphans / dangling edges), shortest path, connection listing, Mermaid topology, hyperparameters, design notes, and (with --write) mutations via add_layer / modify_layer / add_connection / delete_layer / delete_connection / save_model. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
+  "repository": {
+    "url": "https://github.com/neurarch-ai/neurarch-mcp",
+    "source": "github"
+  },
+  "version": "0.9.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "neurarch-mcp",
+      "version": "0.9.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "model_path",
+          "description": "Absolute path to the .neurarch.json model file (File > Save in the Neurarch app; runnable examples ship in the repo's examples/ folder)",
+          "isRequired": true
+        },
+        {
+          "type": "named",
+          "name": "--watch",
+          "description": "Reload the model file when the Neurarch app saves it",
+          "isRequired": false
+        },
+        {
+          "type": "named",
+          "name": "--write",
+          "description": "Expose the six mutation tools (off by default)",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
