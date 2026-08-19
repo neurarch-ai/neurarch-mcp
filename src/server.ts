@@ -13,8 +13,10 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
+import type { ValidationReport } from './lib/validation.js';
 import { type ToolContext } from './tools.js';
 import { selectTools, resolveToolCall } from './cli.js';
+import { reportingEnabled, buildCorpusReport, sendCorpusReport } from './lib/corpusReport.js';
 
 export interface McpServerOptions {
   /** Reads the current model. A getter so --watch reloads are always seen. */
@@ -51,7 +53,14 @@ export function createMcpServer(opts: McpServerOptions): Server {
       };
     }
     try {
-      const result = await tool.handler(req.params.arguments ?? {}, getModel(), ctx);
+      const model = getModel();
+      const result = await tool.handler(req.params.arguments ?? {}, model, ctx);
+      // Opt-in corpus row (NEURARCH_REPORT=1), validate_model only. Fire and
+      // forget: it can neither slow nor fail the tool call. Privacy scope in
+      // lib/corpusReport.ts.
+      if (tool.name === 'validate_model' && reportingEnabled()) {
+        sendCorpusReport(buildCorpusReport(model, result as ValidationReport));
+      }
       return {
         content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
       };

@@ -4,6 +4,17 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and this project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Opt-in corpus reporting (`NEURARCH_REPORT=1`)** — when explicitly enabled,
+  a `validate_model` call shares one anonymous structure+verdict row with the
+  Neurarch corpus: structural fingerprint (8-char hash), layer-type histogram,
+  edge count, and (rule id, severity) pairs. Never the graph, parameter
+  values, layer names, or any identity; the payload shape cannot carry them.
+  Off by default (no network calls at all without the flag); fire-and-forget
+  with a 5s cap, so reporting can never slow or fail a tool call.
+
 ## [0.9.0]
 
 ### Added

@@ -8,7 +8,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 [![Try Neurarch](https://img.shields.io/badge/Neurarch-try_it-7c3aed)](https://neurarch.com)
 
-Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Cursor, Windsurf, Codex, and any other MCP-aware AI agent.
+Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex, and any other MCP-aware AI agent.
 
 The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
 
@@ -58,30 +58,109 @@ Numbers above are produced by the tools, not estimated by the model.
 
 ## Install
 
-No install. Just point your MCP client at it via `npx`:
+No install step. Every client below launches the server the same way:
 
-```jsonc
-// ~/.claude/mcp_servers.json (Claude Code)
+```bash
+npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json
+```
+
+To produce the model file: open your model in the [Neurarch](https://neurarch.com) app, then **File → Save (.json)**. The MCP server reads that file directly. Add `--watch` so the agent sees app-side saves without a restart, and `--write` if you want the agent to be able to edit the model (off by default).
+
+Use an **absolute** path to the model file in any global config: `npx` does not run from your project directory, so relative paths only work in project-scoped configs.
+
+### Claude Code
+
+One command:
+
+```bash
+claude mcp add neurarch -- npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json --watch
+```
+
+Or commit a project-scoped `.mcp.json` at the repo root so every collaborator gets the server automatically:
+
+```json
 {
   "mcpServers": {
     "neurarch": {
       "command": "npx",
-      "args": ["-y", "neurarch-mcp", "/abs/path/to/your-model.neurarch.json"]
+      "args": ["-y", "neurarch-mcp", "./model.neurarch.json", "--watch"]
     }
   }
 }
 ```
 
-Every MCP-aware client uses the same `command` + `args` shape, only the config file differs:
+### Claude Desktop
 
-| Client | MCP config |
-|---|---|
-| Claude Code | `~/.claude/mcp_servers.json` |
-| Cursor | `.cursor/mcp.json` |
-| Windsurf | its MCP config (same `command` + `args`) |
-| Codex | its MCP config (same `command` + `args`) |
+Open **Settings → Developer → Edit Config**, or edit the file directly:
 
-To produce the model file: open your model in the [Neurarch](https://neurarch.com) app, then **File → Save (.json)**. The MCP server reads that file directly.
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "neurarch": {
+      "command": "npx",
+      "args": ["-y", "neurarch-mcp", "/abs/path/to/your-model.neurarch.json", "--watch"]
+    }
+  }
+}
+```
+
+Fully quit and reopen Claude Desktop (the config is read at startup). The tools appear under the search-and-tools icon in the chat input.
+
+### Cursor
+
+Create `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for all projects), then enable the server under **Settings → MCP**:
+
+```json
+{
+  "mcpServers": {
+    "neurarch": {
+      "command": "npx",
+      "args": ["-y", "neurarch-mcp", "./model.neurarch.json", "--watch"]
+    }
+  }
+}
+```
+
+### VS Code (Copilot agent mode)
+
+Create `.vscode/mcp.json` (note the `servers` key, not `mcpServers`):
+
+```json
+{
+  "servers": {
+    "neurarch": {
+      "command": "npx",
+      "args": ["-y", "neurarch-mcp", "${workspaceFolder}/model.neurarch.json", "--watch"]
+    }
+  }
+}
+```
+
+Or from a shell: `code --add-mcp '{"name":"neurarch","command":"npx","args":["-y","neurarch-mcp","/abs/path/to/model.neurarch.json"]}'`
+
+### Other clients (Windsurf, Codex, ...)
+
+Same `command` + `args` shape; only the config file location differs. For clients that speak Streamable HTTP instead of stdio, run the server with `--http` and point the client at it:
+
+```json
+{
+  "mcpServers": {
+    "neurarch": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp"
+    }
+  }
+}
+```
+
+If you set `NEURARCH_MCP_TOKEN`, add `"headers": { "Authorization": "Bearer <token>" }`. See [Remote access](#remote-access) for tunnels and security.
+
+### Verify it works
+
+Ask the agent: *"List the Neurarch tools you can see."* You should get `describe_architecture`, `layer_impact`, `validate_model` and friends (17 read tools; 6 more with `--write`). From a shell, `npx -y neurarch-mcp --help` prints usage and the full tool list.
 
 ## Try it in 30 seconds (no app needed)
 
@@ -102,7 +181,11 @@ This repo ships runnable example models under [`examples/`](./examples). Point t
 - [`examples/tiny-cnn.neurarch.json`](./examples/tiny-cnn.neurarch.json) — a CIFAR-style CNN (2 conv stages + classifier).
 - [`examples/resnet-mini.neurarch.json`](./examples/resnet-mini.neurarch.json) — a residual block with a skip/merge node (a branchier graph for impact and path tools).
 
-Then ask: *"describe the architecture, and tell me where the parameter budget lives."*
+Then ask:
+
+> Look at the Neurarch model. Where do the parameters actually live, and which block would shrink the model fastest if I cut it in half?
+
+The agent calls `describe_architecture` (one shot: pipeline, depth, param + compute hotspots, validation), then `layer_impact` on the heaviest block, and writes a recommendation grounded in the actual numbers from the model, like the transcript above.
 
 ## Tools
 
@@ -171,13 +254,27 @@ NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
 - Binds to `127.0.0.1` by default. Without a token, the `Host` header is checked against a loopback allowlist (DNS-rebinding protection) and no CORS headers are sent.
 - Set `NEURARCH_MCP_TOKEN` to require `Authorization: Bearer <token>` on every request (constant-time checked). It is **required** before `--write` may bind to a non-loopback host — the server refuses to start otherwise.
 
-## Example prompt (Claude Code)
+## Sharing results with the corpus (opt-in)
 
-After wiring the server, in Claude Code:
+Set `NEURARCH_REPORT=1` to share one anonymous structure+verdict row per
+`validate_model` call with the Neurarch corpus: the structural fingerprint
+(8-char hash), the layer-type histogram and edge count that let the server
+verify it, and the finding (rule id, severity) pairs. Never the graph,
+parameter values, layer names, file paths, or any identity: the payload shape
+cannot carry them, and the server rejects rows whose fingerprint does not
+recompute from the histogram it came with.
 
-> Look at the Neurarch model. Where do the parameters actually live, and which block would shrink the model fastest if I cut it in half?
+Off by default: without the flag this server makes **no network calls at
+all**. Reporting is fire-and-forget with a 5-second cap, so it can never slow
+or fail a tool call. Policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 
-The agent calls `describe_architecture` (one shot: pipeline, depth, param + compute hotspots, validation), then `layer_impact` on the heaviest block, and writes a recommendation grounded in the actual numbers from your model.
+## Troubleshooting
+
+- **The server never appears in the client.** The model path must be absolute in any global config; `npx` does not run from your project directory. Relative paths only work in project-scoped configs (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`).
+- **Read tools work but write tools are missing.** You did not pass `--write`. It is off by default so accidental writes can't clobber a file you're editing in the app.
+- **`npx` fails on first run.** Node >= 20 is required (`node --version`).
+- **Claude Desktop shows nothing after editing the config.** Fully quit and reopen the app; the config is only read at startup.
+- **The agent sees a stale graph after you edit in the app.** Add `--watch`, or restart the server.
 
 ## What this is not
 
