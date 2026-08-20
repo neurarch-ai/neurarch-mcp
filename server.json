@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.neurarch-ai/neurarch-mcp",
-  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Structural awareness of your neural network: layer list, parameters, FLOPs, blast-radius impact, validation (cycles / orphans / dangling edges), shortest path, connection listing, Mermaid topology, hyperparameters, design notes, and (with --write) mutations via add_layer / modify_layer / add_connection / delete_layer / delete_connection / save_model. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
+  "description": "Gives AI agents structural awareness of a neural network via a typed Neurarch model graph.",
   "repository": {
     "url": "https://github.com/neurarch-ai/neurarch-mcp",
     "source": "github"
