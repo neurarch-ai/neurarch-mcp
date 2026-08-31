@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import type { ToolDef } from './tools.js';
+import { sourceKindFor } from './loader.js';
 import {
   addLayer,
   modifyLayer,
@@ -142,6 +143,14 @@ const saveModelTool: ToolDef = {
   handler: async (args: { path?: string }, model, ctx) => {
     const target = args.path ?? ctx.modelPath;
     if (!target) throw new Error('save_model: no path available.');
+    // The model serializes as JSON. Writing it to a .py would destroy the
+    // source file and leave something Python cannot import.
+    if (sourceKindFor(target) === 'pytorch-source') {
+      throw new Error(
+        `save_model: refusing to write JSON over ${target}. This server does not generate Python; `
+        + 'pass a .neurarch.json path instead.',
+      );
+    }
     const json = JSON.stringify(model, null, 2);
     await writeFile(target, json, 'utf-8');
     return { ok: true, written: target, sizeBytes: Buffer.byteLength(json, 'utf-8') };

@@ -188,6 +188,29 @@ describe('CallTool', () => {
     expect(after.structuredContent.layerCount).toBe(3);
   });
 
+  it('answers about a PyTorch file given as model_path', async () => {
+    const path = join(dir, 'net.py');
+    await writeFile(path, [
+      'import torch.nn as nn',
+      '',
+      'class Net(nn.Module):',
+      '    def __init__(self):',
+      '        super().__init__()',
+      '        self.fc = nn.Linear(16, 4)',
+      '',
+      '    def forward(self, x):',
+      '        return self.fc(x)',
+      '',
+    ].join('\n'), 'utf-8');
+    const client = await connect();
+    const res = await client.callTool({
+      name: 'get_model_summary',
+      arguments: { [MODEL_PATH_PARAM]: path },
+    }) as any;
+    expect(res.structuredContent.name).toBe('net');
+    expect(res.structuredContent.totalParameters).toBe(16 * 4 + 4);
+  });
+
   it('still hides write tools without --write', async () => {
     const client = await connect();
     const res = await client.callTool({ name: 'delete_layer', arguments: { name: 'block_0' } }) as any;

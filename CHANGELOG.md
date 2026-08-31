@@ -6,6 +6,72 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0]
+
+### Added
+- **PyTorch source is now a first-class input.** `npx neurarch-mcp model.py` works.
+  The server parses the file into the same graph the app and the CI action use,
+  with the same parser, which removes the precondition that made this server a
+  tool for people who were already Neurarch users: there is no longer a "first
+  go open the app, draw your model and export it" step between installing this
+  and getting an answer.
+
+  What comes out of source is exact for layers, types, hyperparameters and
+  wiring. Tensor shapes do not, because the source never says what goes in, so
+  parameter counts still come out while FLOPs and shape contracts report as
+  unknown rather than as a confident zero. `--write` is refused on a `.py` file
+  and `save_model` refuses a `.py` target, because the graph was derived from
+  the source and this server does not generate Python.
+
+- **`lint_model`** — the design rules, offline and with no API key: attention
+  head-dim and GQA divisibility, normalization and activation ordering, dropout
+  and feature ranges, missing residuals in deep stacks, and the shape rules that
+  can be decided statically. The same rule set the Neurarch CI action reports,
+  so a clean result here is a clean CI run.
+
+  It completes a ladder that was missing its middle rung. `validate_model` asks
+  whether the thing is a well-formed graph at all; `lint_model` runs the design
+  rules; `check_design` adds readiness, cost and deployment fit and is the only
+  one that needs a key and a network call. An agent that reached for the network
+  first was paying for an answer two thirds of which was computable locally.
+
+- **`model_path` on every read tool.** One server now covers a repository
+  instead of one file: ask about `baseline.py`, then about
+  `variant_b.neurarch.json`, without registering a second server. Files are
+  cached and re-read whenever their mtime moves, so an answer is never stale.
+  Write tools refuse `model_path` outright: honouring it would let an agent
+  mutate, and then save over, a file nobody pointed this server at, and ignoring
+  it would edit a different model than the agent believes it is editing.
+
+- **Tool annotations** (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
+  `openWorldHint`). All thirty tools were previously advertised as equally
+  consequential, so a client had to confirm all of them or none. Now the read
+  tools declare themselves read-only and closed-world, `check_design` declares
+  the one network call, and `delete_layer` / `delete_connection` /
+  `modify_layer` / `save_model` declare that they destroy something.
+
+- **`structuredContent` on every result**, alongside the JSON text that clients
+  predating it still read. No `outputSchema` is declared: a client fails a call
+  whose structured result does not match a declared schema, so hand-writing two
+  dozen schemas would convert every drift between schema and handler into a
+  broken tool. The data is worth shipping without that; the contract can follow
+  when the schemas are generated rather than typed twice.
+
+- `examples/tiny-vit.py`, so the 30-second path needs no app and no export. It
+  carries a real planted bug (`embed_dim=258`, `num_heads=8`) and a test asserts
+  `lint_model` still finds it, because an example that quietly stops
+  demonstrating anything is worse than no example.
+
+### Changed
+- The vendored Neurarch engine (`src/vendor/engine.bundle.mjs`) is compiled from
+  the app repo and carries the component registry, the PyTorch parser and the
+  rule set. A contract test asserts its exports and its lack of imports, so a
+  regenerated bundle whose surface moved fails here rather than in a user's
+  agent.
+- `server.ts` had no test before this release, which is why the routing it now
+  does is covered end to end through a real MCP client over an in-memory
+  transport.
+
 ## [0.10.1]
 
 ### Fixed

@@ -10,7 +10,7 @@
 
 Model Context Protocol server that exposes a [Neurarch](https://neurarch.com) model graph to Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex, and any other MCP-aware AI agent.
 
-The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat.
+The agent gets **structural awareness** of your neural network: layer list, parameter counts, FLOPs, blast-radius impact analysis, offline design linting, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat. Point it at your `.py` and it reads the model straight out of the source.
 
 <!-- For guaranteed inline autoplay on GitHub: drag docs/demo.webm into any GitHub
      issue or PR comment box, then replace the <video> src below with the resulting
@@ -61,10 +61,13 @@ Numbers above are produced by the tools, not estimated by the model.
 No install step. Every client below launches the server the same way:
 
 ```bash
-npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json
+npx -y neurarch-mcp /abs/path/to/model.py                    # your PyTorch source
+npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json    # or a file saved from the app
 ```
 
-To produce the model file: open your model in the [Neurarch](https://neurarch.com) app, then **File → Save (.json)**. The MCP server reads that file directly. Add `--watch` so the agent sees app-side saves without a restart, and `--write` if you want the agent to be able to edit the model (off by default).
+**Point it at a `.py` and it works.** The server parses PyTorch source into the same graph the app uses, with the same parser, so there is no "first go draw your model" step between installing this and getting an answer. What comes out of source is layers, types, hyperparameters and wiring, all exact. What does not is tensor shapes, because the source never says what goes in: parameter counts still come out, FLOPs and shape contracts report as unknown rather than as zero. `--write` is refused on a `.py` file, since the graph was derived from it and this server does not generate Python.
+
+For the full picture, export from the [Neurarch](https://neurarch.com) app with **File → Save (.json)**: that file carries shapes, groups, hyperparameters and design notes, so every tool has everything. Add `--watch` so the agent sees app-side saves without a restart, and `--write` if you want the agent to be able to edit the model (off by default).
 
 Use an **absolute** path to the model file in any global config: `npx` does not run from your project directory, so relative paths only work in project-scoped configs.
 
@@ -177,9 +180,16 @@ This repo ships runnable example models under [`examples/`](./examples). Point t
 }
 ```
 
+- [`examples/tiny-vit.py`](./examples/tiny-vit.py) — **plain PyTorch source**, no export step, with a real design bug planted in it.
 - [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json) — a small GPT-style decoder (embedding, 2 transformer blocks, LM head).
 - [`examples/tiny-cnn.neurarch.json`](./examples/tiny-cnn.neurarch.json) — a CIFAR-style CNN (2 conv stages + classifier).
 - [`examples/resnet-mini.neurarch.json`](./examples/resnet-mini.neurarch.json) — a residual block with a skip/merge node (a branchier graph for impact and path tools).
+
+Point it at the Python file and ask *"lint this model"*, and `lint_model` comes
+back with five findings on a file nothing was exported from, one of them a
+blocker: `head-dim-divisibility` on `attn`, because `embed_dim=258` is not
+divisible by `num_heads=8`. That is a runtime crash sitting in source that reads
+fine, found offline, with no key and no account.
 
 Then ask:
 
@@ -200,6 +210,7 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 | `find_layers` | Search layers by type, name regex, scope prefix, or augmentation (e.g. frozen layers); optionally rank by parameter count. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
 | `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
+| `lint_model` | Neurarch's structural **design rules**, offline and with no API key: attention head-dim and GQA divisibility, norm/activation ordering, dropout and feature ranges, missing residuals in deep stacks, and the statically decidable shape rules. Same rule set the Neurarch CI action reports, so a clean result here is a clean CI run. |
 | `check_design` | Neurarch's **full verdict** on the model: readiness to train, parameter and cost estimates, the best deployment target and its latency, and any decision still left to the human. Broader than `validate_model`, which is the local structural subset. Requires `NEURARCH_API_KEY` and makes one network call. |
 | `find_path` | Shortest directed path between two layers, or `null` when unreachable. |
 | `list_connections` | Flat edge list with optional `from` / `to` filters. |
@@ -223,7 +234,14 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 | `delete_connection` | Remove a single directed edge. Invalidates the target's cached shape. |
 | `save_model` | Persist the in-memory model to disk. Call this after any mutation. |
 
-`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change. `check_design` is the one that answers what the file cannot: every other tool here inspects the graph, that one returns a verdict on it, so an agent can say what its edit actually did rather than only what it changed.
+`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change. Three tools grade the model, and they are a ladder worth climbing in order:
+`validate_model` asks whether it is a well-formed graph at all (cycles, dangling
+refs, orphans), `lint_model` runs the design rules over it, and both are free,
+offline and instant. `check_design` answers what the file cannot -- readiness,
+training cost, deployment fit, and the decisions that are still the human's --
+and it is the only one that needs a key and a network call. An agent that starts
+at the top pays for an answer two thirds of which was computable on the machine
+it was already standing on.
 
 ### Flags
 
@@ -232,6 +250,28 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 - `--http[=PORT]` — serve over Streamable HTTP instead of stdio (default port `8787`). See [Remote access](#remote-access) below.
 - `--host=ADDR` — bind address for `--http`. Defaults to `127.0.0.1` (loopback only).
 - `--version` (alias `-v`) — print the version and exit. `--help` (`-h`) prints usage and the full tool list.
+
+### One server, many models
+
+Every read tool takes an optional **`model_path`**, so a single server covers a
+whole repository instead of one file. Ask `get_model_summary` about
+`baseline.py`, then about `variant_b.neurarch.json`, without registering a
+second server or restarting anything. Files are cached and re-read whenever
+their mtime moves, so the answer is never stale.
+
+Write tools deliberately refuse `model_path`: mutations always target the file
+passed on the command line, so an agent cannot edit, and then save over, a path
+it invented.
+
+### Tool annotations
+
+Every tool declares what it does to your files. The read tools are marked
+read-only and closed-world; `check_design` marks itself as the one that reaches
+off the machine; `delete_layer`, `delete_connection`, `modify_layer` and
+`save_model` mark themselves destructive. Clients that honour annotations can
+therefore confirm the three tools that can actually destroy something instead of
+prompting on all thirty. Results also carry `structuredContent` alongside the
+JSON text, for clients that read it.
 
 ## Remote access
 
@@ -331,13 +371,18 @@ cd neurarch-mcp
 npm install
 npm run typecheck             # tsc --noEmit
 npm run build                 # tsup → dist/index.js
-npm test                      # vitest (≈100 unit tests)
+npm test                      # vitest (≈190 unit + end-to-end tests)
 node dist/index.js --help     # confirm bin works
 ```
 
 CI runs `typecheck` + `build` + `test` on Node 20 and 22 for every push and PR.
 
-The package vendors a small set of pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer) from the main Neurarch repo. They live under `src/lib/` and have no runtime dependencies beyond `@modelcontextprotocol/sdk`.
+The package vendors two things from the main Neurarch repo, and they are vendored for the same reason: this server has to work with no network, no API key and no second install step.
+
+- `src/lib/` — pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer), maintained as source here.
+- `src/vendor/engine.bundle.mjs` — the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
+
+Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
 
 ## License
 

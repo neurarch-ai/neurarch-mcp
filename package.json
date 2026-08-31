@@ -1,7 +1,7 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.10.1",
-  "description": "MCP server that exposes a Neurarch model graph to Claude Code, Cursor, Windsurf, and other MCP-aware AI agents. Structural awareness of your neural network: layer list, parameters, FLOPs, blast-radius impact, validation (cycles / orphans / dangling edges), a full design verdict via check_design (readiness, cost, deploy target), shortest path, connection listing, Mermaid topology, hyperparameters, design notes, and (with --write) mutations via add_layer / modify_layer / add_connection / delete_layer / delete_connection / save_model. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
+  "version": "0.11.0",
+  "description": "MCP server that gives Claude Code, Cursor, Windsurf and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file or a Neurarch model graph and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), analyse blast radius before an edit, get a full readiness/cost/deployment verdict (check_design), trace paths, render Mermaid topology, and with --write mutate the graph. One server covers a whole repo via model_path. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
   "type": "module",
   "bin": {
     "neurarch-mcp": "dist/index.js"
@@ -33,7 +33,10 @@
     "windsurf",
     "neurarch",
     "vscode",
-    "claude-desktop"
+    "claude-desktop",
+    "lint",
+    "static-analysis",
+    "code-review"
   ],
   "author": "neurarch-ai",
   "license": "MIT",
