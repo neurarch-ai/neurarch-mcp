@@ -10,6 +10,7 @@ import { diffModels } from './lib/diffModels.js';
 import { loadModelFile } from './loader.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
+import { checkDesign } from './lib/checkDesign.js';
 
 export interface ToolContext {
   modelPath: string;
@@ -367,6 +368,30 @@ const validateModelTool: ToolDef = {
   handler: (_args, model) => validateModel(model),
 };
 
+// ── check_design ─────────────────────────────────────────────────────────────
+// The only tool here that answers a question the file itself cannot: everything
+// else inspects the graph, this one gets a verdict on it. validate_model is the
+// local subset (cycles, dangling refs, orphans); this adds readiness, parameter
+// and cost estimates, the best deployment target with its latency, and the
+// decisions that are the human's rather than the agent's to make.
+//
+// It is the one tool that requires a network call and an API key. With no key
+// set it returns an explanation and opens no socket, so this server's
+// "no network calls by default" property is unchanged for anyone who has not
+// configured one. See src/lib/checkDesign.ts.
+const checkDesignTool: ToolDef = {
+  name: 'check_design',
+  description:
+    'Get Neurarch\'s full verdict on this model: is it structurally sound and ready to train, '
+    + 'what will a training run cost and how long will it take, which deployment target fits it '
+    + 'best and at what latency, and which decisions are still the human\'s to make. '
+    + 'Call this BEFORE proposing an architecture change and again after, so you can say what your '
+    + 'edit actually did. Broader than validate_model, which is the local structural subset. '
+    + 'Requires NEURARCH_API_KEY and makes one network call; returns an explanation if unset.',
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  handler: (_args, model) => checkDesign(model),
+};
+
 // ── find_path ────────────────────────────────────────────────────────────────
 const findPath: ToolDef = {
   name: 'find_path',
@@ -563,6 +588,7 @@ export const TOOLS: ToolDef[] = [
   getBlockTool,
   diffModelsTool,
   validateModelTool,
+  checkDesignTool,
   findPath,
   listConnections,
   listHyperparams,

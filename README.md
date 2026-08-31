@@ -160,7 +160,7 @@ If you set `NEURARCH_MCP_TOKEN`, add `"headers": { "Authorization": "Bearer <tok
 
 ### Verify it works
 
-Ask the agent: *"List the Neurarch tools you can see."* You should get `describe_architecture`, `layer_impact`, `validate_model` and friends (17 read tools; 6 more with `--write`). From a shell, `npx -y neurarch-mcp --help` prints usage and the full tool list.
+Ask the agent: *"List the Neurarch tools you can see."* You should get `describe_architecture`, `layer_impact`, `validate_model` and friends (18 read tools; 6 more with `--write`). From a shell, `npx -y neurarch-mcp --help` prints usage and the full tool list.
 
 ## Try it in 30 seconds (no app needed)
 
@@ -200,6 +200,7 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 | `find_layers` | Search layers by type, name regex, scope prefix, or augmentation (e.g. frozen layers); optionally rank by parameter count. |
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
 | `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
+| `check_design` | Neurarch's **full verdict** on the model: readiness to train, parameter and cost estimates, the best deployment target and its latency, and any decision still left to the human. Broader than `validate_model`, which is the local structural subset. Requires `NEURARCH_API_KEY` and makes one network call. |
 | `find_path` | Shortest directed path between two layers, or `null` when unreachable. |
 | `list_connections` | Flat edge list with optional `from` / `to` filters. |
 | `param_count_by_block` | Parameter counts grouped by block / scope / type. |
@@ -222,7 +223,7 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 | `delete_connection` | Remove a single directed edge. Invalidates the target's cached shape. |
 | `save_model` | Persist the in-memory model to disk. Call this after any mutation. |
 
-`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change.
+`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change. `check_design` is the one that answers what the file cannot: every other tool here inspects the graph, that one returns a verdict on it, so an agent can say what its edit actually did rather than only what it changed.
 
 ### Flags
 
@@ -264,9 +265,26 @@ parameter values, layer names, file paths, or any identity: the payload shape
 cannot carry them, and the server rejects rows whose fingerprint does not
 recompute from the histogram it came with.
 
-Off by default: without the flag this server makes **no network calls at
-all**. Reporting is fire-and-forget with a 5-second cap, so it can never slow
-or fail a tool call. Policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+Off by default. Reporting is fire-and-forget with a 5-second cap, so it can
+never slow or fail a tool call. Policy:
+[neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+
+## Network: two switches, both off by default
+
+This server opens a socket for exactly two reasons, and neither happens unless
+you turn it on:
+
+| Switch | What it sends | When |
+|---|---|---|
+| `NEURARCH_REPORT=1` | An anonymous structure+verdict row (fingerprint, histogram, edge count, rule-id/severity pairs). **Structurally incapable of carrying the graph.** | After each `validate_model` call, fire and forget |
+| `NEURARCH_API_KEY=nrk_...` | **The model graph itself**, because a verdict about a graph cannot be computed without it | Only when the agent calls `check_design` |
+
+The second one is called out separately because it is materially different from
+the first: it sends your architecture. If that is not acceptable for a given
+model, do not set a key. Every other tool in this server keeps working, and
+`validate_model` gives you the local structural subset of the same checks.
+
+With neither set, this server makes **no network calls at all**.
 
 ## Troubleshooting
 
