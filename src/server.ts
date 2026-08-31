@@ -13,10 +13,18 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
-import type { ValidationReport } from './lib/validation.js';
 import { type ToolContext } from './tools.js';
 import { listedTools, resolveToolCall, isWriteTool, MODEL_PATH_PARAM } from './cli.js';
 import { reportingEnabled, buildCorpusReport, sendCorpusReport } from './lib/corpusReport.js';
+
+/**
+ * The tools that grade a graph rather than describe one.
+ *
+ * A corpus row records "this shape got this verdict", so it is meaningful only
+ * after something graded the shape. get_layer_info and the rest inspect; these
+ * three judge.
+ */
+const GRADING_TOOLS = new Set(['validate_model', 'lint_model', 'check_design']);
 import { loadModelCached } from './models.js';
 
 export interface McpServerOptions {
@@ -87,11 +95,17 @@ export function createMcpServer(opts: McpServerOptions): Server {
       }
 
       const result = await tool.handler(args, model, ctx);
-      // Opt-in corpus row (NEURARCH_REPORT=1), validate_model only. Fire and
-      // forget: it can neither slow nor fail the tool call. Privacy scope in
-      // lib/corpusReport.ts.
-      if (tool.name === 'validate_model' && reportingEnabled()) {
-        sendCorpusReport(buildCorpusReport(model, result as ValidationReport));
+      // Opt-in corpus row (NEURARCH_REPORT=1). Fire and forget: it can neither
+      // slow nor fail the tool call. Privacy scope in lib/corpusReport.ts.
+      //
+      // All three grading tools, not just validate_model. The old wiring made
+      // the channel's coverage an accident of which tool an agent reached for,
+      // and validate_model is the narrowest of the three: an agent that asked
+      // for the design rules or the whole verdict recorded nothing at all. The
+      // row is derived from the graph rather than from the result, so these
+      // three send the same row and the server's fingerprint dedupes them.
+      if (GRADING_TOOLS.has(tool.name) && reportingEnabled()) {
+        sendCorpusReport(buildCorpusReport(model));
       }
       // Both shapes, deliberately. `structuredContent` (spec 2025-06-18) is what
       // a modern client should read; the JSON text stays because clients that

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildCorpusReport, reportingEnabled, DEFAULT_REPORT_URL } from './corpusReport.js';
 import type { ModelArchitecture } from './types.js';
-import type { ValidationReport } from './validation.js';
 
 const model = {
   id: 'm', name: 'm',
@@ -17,43 +16,62 @@ const model = {
   ],
 } as unknown as ModelArchitecture;
 
-const validation: ValidationReport = {
-  ok: false,
-  findings: [
-    { rule: 'cycle', severity: 'error', message: 'A cycle exists through fc1.' },
-    { rule: 'orphan', severity: 'warn', message: 'act has no downstream.', componentNames: ['act'] },
+/** A graph the design rules actually fire on: 8 heads do not divide 100. */
+const badHeads = {
+  id: 'm', name: 'm',
+  components: [
+    { id: 'i', name: 'in', type: 'input', params: { shape: [16, 100] } },
+    { id: 'a', name: 'attn', type: 'multiHeadAttention', params: { embedDim: 100, numHeads: 8 } },
+    { id: 'o', name: 'out', type: 'output', params: {} },
   ],
-  totals: { errors: 1, warnings: 1 },
-};
+  connections: [{ from: 'i', to: 'a' }, { from: 'a', to: 'o' }],
+} as unknown as ModelArchitecture;
 
 describe('buildCorpusReport', () => {
   it('hashes byte-identically to the app/server fingerprint (cross-repo lock vector)', () => {
     // fnv1a('input:1|linear:2|output:1|relu:1#e4') computed against the main
     // repo's lib/archFingerprint.ts. If this fails, the hash drifted and the
     // server will reject every row this package sends.
-    const r = buildCorpusReport(model, validation);
+    const r = buildCorpusReport(model);
     expect(r.typeHistogram).toBe('input:1|linear:2|output:1|relu:1');
     expect(r.connectionCount).toBe(4);
     expect(r.fingerprint).toBe('951e5874');
   });
 
-  it('maps validator severities into the corpus vocabulary (error -> block)', () => {
-    const r = buildCorpusReport(model, validation);
-    expect(r.findings).toEqual([
-      { ruleId: 'cycle', severity: 'block' },
-      { ruleId: 'orphan', severity: 'warn' },
-    ]);
+  it('grades with the rule ids every other channel uses, not the validator\'s', () => {
+    // The point of the change this test pins: an `mcp` row and a `ci` row must
+    // name the same rule for the same graph, or the two cannot be pooled.
+    const r = buildCorpusReport(badHeads);
+    const ids = r.findings.map(f => f.ruleId);
+    expect(ids).toContain('head-dim-divisibility');
+    expect(r.findings.find(f => f.ruleId === 'head-dim-divisibility')?.severity).toBe('block');
+    // The validator's own vocabulary must not appear: those ids exist in no
+    // other channel, and a row spelled in them is a row nobody can join.
+    expect(ids).not.toContain('cycle');
+    expect(ids).not.toContain('orphan');
+  });
+
+  it('carries only warn and block: info has no corpus severity to be', () => {
+    for (const r of [buildCorpusReport(model), buildCorpusReport(badHeads)]) {
+      for (const f of r.findings) expect(['warn', 'block']).toContain(f.severity);
+    }
+  });
+
+  it('is a property of the graph, so the same graph gives the same row', () => {
+    // Three tools send this row now. If it depended on which one called, the
+    // server would be pooling three different things under one channel.
+    expect(buildCorpusReport(model)).toEqual(buildCorpusReport(model));
   });
 
   it('carries ONLY structure and rule ids: no names, messages, params, or paths', () => {
-    const r = buildCorpusReport(model, validation);
+    const r = buildCorpusReport(model);
     expect(Object.keys(r).sort()).toEqual(
       ['channel', 'connectionCount', 'findings', 'fingerprint', 'layerCount', 'typeHistogram'],
     );
     const wire = JSON.stringify(r);
     expect(wire).not.toContain('fc1');       // layer names
     expect(wire).not.toContain('act');       // names from findings
-    expect(wire).not.toContain('cycle exists'); // messages
+    expect(wire).not.toContain('divide');    // rule messages
     expect(wire).not.toContain('inFeatures');   // params
   });
 

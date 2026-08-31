@@ -3,7 +3,7 @@
   "name": "tiny-cnn",
   "description": "A small CIFAR-style CNN: two conv-relu-pool stages, flatten, then a classifier head. Hand-written example so you can try neurarch-mcp without the app.",
   "components": [
-    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": {}, "inputs": [], "outputs": ["conv1"], "outputShape": [3, 32, 32] },
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": { "shape": [3, 32, 32] }, "inputs": [], "outputs": ["conv1"], "outputShape": [3, 32, 32] },
     { "id": "conv1", "type": "conv2d", "name": "conv1", "position": { "x": 0, "y": 100 }, "params": { "inChannels": 3, "outChannels": 32, "kernelSize": 3, "padding": 1 }, "inputs": ["input"], "outputs": ["relu1"], "scope": "features.0", "inputShape": [3, 32, 32], "outputShape": [32, 32, 32] },
     { "id": "relu1", "type": "relu", "name": "relu1", "position": { "x": 0, "y": 200 }, "params": {}, "inputs": ["conv1"], "outputs": ["pool1"], "scope": "features.0", "inputShape": [32, 32, 32], "outputShape": [32, 32, 32] },
     { "id": "pool1", "type": "maxpool2d", "name": "pool1", "position": { "x": 0, "y": 300 }, "params": { "kernelSize": 2, "stride": 2 }, "inputs": ["relu1"], "outputs": ["conv2"], "scope": "features.0", "inputShape": [32, 32, 32], "outputShape": [32, 16, 16] },

@@ -10,7 +10,7 @@ import { diffModels } from './lib/diffModels.js';
 import { loadModelFile } from './loader.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
-import { checkDesign } from './lib/checkDesign.js';
+import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
 import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
 
 export interface ToolContext {
@@ -398,10 +398,10 @@ const validateModelTool: ToolDef = {
 // and cost estimates, the best deployment target with its latency, and the
 // decisions that are the human's rather than the agent's to make.
 //
-// It is the one tool that requires a network call and an API key. With no key
-// set it returns an explanation and opens no socket, so this server's
-// "no network calls by default" property is unchanged for anyone who has not
-// configured one. See src/lib/checkDesign.ts.
+// It used to be the one tool that required a key and a network call. The
+// verifier is a pure 13ms function of the graph, so it is vendored now and this
+// tool is as offline and as closed-world as the other eighteen.
+// See src/lib/checkDesign.ts.
 const checkDesignTool: ToolDef = {
   name: 'check_design',
   description:
@@ -410,12 +410,8 @@ const checkDesignTool: ToolDef = {
     + 'best and at what latency, and which decisions are still the human\'s to make. '
     + 'Call this BEFORE proposing an architecture change and again after, so you can say what your '
     + 'edit actually did. Broader than validate_model, which is the local structural subset. '
-    + 'Requires NEURARCH_API_KEY and makes one network call; returns an explanation if unset.',
+    + 'Runs offline, needs no API key, and makes no network call.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  // The one read tool that reaches outside this process, so the one that is
-  // not closed-world and not guaranteed to answer the same thing twice: the
-  // verdict tracks a service that improves.
-  annotations: { openWorldHint: true, idempotentHint: false },
   handler: (_args, model) => checkDesign(model),
 };
 
@@ -428,11 +424,12 @@ const checkDesignTool: ToolDef = {
 //                   ordering, dropout ranges, dead residuals. Offline, because
 //                   the rule engine is bundled into this package.
 //   check_design    the verdict, including everything a static rule cannot see:
-//                   readiness, training cost, deployment fit. Needs a key and a
-//                   network call.
+//                   readiness, training cost, deployment fit. Offline too, now
+//                   that the verifier is vendored rather than called.
 //
-// Ordering matters: an agent that reaches for the network first pays for an
-// answer two-thirds of which was computable on the machine it was already on.
+// Ordering still matters, for cost rather than for network: validate_model is a
+// graph walk, lint_model is the rule set, check_design runs all five pipeline
+// stages. Reach for the cheapest one that answers the question asked.
 const lintModelTool: ToolDef = {
   name: 'lint_model',
   description:
@@ -468,6 +465,11 @@ const lintModelTool: ToolDef = {
       clean: counts.block === 0 && counts.warn === 0,
       counts,
       findings,
+      // The measured evidence behind the rules that fired, for the ones that
+      // have any. An agent told "head-dim divisibility" can quote the study
+      // rather than assert a rule, and a rule with no measurement behind it is
+      // simply absent here rather than dressed up. Local: a static table.
+      provenance: provenanceForRules(findings.map(f => f.rule)),
       // Says plainly that a filtered view is a filtered view.
       reportedSeverityFloor: severity ?? 'info',
       totalBeforeFilter: all.length,

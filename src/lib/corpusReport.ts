@@ -1,6 +1,20 @@
 /**
- * Opt-in corpus reporting: when NEURARCH_REPORT=1 is set, a `validate_model`
- * call shares one anonymous structure+verdict row with the Neurarch corpus.
+ * Opt-in corpus reporting: when NEURARCH_REPORT=1 is set, a graph-grading call
+ * shares one anonymous structure+verdict row with the Neurarch corpus.
+ *
+ * ── One vocabulary, or the rows cannot be pooled ───────────────────────────
+ * The findings on the row come from `lintModelGraph`, never from the tool the
+ * agent happened to call. That is deliberate and it is the whole point: the CI
+ * action grades with `lintModelGraph`, the app grades with `lintModelGraph`,
+ * and until this file did too, an `mcp` row said `cycle` and `orphan` where a
+ * `ci` row said `head-dim-divisibility`. Three channels grading with three
+ * vocabularies cannot be pooled, and a corpus that cannot be pooled is a corpus
+ * of one channel wearing three names.
+ *
+ * So the row is a property of the GRAPH, not of the call. validate_model,
+ * lint_model and check_design all produce the same row for the same graph,
+ * which is also why sending one is safe from three different tools: the
+ * fingerprint dedupes them server-side rather than triple-counting a design.
  *
  * What leaves the process: the structural fingerprint (8-char FNV-1a hash of
  * the layer-type histogram + edge count), the histogram and edge count that
@@ -16,8 +30,8 @@
  * (src/utils/structuralIndex.ts) and the server's lib/archFingerprint.ts in
  * the main repo, or rows stop joining the corpus and the server rejects them.
  */
+import { lintModelGraph } from '../vendor/engine.bundle.mjs';
 import type { ModelArchitecture } from './types.js';
-import type { ValidationReport } from './validation.js';
 
 /**
  * `www`, not the apex, for the same reason check_design uses it: the apex 307s
@@ -57,8 +71,14 @@ export function reportingEnabled(): boolean {
   return process.env.NEURARCH_REPORT === '1';
 }
 
-/** Build the privacy-scoped row for one validate_model result. */
-export function buildCorpusReport(model: ModelArchitecture, report: ValidationReport): CorpusReport {
+/**
+ * Build the privacy-scoped row for one graph.
+ *
+ * Takes no tool result on purpose: see the vocabulary note at the top. The
+ * findings are recomputed here with the engine every channel shares, so the
+ * same graph produces the same row whichever tool was called.
+ */
+export function buildCorpusReport(model: ModelArchitecture): CorpusReport {
   const counts = new Map<string, number>();
   for (const c of model.components) {
     counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
@@ -75,12 +95,12 @@ export function buildCorpusReport(model: ModelArchitecture, report: ValidationRe
     connectionCount,
     layerCount: model.components.length,
     channel: 'mcp',
-    // The validator's 'error' is the corpus's 'block': both mean "structurally
-    // broken", and the corpus schema speaks the app's severity vocabulary.
-    findings: report.findings.map(f => ({
-      ruleId: f.rule,
-      severity: f.severity === 'error' ? 'block' as const : 'warn' as const,
-    })),
+    // `info` is dropped rather than folded into `warn`: the corpus schema has
+    // no info severity, and promoting a note to a warning would inflate every
+    // pooled count that reads this channel.
+    findings: lintModelGraph(model)
+      .filter(f => f.severity === 'block' || f.severity === 'warn')
+      .map(f => ({ ruleId: f.rule, severity: f.severity as 'warn' | 'block' })),
   };
 }
 

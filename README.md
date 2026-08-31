@@ -211,7 +211,7 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 | `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
 | `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
 | `lint_model` | Neurarch's structural **design rules**, offline and with no API key: attention head-dim and GQA divisibility, norm/activation ordering, dropout and feature ranges, missing residuals in deep stacks, and the statically decidable shape rules. Same rule set the Neurarch CI action reports, so a clean result here is a clean CI run. |
-| `check_design` | Neurarch's **full verdict** on the model: readiness to train, parameter and cost estimates, the best deployment target and its latency, and any decision still left to the human. Broader than `validate_model`, which is the local structural subset. Requires `NEURARCH_API_KEY` and makes one network call. |
+| `check_design` | Neurarch's **full verdict** on the model: readiness to train, parameter and cost estimates, the best deployment target and its latency, and any decision still left to the human. Broader than `validate_model`, which is the local structural subset. Offline, no API key, ~13ms. |
 | `find_path` | Shortest directed path between two layers, or `null` when unreachable. |
 | `list_connections` | Flat edge list with optional `from` / `to` filters. |
 | `param_count_by_block` | Parameter counts grouped by block / scope / type. |
@@ -236,12 +236,16 @@ The agent calls `describe_architecture` (one shot: pipeline, depth, param + comp
 
 `layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change. Three tools grade the model, and they are a ladder worth climbing in order:
 `validate_model` asks whether it is a well-formed graph at all (cycles, dangling
-refs, orphans), `lint_model` runs the design rules over it, and both are free,
-offline and instant. `check_design` answers what the file cannot -- readiness,
-training cost, deployment fit, and the decisions that are still the human's --
-and it is the only one that needs a key and a network call. An agent that starts
-at the top pays for an answer two thirds of which was computable on the machine
-it was already standing on.
+refs, orphans), `lint_model` runs the design rules over it, and `check_design`
+answers what the file cannot -- readiness, training cost, deployment fit, and the
+decisions that are still the human's. All three are free, offline and instant:
+the verifier is vendored, not called. `check_design` is the most work of the
+three (five pipeline stages against one graph walk), so an agent that starts at
+the top still pays for an answer two thirds of which a cheaper tool had.
+
+`lint_model` also returns `provenance`: for every rule that fired and has a
+published measurement behind it, the measurement. A rule with no number behind
+it is absent rather than dressed up.
 
 ### Flags
 
@@ -266,8 +270,8 @@ it invented.
 ### Tool annotations
 
 Every tool declares what it does to your files. The read tools are marked
-read-only and closed-world; `check_design` marks itself as the one that reaches
-off the machine; `delete_layer`, `delete_connection`, `modify_layer` and
+read-only and closed-world, `check_design` included since the verifier stopped
+being a network call; `delete_layer`, `delete_connection`, `modify_layer` and
 `save_model` mark themselves destructive. Clients that honour annotations can
 therefore confirm the three tools that can actually destroy something instead of
 prompting on all thirty. Results also carry `structuredContent` alongside the
@@ -309,22 +313,25 @@ Off by default. Reporting is fire-and-forget with a 5-second cap, so it can
 never slow or fail a tool call. Policy:
 [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 
-## Network: two switches, both off by default
+## Network: one switch, off by default
 
-This server opens a socket for exactly two reasons, and neither happens unless
+This server opens a socket for exactly one reason, and it does not happen unless
 you turn it on:
 
 | Switch | What it sends | When |
 |---|---|---|
-| `NEURARCH_REPORT=1` | An anonymous structure+verdict row (fingerprint, histogram, edge count, rule-id/severity pairs). **Structurally incapable of carrying the graph.** | After each `validate_model` call, fire and forget |
-| `NEURARCH_API_KEY=nrk_...` | **The model graph itself**, because a verdict about a graph cannot be computed without it | Only when the agent calls `check_design` |
+| `NEURARCH_REPORT=1` | An anonymous structure+verdict row (fingerprint, histogram, edge count, rule-id/severity pairs). **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model` or `check_design` call, fire and forget |
 
-The second one is called out separately because it is materially different from
-the first: it sends your architecture. If that is not acceptable for a given
-model, do not set a key. Every other tool in this server keeps working, and
-`validate_model` gives you the local structural subset of the same checks.
+With it unset, this server makes **no network calls at all**, and no tool is an
+exception to that. Your model graph never leaves the machine.
 
-With neither set, this server makes **no network calls at all**.
+Until 0.11.0 there was a second switch: `check_design` POSTed the graph to
+`/api/v1/check` with an API key. It no longer exists, and no key is read
+anywhere in this package. The verdict is a pure 13ms function of the graph, so
+it is vendored and computed here; the key bought no compute and captured no
+measurement, it only put a signup between a stranger and the one tool this
+product is built around. The hosted endpoint still exists for callers who are
+not running this server.
 
 ## Troubleshooting
 
@@ -377,10 +384,11 @@ node dist/index.js --help     # confirm bin works
 
 CI runs `typecheck` + `build` + `test` on Node 20 and 22 for every push and PR.
 
-The package vendors two things from the main Neurarch repo, and they are vendored for the same reason: this server has to work with no network, no API key and no second install step.
+The package vendors from the main Neurarch repo, and everything is vendored for the same reason: this server has to work with no network, no API key and no second install step.
 
 - `src/lib/` — pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer), maintained as source here.
 - `src/vendor/engine.bundle.mjs` — the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
+- `src/vendor/verifier.bundle.mjs` — the compiled Neurarch verifier behind `check_design`: the five pipeline stages, plus the rule-provenance table. Same code path as the app and the hosted endpoint, so an agent here and a person in the app get the same answer. Same rules: generated, contract-tested (`verifier.contract.test.ts`), and asserted to contain no import and no `fetch`.
 
 Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
 
