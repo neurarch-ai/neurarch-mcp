@@ -6,7 +6,30 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0]
+
 ### Added
+- **`check_design`** — the one tool here that returns a *verdict* rather than an
+  inspection. Every other tool answers a question about the file in front of it
+  (how many parameters, what does this layer touch, is there a cycle); this one
+  answers the question an agent needs before it edits someone's architecture:
+  is the design sound, what will a training run cost, which deployment target
+  fits it and at what latency, and which decisions are still the human's.
+  `validate_model` is the local structural subset of it.
+
+  Requires `NEURARCH_API_KEY` (create one at neurarch.com under Settings →
+  Developer API) and makes one network call. **With no key set it opens no
+  socket and returns an explanation**, so the "no network calls by default"
+  property is unchanged for anyone who has not configured one.
+
+  Note that unlike corpus reporting, this **sends the model graph**, because a
+  verdict about a graph cannot be computed without it. That difference is called
+  out in its own README section rather than buried: if it is not acceptable for
+  a given model, do not set a key and every other tool keeps working.
+
+- `NEURARCH_API_URL` to point `check_design` at a self-hosted or test endpoint.
+
+### Added in 0.9.1
 - **Opt-in corpus reporting (`NEURARCH_REPORT=1`)** — when explicitly enabled,
   a `validate_model` call shares one anonymous structure+verdict row with the
   Neurarch corpus: structural fingerprint (8-char hash), layer-type histogram,
