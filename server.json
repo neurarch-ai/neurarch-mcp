@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.neurarch-ai/neurarch-mcp",
-  "description": "Gives AI agents structural awareness of a neural network via a typed Neurarch model graph.",
+  "description": "Reads your PyTorch .py or Neurarch graph so agents can inspect, lint and cost the model.",
   "repository": {
     "url": "https://github.com/neurarch-ai/neurarch-mcp",
     "source": "github"
   },
-  "version": "0.10.0",
+  "version": "0.11.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "neurarch-mcp",
-      "version": "0.10.0",
+      "version": "0.11.0",
       "transport": {
         "type": "stdio"
       },
@@ -19,7 +19,7 @@
         {
           "type": "positional",
           "valueHint": "model_path",
-          "description": "Absolute path to the .neurarch.json model file (File > Save in the Neurarch app; runnable examples ship in the repo's examples/ folder)",
+          "description": "Absolute path to a PyTorch .py file or a .neurarch.json model graph (runnable examples ship in the repo's examples/ folder)",
           "isRequired": true
         },
         {

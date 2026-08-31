@@ -11,15 +11,38 @@ import { loadModelFile } from './loader.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 import { checkDesign } from './lib/checkDesign.js';
+import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
 
 export interface ToolContext {
   modelPath: string;
+}
+
+/**
+ * MCP tool annotations (spec 2025-03-26 and later): behavioural hints a client
+ * uses to decide how much ceremony a call deserves. They are hints, not
+ * enforcement, but they are the difference between a client confirming all 30
+ * tools and confirming the three that can actually destroy something.
+ */
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
 }
 
 export interface ToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /**
+   * Overrides only. Read tools inherit read-only / idempotent / closed-world
+   * defaults from `annotate()` in cli.ts, so a tool declares annotations here
+   * only where the truth differs from that. Write tools always declare their
+   * own, because "does this destroy anything" is never a default worth
+   * guessing at.
+   */
+  annotations?: ToolAnnotations;
   handler: (args: any, model: ModelArchitecture, ctx: ToolContext) => unknown | Promise<unknown>;
 }
 
@@ -389,7 +412,67 @@ const checkDesignTool: ToolDef = {
     + 'edit actually did. Broader than validate_model, which is the local structural subset. '
     + 'Requires NEURARCH_API_KEY and makes one network call; returns an explanation if unset.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  // The one read tool that reaches outside this process, so the one that is
+  // not closed-world and not guaranteed to answer the same thing twice: the
+  // verdict tracks a service that improves.
+  annotations: { openWorldHint: true, idempotentHint: false },
   handler: (_args, model) => checkDesign(model),
+};
+
+// ── lint_model ───────────────────────────────────────────────────────────────
+// The middle rung of a ladder this server now has all three of:
+//
+//   validate_model  invariants the graph must satisfy to be a graph at all
+//                   (cycles, dangling refs, orphans). Cheap, offline, absolute.
+//   lint_model      the design rules: head-dim divisibility, norm/activation
+//                   ordering, dropout ranges, dead residuals. Offline, because
+//                   the rule engine is bundled into this package.
+//   check_design    the verdict, including everything a static rule cannot see:
+//                   readiness, training cost, deployment fit. Needs a key and a
+//                   network call.
+//
+// Ordering matters: an agent that reaches for the network first pays for an
+// answer two-thirds of which was computable on the machine it was already on.
+const lintModelTool: ToolDef = {
+  name: 'lint_model',
+  description:
+    'Run Neurarch\'s structural design rules over the model, offline and with no API key: '
+    + 'attention head-dim and GQA divisibility, normalization and activation ordering, '
+    + 'dropout and feature ranges, missing residuals in deep stacks, and the shape rules that '
+    + 'can be decided statically. Returns findings with a stable rule id and severity '
+    + '(block | warn | info). This is the same rule set the Neurarch CI action reports, so a '
+    + 'clean result here is a clean CI run. Broader than validate_model (which only checks that '
+    + 'the graph is well-formed) and narrower than check_design (which adds cost, readiness and '
+    + 'deployment, and needs a key). Call this before proposing an edit and again after.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      severity: {
+        type: 'string',
+        enum: ['block', 'warn', 'info'],
+        description: 'Optional minimum severity to report. Defaults to reporting everything.',
+      },
+    },
+    additionalProperties: false,
+  },
+  handler: ({ severity }: { severity?: EngineFinding['severity'] }, model) => {
+    const order = { block: 0, warn: 1, info: 2 } as const;
+    const floor = severity ? order[severity] : 2;
+    const all = lintModelGraph(model);
+    const findings = all.filter(f => order[f.severity] <= floor);
+    const counts = { block: 0, warn: 0, info: 0 };
+    for (const f of findings) counts[f.severity]++;
+    return {
+      // The headline an agent should act on before reading the list: a block is
+      // a design that will not run or will not train, not a style note.
+      clean: counts.block === 0 && counts.warn === 0,
+      counts,
+      findings,
+      // Says plainly that a filtered view is a filtered view.
+      reportedSeverityFloor: severity ?? 'info',
+      totalBeforeFilter: all.length,
+    };
+  },
 };
 
 // ── find_path ────────────────────────────────────────────────────────────────
@@ -588,6 +671,7 @@ export const TOOLS: ToolDef[] = [
   getBlockTool,
   diffModelsTool,
   validateModelTool,
+  lintModelTool,
   checkDesignTool,
   findPath,
   listConnections,

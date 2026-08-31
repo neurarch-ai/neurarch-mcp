@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { unwatchFile, watchFile } from 'node:fs';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { loadModelFile } from './loader.js';
+import { loadModelFile, sourceKindFor } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
@@ -20,7 +20,14 @@ const VERSION: string = pkg.version;
 const HELP = `neurarch-mcp — Model Context Protocol server for a Neurarch model file.
 
 Usage:
-  npx neurarch-mcp <path-to-model.neurarch.json> [--write] [--watch] [--http[=PORT]]
+  npx neurarch-mcp <model.neurarch.json | model.py> [--write] [--watch] [--http[=PORT]]
+
+Model file:
+  Either a .neurarch.json saved from the Neurarch app, or a PyTorch .py file,
+  which is parsed into the same graph. Python source carries no tensor shapes,
+  so layers, params and wiring are exact while FLOPs and shape contracts are
+  reported as unknown; --write is refused on a .py file because the graph was
+  derived from it and cannot be written back.
 
 Flags:
   --version Print the neurarch-mcp version and exit (alias: -v).
@@ -112,6 +119,20 @@ async function main(): Promise<void> {
   }
 
   const ctx: ToolContext = { modelPath };
+
+  // Mutations against a graph parsed out of Python have nowhere to go: writing
+  // them back means regenerating source, which this server does not do, and
+  // save_model would put JSON where the .py was. Refused at startup rather than
+  // at the first edit, so the user finds out before an agent has built a plan
+  // on top of tools that were never going to work.
+  if (writeEnabled && sourceKindFor(modelPath) === 'pytorch-source') {
+    process.stderr.write(
+      'neurarch-mcp: refusing --write on a PyTorch source file. The graph is derived from '
+      + `${modelPath}, so edits cannot be written back to it. Export the model as .neurarch.json `
+      + 'from the Neurarch app and point --write at that, or drop --write to use the read tools.\n',
+    );
+    process.exit(1);
+  }
 
   if (writeEnabled) {
     process.stderr.write(

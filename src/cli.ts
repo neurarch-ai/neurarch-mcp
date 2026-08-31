@@ -3,7 +3,7 @@
  * tool-dispatch gating can be unit-tested without spinning up a stdio server.
  * index.ts wires these into the live MCP server and the process lifecycle.
  */
-import { TOOLS, type ToolDef } from './tools.js';
+import { TOOLS, type ToolAnnotations, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 
 export interface ParsedFlags {
@@ -59,6 +59,82 @@ export function parseFlags(argv: string[]): ParsedFlags {
 /** The tools exposed for a given mode: read-only by default, +writes with --write. */
 export function selectTools(writeEnabled: boolean): ToolDef[] {
   return writeEnabled ? [...TOOLS, ...WRITE_TOOLS] : TOOLS;
+}
+
+/** Argument name for "ask this about a different file". Read tools only. */
+export const MODEL_PATH_PARAM = 'model_path';
+
+const MODEL_PATH_PROPERTY = {
+  type: 'string',
+  description:
+    'Optional. Answer this about a different model file instead of the one this server was '
+    + 'started with, so one server can cover a whole repository of architectures. Absolute, or '
+    + 'relative to the server working directory. Read tools only: mutations always target the '
+    + 'file passed on the command line, so an agent cannot write to a path it just made up.',
+};
+
+/**
+ * Add `model_path` to a read tool's schema.
+ *
+ * Done here rather than in each of the two dozen tool definitions for the
+ * obvious reason (one place to change) and one less obvious one: a tool that
+ * already has a `model_path` of its own must keep it, and a single guard
+ * enforces that everywhere. `diff_models` and `save_model` take a `path`, which
+ * means something different in both cases, which is exactly why the injected
+ * argument is not called `path`.
+ */
+export function withModelPath(schema: Record<string, unknown>): Record<string, unknown> {
+  const props = (schema.properties ?? {}) as Record<string, unknown>;
+  if (MODEL_PATH_PARAM in props) return schema;
+  return { ...schema, properties: { ...props, [MODEL_PATH_PARAM]: MODEL_PATH_PROPERTY } };
+}
+
+/**
+ * What a read tool is, unless it says otherwise: it looks, it does not touch,
+ * it gives the same answer twice, and it does not reach off the machine.
+ * `check_design` is the single tool that overrides part of this.
+ */
+const READ_TOOL_DEFAULTS: ToolAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+/** The wire form of a tool: what ListTools sends to the client. */
+export interface ListedTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations: ToolAnnotations;
+}
+
+/**
+ * Build the ListTools payload: schemas with `model_path` where it applies, and
+ * annotations resolved from the per-tool overrides over the read defaults.
+ */
+export function listedTools(writeEnabled: boolean): ListedTool[] {
+  const reads = TOOLS.map(t => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: withModelPath(t.inputSchema),
+    annotations: { ...READ_TOOL_DEFAULTS, ...(t.annotations ?? {}) },
+  }));
+  if (!writeEnabled) return reads;
+  const writes = WRITE_TOOLS.map(t => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: t.inputSchema,
+    // Write tools always declare their own; the fallback exists so a new one
+    // added without annotations is still never advertised as read-only.
+    annotations: t.annotations ?? { readOnlyHint: false, destructiveHint: true },
+  }));
+  return [...reads, ...writes];
+}
+
+/** True when the name belongs to a mutation tool, whether or not writes are on. */
+export function isWriteTool(name: string): boolean {
+  return WRITE_TOOLS.some(t => t.name === name);
 }
 
 export interface ToolResolution {
