@@ -6,6 +6,49 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.12.0]
+
+### Changed
+- **`check_design` no longer needs an API key, or a network call.** The verifier
+  is vendored (`src/vendor/verifier.bundle.mjs`) and runs here, in about 13ms,
+  against the graph already in memory.
+
+  The key was never buying what a key is supposed to buy. `checkDesign` is a
+  pure, synchronous function of the graph; the server around it validated the
+  key, capped the graph at 2000 components, and rewrote the error text. The
+  corpus row that would have justified metering is written by a different
+  endpoint, which requires no key. So the key bought no compute and captured no
+  measurement: it put a signup between a stranger and the one tool this product
+  is built around, while the other eighteen tools ran offline on first install.
+
+  The size cap is kept, because a runaway generated graph should come back with
+  a sentence rather than stall the tool call. The hosted endpoint is unchanged
+  for callers who are not running this server.
+
+- **The network promise has no exceptions now.** Unset `NEURARCH_REPORT` and
+  this server opens no socket, from any tool. `NEURARCH_API_KEY` and
+  `NEURARCH_API_URL` are read nowhere in the package.
+
+- **Corpus reporting covers all three grading tools**, not just
+  `validate_model`, and grades with `lintModelGraph` rule ids rather than the
+  validator's own vocabulary.
+
+  Both halves were making the channel unusable. Coverage was an accident of
+  which tool an agent happened to reach for: an agent that asked for the design
+  rules or the whole verdict recorded nothing. And an `mcp` row said `cycle`
+  where a `ci` row said `head-dim-divisibility`, so rows from the two channels
+  could not be pooled even when they were about the same graph. The row is now
+  derived from the graph rather than from the tool result, so the same graph
+  produces the same row whichever tool asked, and the server's fingerprint
+  dedupes rather than triple-counting.
+
+### Added
+- **`lint_model` returns `provenance`**: for each rule that fired and has a
+  published measurement behind it, the measurement, quoted with its public
+  source. Local, from a static table, no key. Rules with no number behind them
+  are absent rather than dressed up, which is the same honesty contract the
+  table has always carried.
+
 ## [0.11.0]
 
 ### Added

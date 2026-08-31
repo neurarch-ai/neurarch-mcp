@@ -68,15 +68,19 @@ describe('ListTools', () => {
     }
   });
 
-  it('marks check_design as the one read tool that leaves the machine', async () => {
+  it('marks every read tool closed-world, check_design included', async () => {
+    // check_design was the exception until the verifier was vendored: it POSTed
+    // the graph to an endpoint, so its answer tracked a service rather than the
+    // file, and it was annotated openWorld/non-idempotent to say so. It is a
+    // local function call now, and an annotation that still claimed otherwise
+    // would tell a client to expect network failures that cannot happen.
     const client = await connect();
     const { tools } = await client.listTools();
+    for (const t of tools) {
+      expect(t.annotations!.openWorldHint, t.name).toBe(false);
+    }
     const check = tools.find(t => t.name === 'check_design')!;
-    expect(check.annotations!.openWorldHint).toBe(true);
     expect(check.annotations!.readOnlyHint).toBe(true);
-    // Everything else is closed-world: it only ever reads the file.
-    const others = tools.filter(t => t.name !== 'check_design');
-    expect(others.every(t => t.annotations!.openWorldHint === false)).toBe(true);
   });
 
   it('flags the destructive write tools and only those', async () => {

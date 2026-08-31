@@ -1,6 +1,6 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "MCP server that gives Claude Code, Cursor, Windsurf and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file or a Neurarch model graph and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), analyse blast radius before an edit, get a full readiness/cost/deployment verdict (check_design), trace paths, render Mermaid topology, and with --write mutate the graph. One server covers a whole repo via model_path. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
   "type": "module",
   "bin": {

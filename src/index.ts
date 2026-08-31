@@ -55,20 +55,15 @@ Environment:
                       on every request (constant-time checked). Required before
                       --write may bind to a non-loopback host.
   NEURARCH_REPORT     Set to 1 to opt in to anonymous corpus reporting: each
-                      validate_model call shares its structural fingerprint,
-                      layer-type histogram, edge count, and (rule, severity)
-                      pairs. Never the graph, params, names, or any identity.
-                      Off by default. Errors never affect the tool call.
-  NEURARCH_API_KEY    Neurarch developer API key (nrk_...). Enables check_design,
-                      which returns the full verdict on the model: readiness,
-                      training cost, best deployment target, open decisions.
-                      Unlike corpus reporting, this SENDS THE GRAPH, because a
-                      verdict about a graph cannot be computed without it. Unset
-                      means check_design explains itself and opens no socket.
-  NEURARCH_API_URL    Override the check_design endpoint (self-hosted / testing).
+                      validate_model, lint_model or check_design call shares its
+                      structural fingerprint, layer-type histogram, edge count,
+                      and (rule, severity) pairs. Never the graph, params, names,
+                      or any identity. Off by default; errors never affect the
+                      tool call.
 
-  With neither NEURARCH_REPORT nor NEURARCH_API_KEY set, this server makes no
-  network calls at all.
+  This is the only switch that opens a socket. Unset, this server makes no
+  network calls at all: every tool, check_design included, runs locally against
+  a vendored verifier. No API key is read anywhere in this package.
 
 Read tools (always available):
 ${TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}

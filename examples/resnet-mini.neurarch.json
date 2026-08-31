@@ -3,7 +3,7 @@
   "name": "resnet-mini",
   "description": "A minimal ResNet: a conv stem and one residual block (two conv-bn stages plus an identity skip merged by an add node), then global pooling and a classifier. Hand-written example showing a branchier graph with a skip connection, so impact/validation/path tools have a merge node to reason about.",
   "components": [
-    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": {}, "inputs": [], "outputs": ["stem_conv"], "outputShape": [3, 32, 32] },
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": { "shape": [3, 32, 32] }, "inputs": [], "outputs": ["stem_conv"], "outputShape": [3, 32, 32] },
     { "id": "stem_conv", "type": "conv2d", "name": "stem_conv", "position": { "x": 0, "y": 100 }, "params": { "inChannels": 3, "outChannels": 64, "kernelSize": 3, "padding": 1 }, "inputs": ["input"], "outputs": ["stem_bn"], "scope": "stem", "inputShape": [3, 32, 32], "outputShape": [64, 32, 32] },
     { "id": "stem_bn", "type": "batchNorm", "name": "stem_bn", "position": { "x": 0, "y": 200 }, "params": { "numFeatures": 64 }, "inputs": ["stem_conv"], "outputs": ["stem_relu"], "scope": "stem", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },
     { "id": "stem_relu", "type": "relu", "name": "stem_relu", "position": { "x": 0, "y": 300 }, "params": {}, "inputs": ["stem_bn"], "outputs": ["conv_a", "add"], "scope": "stem", "inputShape": [64, 32, 32], "outputShape": [64, 32, 32] },

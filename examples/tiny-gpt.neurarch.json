@@ -3,7 +3,7 @@
   "name": "tiny-gpt",
   "description": "A small GPT-style decoder: token embedding, two transformer blocks, a final norm, and an LM head. Hand-written example so you can try neurarch-mcp without the app.",
   "components": [
-    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": { "seqLen": 256 }, "inputs": [], "outputs": ["tok_emb"], "outputShape": [256] },
+    { "id": "input", "type": "input", "name": "input", "position": { "x": 0, "y": 0 }, "params": { "shape": [256], "seqLen": 256 }, "inputs": [], "outputs": ["tok_emb"], "outputShape": [256] },
     { "id": "tok_emb", "type": "embedding", "name": "token_embedding", "position": { "x": 0, "y": 100 }, "params": { "vocabSize": 50257, "embeddingDim": 512 }, "inputs": ["input"], "outputs": ["pos_emb"], "scope": "embed", "inputShape": [256], "outputShape": [256, 512] },
     { "id": "pos_emb", "type": "positionalEncoding", "name": "positional_encoding", "position": { "x": 0, "y": 200 }, "params": { "maxLen": 256, "embedDim": 512 }, "inputs": ["tok_emb"], "outputs": ["block0"], "scope": "embed", "inputShape": [256, 512], "outputShape": [256, 512] },
     { "id": "block0", "type": "transformerBlock", "name": "block_0", "position": { "x": 0, "y": 300 }, "params": { "embedDim": 512, "numHeads": 8, "ffDim": 2048 }, "inputs": ["pos_emb"], "outputs": ["block1"], "scope": "decoder.layer.0", "inputShape": [256, 512], "outputShape": [256, 512] },

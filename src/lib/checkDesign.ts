@@ -1,5 +1,5 @@
 /**
- * check_design — ask Neurarch's verifier for the whole verdict on this graph.
+ * check_design — Neurarch's whole verdict on this graph, computed here.
  *
  * Every other tool in this server answers a question about the model from the
  * file in front of it: how many parameters, what does this layer touch, is
@@ -8,55 +8,33 @@
  * architecture, which is "is this design sound, what will it cost to train, and
  * where can it actually run".
  *
- * That verdict is one HTTP call away, and this is the call.
+ * ── Why this stopped being a network call ──────────────────────────────────
+ * It used to POST to /api/v1/check with an API key. Nothing about it needed to.
+ * `checkDesign` is a pure, synchronous function of the graph: five pipeline
+ * stages, ~13ms, no I/O of any kind. The server around it did three things the
+ * key paid for, and none of them were the verdict: it validated the key,
+ * capped the graph at 2000 components, and rewrote the error text. The corpus
+ * row that would have justified metering is written by a separate endpoint that
+ * requires no key at all.
+ *
+ * So the key bought no compute and captured no measurement. All it did was put
+ * a signup between a stranger and the one tool this product is built around,
+ * while the other eighteen tools in this server ran offline on first install.
+ * The verifier is vendored now (src/vendor/verifier.bundle.mjs), and this file
+ * is a function call.
  *
  * ── The network promise ────────────────────────────────────────────────────
- * This server's README promises no network calls at all unless you opt in.
- * That promise is kept, precisely: `check_design` requires NEURARCH_API_KEY,
- * and with no key set it never opens a socket. It returns an explanation
- * instead. Setting a key is the opt-in, the same way NEURARCH_REPORT=1 is for
- * corpus reporting, and it is the only thing in this file that can cause
- * traffic.
+ * This server's README promises no network calls unless you opt in. That
+ * promise used to carry an exception for this tool. It no longer does: nothing
+ * here opens a socket, ever, and the graph never leaves the machine. The single
+ * remaining opt-in is NEURARCH_REPORT=1 (corpus reporting), whose payload is
+ * structurally incapable of carrying the model.
  *
- * ── What is sent ───────────────────────────────────────────────────────────
- * The model graph, because a verdict about a graph cannot be computed without
- * it. That is materially different from corpus reporting, which is deliberately
- * incapable of carrying the model, so it is stated plainly here and in the
- * README rather than buried. If you do not want the graph leaving the machine,
- * do not set a key: every other tool in this server keeps working.
+ * The hosted endpoint still exists, for callers who are not running this
+ * server: https://www.neurarch.com/api/v1/check, same code path, same answer.
  */
+import { checkDesign as runVerifier, provenanceFor } from '../vendor/verifier.bundle.mjs';
 import type { ModelArchitecture } from './types.js';
-
-/**
- * Read at call time, not at import time.
- *
- * A module-scope `const` would freeze whatever the environment happened to be
- * when this file was first imported, which is wrong twice over: a host that
- * configures the process after loading modules gets ignored, and a test cannot
- * exercise the override without re-importing the module.
- */
-function checkUrl(): string {
-  return process.env.NEURARCH_API_URL || DEFAULT_CHECK_URL;
-}
-
-/**
- * The host is `www`, and the `www` is load-bearing.
- *
- * The apex `neurarch.com` answers every /api route with a 307 to
- * `www.neurarch.com`. Node's fetch follows it, keeps the method and the body
- * (that is what 307 means), and then does the one thing that breaks this tool:
- * per the fetch spec it strips `Authorization` when a redirect crosses
- * origins. The request that finally lands carries no key, the server answers
- * 401, and the agent is told its key is invalid when the key was fine.
- *
- * So the default points at the host that actually serves the route. Anyone
- * setting NEURARCH_API_URL by hand should do the same.
- */
-export const DEFAULT_CHECK_URL = 'https://www.neurarch.com/api/v1/check';
-
-/** Foreground tool, so it gets longer than the fire-and-forget reporter's 5s,
- *  but still a cap: an agent waiting forever on us is worse than an error. */
-const TIMEOUT_MS = 20_000;
 
 export interface DesignCheckFinding {
   stage: string;
@@ -76,63 +54,51 @@ export interface DesignCheck {
   decision?: { question: string; because: string; options: Array<{ label: string; value: string; hint?: string }> };
 }
 
-export function apiKey(): string | undefined {
-  const k = process.env.NEURARCH_API_KEY?.trim();
-  return k ? k : undefined;
+/**
+ * The size cap the endpoint enforced, kept rather than dropped.
+ *
+ * Not for our sake any more (there is no server to protect), but for the
+ * agent's: the stages are near-linear in layer count, and a runaway generated
+ * graph should come back with a sentence rather than stall the tool call it was
+ * made from. The number is the endpoint's, so both surfaces refuse the same
+ * inputs.
+ */
+export const MAX_COMPONENTS = 2000;
+
+export function checkDesign(model: ModelArchitecture): DesignCheck | { error: string } {
+  const n = model?.components?.length ?? 0;
+  if (n > MAX_COMPONENTS) {
+    return {
+      error: `check_design: this graph has ${n} layers, over the ${MAX_COMPONENTS} cap. `
+        + 'Check a subgraph, or the block-level model rather than the expanded one.',
+    };
+  }
+  try {
+    return runVerifier(model) as DesignCheck;
+  } catch (e) {
+    // A verifier that throws is a bug in the verifier, not a broken model, and
+    // saying so is more useful to the agent than a stack trace it cannot act on.
+    return {
+      error: `check_design could not evaluate this graph: ${(e as Error).message}. `
+        + 'The graph loaded, so this is a gap in the verifier rather than a problem with your model. '
+        + 'validate_model and lint_model still work on it.',
+    };
+  }
 }
 
 /**
- * The message shown when no key is configured.
+ * The published measurement behind each rule that fired.
  *
- * Written for the agent that hit it, not for a log: it says what is missing,
- * where to get it, and what still works without it, so the agent can tell the
- * user something useful instead of reporting a bare failure.
+ * Bundled rather than fetched, and free rather than metered, for the same
+ * reason as the verdict: the measurements are already public at
+ * https://www.neurarch.com/docs/structural-checks, and charging for a number
+ * you can read on the website is theatre. It is also the give-back that makes
+ * NEURARCH_REPORT=1 an exchange rather than a donation.
+ *
+ * Rules with no published measurement behind them are simply absent, which is
+ * the honest shape: an empty object means "nothing here is backed by a number
+ * we can show you", not "no rules fired".
  */
-export const NO_KEY_MESSAGE =
-  'check_design needs a Neurarch API key, and none is set. '
-  + 'Create one at https://www.neurarch.com under Settings → Developer API, then start this server with '
-  + 'NEURARCH_API_KEY=nrk_... in its environment. '
-  + 'Without a key this server makes no network calls, and every other tool here still works offline; '
-  + 'validate_model is the local subset (cycles, dangling refs, orphans) of what check_design returns.';
-
-export async function checkDesign(model: ModelArchitecture): Promise<DesignCheck | { error: string }> {
-  const key = apiKey();
-  // Checked before anything else: no key means no socket, which is the whole
-  // basis of the offline promise above.
-  if (!key) return { error: NO_KEY_MESSAGE };
-
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  try {
-    const url = checkUrl();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model }),
-      signal: ctrl.signal,
-    });
-
-    if (!res.ok) {
-      // The server's own message is more specific than anything we could
-      // invent here (an expired key, a graph over the size cap), so it is
-      // passed through rather than flattened into "request failed".
-      const body = await res.text().catch(() => '');
-      let detail = body.slice(0, 400);
-      try {
-        const parsed = JSON.parse(body) as { error?: string };
-        if (parsed?.error) detail = parsed.error;
-      } catch { /* not JSON: the truncated body is the best we have */ }
-      return { error: `check_design failed (HTTP ${res.status}): ${detail || 'no response body'}` };
-    }
-
-    return (await res.json()) as DesignCheck;
-  } catch (e) {
-    const err = e as Error;
-    if (err.name === 'AbortError') {
-      return { error: `check_design timed out after ${TIMEOUT_MS / 1000}s. The graph may be very large, or the service unreachable.` };
-    }
-    return { error: `check_design could not reach ${checkUrl()}: ${err.message}` };
-  } finally {
-    clearTimeout(timer);
-  }
+export function provenanceForRules(ruleIds: string[]): Record<string, unknown> {
+  return provenanceFor(ruleIds) as Record<string, unknown>;
 }
