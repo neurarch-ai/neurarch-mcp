@@ -39,6 +39,9 @@ const addLayerTool: ToolDef = {
     required: ['type', 'name'],
     additionalProperties: false,
   },
+  // Adds; never overwrites. Not idempotent: calling it twice with the same
+  // name fails on the duplicate, and with a different name adds a second layer.
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   handler: (args, model) => addLayer(model, args),
 };
 
@@ -57,6 +60,10 @@ const modifyLayerTool: ToolDef = {
     required: ['name'],
     additionalProperties: false,
   },
+  // Overwrites existing params, so destructive in the sense the spec means:
+  // the previous value is gone. Idempotent because re-applying the same patch
+  // lands on the same state.
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   handler: (args, model) => modifyLayer(model, args),
 };
 
@@ -74,6 +81,7 @@ const addConnectionTool: ToolDef = {
     required: ['from', 'to'],
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   handler: (args, model) => addConnection(model, args),
 };
 
@@ -89,6 +97,10 @@ const deleteLayerTool: ToolDef = {
     required: ['name'],
     additionalProperties: false,
   },
+  // The most destructive tool here: it takes every edge touching the layer
+  // with it. Idempotent only in the weak sense that a second call finds
+  // nothing left to remove.
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   handler: (args, model) => deleteLayer(model, args),
 };
 
@@ -105,6 +117,7 @@ const deleteConnectionTool: ToolDef = {
     required: ['from', 'to'],
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   handler: (args, model) => deleteConnection(model, args),
 };
 
@@ -122,6 +135,10 @@ const saveModelTool: ToolDef = {
     },
     additionalProperties: false,
   },
+  // Overwrites a file on disk, which is the only irreversible thing this
+  // server does. A client that confirms exactly one tool should confirm this
+  // one.
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   handler: async (args: { path?: string }, model, ctx) => {
     const target = args.path ?? ctx.modelPath;
     if (!target) throw new Error('save_model: no path available.');

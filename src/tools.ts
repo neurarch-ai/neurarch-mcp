@@ -16,10 +16,32 @@ export interface ToolContext {
   modelPath: string;
 }
 
+/**
+ * MCP tool annotations (spec 2025-03-26 and later): behavioural hints a client
+ * uses to decide how much ceremony a call deserves. They are hints, not
+ * enforcement, but they are the difference between a client confirming all 30
+ * tools and confirming the three that can actually destroy something.
+ */
+export interface ToolAnnotations {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
 export interface ToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /**
+   * Overrides only. Read tools inherit read-only / idempotent / closed-world
+   * defaults from `annotate()` in cli.ts, so a tool declares annotations here
+   * only where the truth differs from that. Write tools always declare their
+   * own, because "does this destroy anything" is never a default worth
+   * guessing at.
+   */
+  annotations?: ToolAnnotations;
   handler: (args: any, model: ModelArchitecture, ctx: ToolContext) => unknown | Promise<unknown>;
 }
 
@@ -389,6 +411,10 @@ const checkDesignTool: ToolDef = {
     + 'edit actually did. Broader than validate_model, which is the local structural subset. '
     + 'Requires NEURARCH_API_KEY and makes one network call; returns an explanation if unset.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  // The one read tool that reaches outside this process, so the one that is
+  // not closed-world and not guaranteed to answer the same thing twice: the
+  // verdict tracks a service that improves.
+  annotations: { openWorldHint: true, idempotentHint: false },
   handler: (_args, model) => checkDesign(model),
 };
 
