@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCorpusReport, reportingEnabled } from './corpusReport.js';
+import { buildCorpusReport, reportingEnabled, DEFAULT_REPORT_URL } from './corpusReport.js';
 import type { ModelArchitecture } from './types.js';
 import type { ValidationReport } from './validation.js';
 
@@ -70,5 +70,12 @@ describe('buildCorpusReport', () => {
       if (prev === undefined) delete process.env.NEURARCH_REPORT;
       else process.env.NEURARCH_REPORT = prev;
     }
+  });
+  it('posts to a host that does not redirect', () => {
+    // The row carries no Authorization header, so a redirect would not lose
+    // anything, but it would burn a round trip inside a 5s fire-and-forget
+    // budget. Same apex-307 trap as check_design; same answer.
+    expect(DEFAULT_REPORT_URL).toBe('https://www.neurarch.com/api/v1/report');
+    expect(new URL(DEFAULT_REPORT_URL).hostname).not.toBe('neurarch.com');
   });
 });

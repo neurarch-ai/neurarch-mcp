@@ -19,7 +19,20 @@
 import type { ModelArchitecture } from './types.js';
 import type { ValidationReport } from './validation.js';
 
-const REPORT_URL = process.env.NEURARCH_REPORT_URL || 'https://neurarch.com/api/v1/report';
+/**
+ * `www`, not the apex, for the same reason check_design uses it: the apex 307s
+ * every /api route to www. This request carries no Authorization header, so a
+ * followed redirect would still deliver the row, but it would pay a wasted
+ * round trip inside a 5s fire-and-forget budget for no reason at all.
+ *
+ * Read at call time rather than frozen at import time, so a host that
+ * configures the process after loading modules is still honoured.
+ */
+export const DEFAULT_REPORT_URL = 'https://www.neurarch.com/api/v1/report';
+
+function reportUrl(): string {
+  return process.env.NEURARCH_REPORT_URL || DEFAULT_REPORT_URL;
+}
 
 /** Tiny deterministic string hash (FNV-1a, 32-bit) -> 8-char hex. */
 function fnv1a(str: string): string {
@@ -75,7 +88,7 @@ export function buildCorpusReport(model: ModelArchitecture, report: ValidationRe
 export function sendCorpusReport(payload: CorpusReport): void {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
-  fetch(REPORT_URL, {
+  fetch(reportUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

@@ -6,6 +6,28 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.10.1]
+
+### Fixed
+- **`check_design` returned "Invalid or missing API key" to everyone who had a
+  valid one.** 0.10.0 defaulted to `https://neurarch.com/api/v1/check`. The apex
+  answers every `/api` route with a 307 to `www.neurarch.com`; Node's `fetch`
+  follows it, keeps the method and body as a 307 requires, and then strips the
+  `Authorization` header because the redirect crosses origins (this is the fetch
+  spec, not a bug in undici). The request that landed carried no key, the server
+  answered 401, and the error text sent the user off to re-create a key that was
+  never the problem. The default is now `https://www.neurarch.com/api/v1/check`,
+  and a test pins the host so the trap cannot be walked into again.
+
+  No action needed beyond upgrading. Anyone who worked around this by setting
+  `NEURARCH_API_URL` to the `www` host can drop the override.
+
+- Corpus reporting (`NEURARCH_REPORT=1`) posted to the same apex host. It has no
+  `Authorization` header to lose, so rows were still delivered, but each one paid
+  a redirect inside a 5-second fire-and-forget budget. It now posts to `www`
+  directly, and reads `NEURARCH_REPORT_URL` at call time rather than freezing it
+  at import time, matching `check_design`.
+
 ## [0.10.0]
 
 ### Added

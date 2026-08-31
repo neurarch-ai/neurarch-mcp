@@ -36,8 +36,23 @@ import type { ModelArchitecture } from './types.js';
  * exercise the override without re-importing the module.
  */
 function checkUrl(): string {
-  return process.env.NEURARCH_API_URL || 'https://neurarch.com/api/v1/check';
+  return process.env.NEURARCH_API_URL || DEFAULT_CHECK_URL;
 }
+
+/**
+ * The host is `www`, and the `www` is load-bearing.
+ *
+ * The apex `neurarch.com` answers every /api route with a 307 to
+ * `www.neurarch.com`. Node's fetch follows it, keeps the method and the body
+ * (that is what 307 means), and then does the one thing that breaks this tool:
+ * per the fetch spec it strips `Authorization` when a redirect crosses
+ * origins. The request that finally lands carries no key, the server answers
+ * 401, and the agent is told its key is invalid when the key was fine.
+ *
+ * So the default points at the host that actually serves the route. Anyone
+ * setting NEURARCH_API_URL by hand should do the same.
+ */
+export const DEFAULT_CHECK_URL = 'https://www.neurarch.com/api/v1/check';
 
 /** Foreground tool, so it gets longer than the fire-and-forget reporter's 5s,
  *  but still a cap: an agent waiting forever on us is worse than an error. */
@@ -75,7 +90,7 @@ export function apiKey(): string | undefined {
  */
 export const NO_KEY_MESSAGE =
   'check_design needs a Neurarch API key, and none is set. '
-  + 'Create one at https://neurarch.com under Settings → Developer API, then start this server with '
+  + 'Create one at https://www.neurarch.com under Settings → Developer API, then start this server with '
   + 'NEURARCH_API_KEY=nrk_... in its environment. '
   + 'Without a key this server makes no network calls, and every other tool here still works offline; '
   + 'validate_model is the local subset (cycles, dangling refs, orphans) of what check_design returns.';

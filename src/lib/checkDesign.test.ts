@@ -7,7 +7,7 @@
  * possible regression in this package.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { checkDesign, apiKey, NO_KEY_MESSAGE } from './checkDesign.js';
+import { checkDesign, apiKey, NO_KEY_MESSAGE, DEFAULT_CHECK_URL } from './checkDesign.js';
 import type { ModelArchitecture } from './types.js';
 
 const model = (): ModelArchitecture => ({
@@ -122,5 +122,24 @@ describe('with a key', () => {
     expect(String(fetchSpy.mock.calls[0][0])).toBe('http://localhost:3000/api/v1/check');
     if (prevUrl === undefined) delete process.env.NEURARCH_API_URL;
     else process.env.NEURARCH_API_URL = prevUrl;
+  });
+  it('defaults to a host that does not redirect, so the key survives the hop', () => {
+    // 0.10.0 shipped pointing at the apex, which 307s to www. Node's fetch
+    // follows the hop and strips Authorization across origins, so every user
+    // with a perfectly good key was told the key was invalid. The default host
+    // is therefore part of the contract, not a cosmetic choice.
+    expect(DEFAULT_CHECK_URL).toBe('https://www.neurarch.com/api/v1/check');
+    expect(new URL(DEFAULT_CHECK_URL).hostname).not.toBe('neurarch.com');
+  });
+
+  it('sends the key on the request it actually makes', async () => {
+    process.env.NEURARCH_API_KEY = 'nrk_live';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(OK_BODY), { status: 200 }),
+    );
+    await checkDesign(model());
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toBe(DEFAULT_CHECK_URL);
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer nrk_live');
   });
 });
