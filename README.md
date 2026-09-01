@@ -1,38 +1,32 @@
 # neurarch-mcp
 
+**PyTorch MCP server: lint, verify and rank a neural network design before you train it, from Claude Code, Cursor, Claude Desktop, VS Code, Windsurf or Codex.**
+
 [![CI](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
 [![npm downloads](https://img.shields.io/npm/dm/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
+[![PyPI neurarch-trace](https://img.shields.io/pypi/v/neurarch-trace.svg?label=neurarch-trace)](https://pypi.org/project/neurarch-trace/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-server-7c3aed.svg)](https://modelcontextprotocol.io)
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
-[![Try Neurarch](https://img.shields.io/badge/Neurarch-try_it-7c3aed)](https://neurarch.com)
 
-**Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead.**
+Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead, plus the verifier: **the design rules, the full readiness / cost / deployment verdict, and which of several candidate designs is worth the GPU time.** Point it at a PyTorch `.py`, a saved graph, or a Hugging Face repo. Everything runs on your machine, with no API key, no account, and no network call unless you turn one on.
 
-A Model Context Protocol server that plugs a PyTorch `.py` file or a [Neurarch](https://neurarch.com) model graph into Claude Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex, and any other MCP-aware agent.
+[![neurarch-mcp answering a model-structure question, every number from a tool call](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo.gif)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
 
-The agent gets **structural awareness** of your network: layer list, parameter counts, FLOPs, blast-radius impact analysis, the design rules, the full readiness and cost verdict, and Mermaid diagrams, without you pasting 200 lines of `nn.Module` into chat. Point it at your `.py` and it reads the model straight out of the source. All of it runs on your machine: no API key, no account, and no network call unless you turn one on.
+<sub>Every number above is produced by the tools, not guessed by the model. [13s webm](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm).</sub>
 
-<!-- For guaranteed inline autoplay on GitHub: drag docs/demo.webm into any GitHub
-     issue or PR comment box, then replace the <video> src below with the resulting
-     https://github.com/user-attachments/assets/... URL. The raw URL works as a
-     poster + download fallback until then. -->
-<video
-  src="https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm"
-  poster="https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png"
-  autoplay muted loop playsinline width="900">
-  <a href="https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm">
-    <img src="https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo-poster.png"
-         alt="neurarch-mcp answering a model-structure question, grounded in real tool output" width="900">
-  </a>
-</video>
+## Install
 
-<sub>▶ [Watch the 13s demo](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm) — every number above is produced by the tools, not guessed by the model.</sub>
+```bash
+claude mcp add neurarch -- npx -y neurarch-mcp /abs/path/to/model.py        # Claude Code
+```
 
-## Why
+[<img src="https://img.shields.io/badge/Add%20to-Cursor-000000?logo=cursor&logoColor=white" alt="Add to Cursor" height="28">](cursor://anysphere.cursor-deeplink/mcp/install?name=neurarch&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm5ldXJhcmNoLW1jcCIsIi4vbW9kZWwucHkiXX0=)
+[<img src="https://img.shields.io/badge/Install%20in-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white" alt="Install in VS Code" height="28">](https://vscode.dev/redirect/mcp/install?name=neurarch&config=%7B%22name%22%3A%20%22neurarch%22%2C%20%22command%22%3A%20%22npx%22%2C%20%22args%22%3A%20%5B%22-y%22%2C%20%22neurarch-mcp%22%2C%20%22%24%7BworkspaceFolder%7D%2Fmodel.py%22%5D%7D)
+[<img src="https://img.shields.io/badge/Claude%20Desktop-.mcpb-D97757?logo=anthropic&logoColor=white" alt="Claude Desktop bundle" height="28">](https://github.com/neurarch-ai/neurarch-mcp/releases/latest)
 
-When you ask Claude Code "rewrite the training loop for my new encoder block", it sees your `train.py` but not your model. It guesses at shapes and parameter counts. `neurarch-mcp` plugs the structured model graph into the same conversation so the agent can answer "what depends on `attn_8`?" or "where does the parameter budget actually live?" with one call instead of ten.
+Per-client config for Claude Desktop, Cursor, VS Code, Windsurf and Codex is [below](#client-setup). Node 20+ is the only requirement; there is no install step beyond `npx`.
 
 ## What it looks like
 
@@ -42,7 +36,7 @@ A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.
 You ▸ Where does the parameter budget live, and is it safe to drop block_1?
 
 Claude ▸ (calls describe_architecture)
-  tiny-gpt — 8 layers, depth 7, 57.8M params, 8.27 GMACs.
+  tiny-gpt: 8 layers, depth 7, 57.8M params, 8.27 GMACs.
   Heaviest by params: token_embedding (25.7M, 44%), lm_head (25.7M), block_0/1 (3.1M each).
   Heaviest by compute: lm_head, then the two decoder blocks. Validation: clean.
 
@@ -52,288 +46,213 @@ Claude ▸ (calls describe_architecture)
   The budget is dominated by the embedding + LM head (~89%), not the decoder blocks,
   so dropping block_1 frees only ~3.1M params (~5%) while removing one of just two
   decoder layers. It is structurally safe (final_norm just re-reads block_0's output),
-  but it is the wrong lever if your goal is shrinking the model — quantizing the
+  but it is the wrong lever if your goal is shrinking the model. Quantizing the
   embedding/head would do far more.
 ```
 
-Numbers above are produced by the tools, not estimated by the model.
+And the one this server is built around. Point it at [`examples/tiny-vit.py`](./examples/tiny-vit.py), plain PyTorch source with a bug planted in it, and ask *"lint this model"*:
 
-## Install
-
-No install step. Every client below launches the server the same way:
-
-```bash
-npx -y neurarch-mcp /abs/path/to/model.py                    # your PyTorch source
-npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json    # or a file saved from the app
+```
+block  head-dim-divisibility [attn:multiHeadAttention]: embed dim (258) must be
+       divisible by numHeads (8); head_dim would be 32.25
 ```
 
-**Point it at a `.py` and it works.** The server parses PyTorch source into the same graph the app uses, with the same parser, so there is no "first go draw your model" step between installing this and getting an answer. What comes out of source is layers, types, hyperparameters and wiring, all exact. What does not is tensor shapes, because the source never says what goes in: parameter counts still come out, FLOPs and shape contracts report as unknown rather than as zero. `--write` is refused on a `.py` file, since the graph was derived from it and this server does not generate Python.
+That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run.
 
-For the full picture, export from the [Neurarch](https://neurarch.com) app with **File → Save (.json)**: that file carries shapes, groups, hyperparameters and design notes, so every tool has everything. Add `--watch` so the agent sees app-side saves without a restart, and `--write` if you want the agent to be able to edit the model (off by default).
+## Three ways in
 
-Use an **absolute** path to the model file in any global config: `npx` does not run from your project directory, so relative paths only work in project-scoped configs.
+| Input | What the agent gets | How |
+|---|---|---|
+| **A PyTorch `.py` file** | Layers, types, hyperparameters and wiring, all exact. Parameter counts. Shapes and FLOPs are unknown, because the source never says what goes in, and are reported as unknown rather than as zero. | `npx -y neurarch-mcp model.py` |
+| **A traced graph** (`neurarch-trace`) | Everything, with real shapes. Handles what static parsing cannot: `from_pretrained`, timm, models spread across files, anything built dynamically. | `pip install neurarch-trace`<br>`neurarch-trace my_pkg.model:build --input 1,3,224,224` |
+| **A Hugging Face repo** | The architecture from `config.json`, with the published parameter count next to the graph's so you can see how close it is (Qwen2.5-0.5B: 494.00M against 494,032,768). | `npx -y neurarch-mcp hf:Qwen/Qwen2.5-0.5B --hf` |
 
-### Claude Code
+A `.neurarch.json` saved from the [Neurarch app](https://neurarch.com) (**File → Save**) is the fourth, and carries shapes, groups and design notes. Add `--watch` so the agent sees app-side saves without a restart.
 
-One command:
-
-```bash
-claude mcp add neurarch -- npx -y neurarch-mcp /abs/path/to/your-model.neurarch.json --watch
-```
-
-Or commit a project-scoped `.mcp.json` at the repo root so every collaborator gets the server automatically:
-
-```json
-{
-  "mcpServers": {
-    "neurarch": {
-      "command": "npx",
-      "args": ["-y", "neurarch-mcp", "./model.neurarch.json", "--watch"]
-    }
-  }
-}
-```
-
-### Claude Desktop
-
-Open **Settings → Developer → Edit Config**, or edit the file directly:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "neurarch": {
-      "command": "npx",
-      "args": ["-y", "neurarch-mcp", "/abs/path/to/your-model.neurarch.json", "--watch"]
-    }
-  }
-}
-```
-
-Fully quit and reopen Claude Desktop (the config is read at startup). The tools appear under the search-and-tools icon in the chat input.
-
-### Cursor
-
-Create `.cursor/mcp.json` in your project (or `~/.cursor/mcp.json` for all projects), then enable the server under **Settings → MCP**:
-
-```json
-{
-  "mcpServers": {
-    "neurarch": {
-      "command": "npx",
-      "args": ["-y", "neurarch-mcp", "./model.neurarch.json", "--watch"]
-    }
-  }
-}
-```
-
-### VS Code (Copilot agent mode)
-
-Create `.vscode/mcp.json` (note the `servers` key, not `mcpServers`):
-
-```json
-{
-  "servers": {
-    "neurarch": {
-      "command": "npx",
-      "args": ["-y", "neurarch-mcp", "${workspaceFolder}/model.neurarch.json", "--watch"]
-    }
-  }
-}
-```
-
-Or from a shell: `code --add-mcp '{"name":"neurarch","command":"npx","args":["-y","neurarch-mcp","/abs/path/to/model.neurarch.json"]}'`
-
-### Other clients (Windsurf, Codex, ...)
-
-Same `command` + `args` shape; only the config file location differs. For clients that speak Streamable HTTP instead of stdio, run the server with `--http` and point the client at it:
-
-```json
-{
-  "mcpServers": {
-    "neurarch": {
-      "type": "http",
-      "url": "http://127.0.0.1:8787/mcp"
-    }
-  }
-}
-```
-
-If you set `NEURARCH_MCP_TOKEN`, add `"headers": { "Authorization": "Bearer <token>" }`. See [Remote access](#remote-access) for tunnels and security.
-
-### Verify it works
-
-Ask the agent: *"List the Neurarch tools you can see."* You should get `describe_architecture`, `layer_impact`, `validate_model` and friends (18 read tools; 6 more with `--write`). From a shell, `npx -y neurarch-mcp --help` prints usage and the full tool list.
-
-## Try it in 30 seconds (no app needed)
-
-This repo ships runnable example models under [`examples/`](./examples). Point the server at one and your agent can immediately answer structural questions:
-
-```jsonc
-{
-  "mcpServers": {
-    "neurarch": {
-      "command": "npx",
-      "args": ["-y", "neurarch-mcp", "./examples/tiny-gpt.neurarch.json"]
-    }
-  }
-}
-```
-
-- [`examples/tiny-vit.py`](./examples/tiny-vit.py) — **plain PyTorch source**, no export step, with a real design bug planted in it.
-- [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json) — a small GPT-style decoder (embedding, 2 transformer blocks, LM head).
-- [`examples/tiny-cnn.neurarch.json`](./examples/tiny-cnn.neurarch.json) — a CIFAR-style CNN (2 conv stages + classifier).
-- [`examples/resnet-mini.neurarch.json`](./examples/resnet-mini.neurarch.json) — a residual block with a skip/merge node (a branchier graph for impact and path tools).
-
-Point it at the Python file and ask *"lint this model"*, and `lint_model` comes
-back with five findings on a file nothing was exported from, one of them a
-blocker: `head-dim-divisibility` on `attn`, because `embed_dim=258` is not
-divisible by `num_heads=8`. That is a runtime crash sitting in source that reads
-fine, found offline, with no key and no account.
-
-Then ask:
-
-> Look at the Neurarch model. Where do the parameters actually live, and which block would shrink the model fastest if I cut it in half?
-
-The agent calls `describe_architecture` (one shot: pipeline, depth, param + compute hotspots, validation), then `layer_impact` on the heaviest block, and writes a recommendation grounded in the actual numbers from the model, like the transcript above.
+Every read tool also takes an optional `model_path`, so **one server covers a whole repository**: ask about `baseline.py`, then `variant_b.neurarch.json`, then `zoo:llama-3-8b`, without restarting anything. `find_models` tells the agent what is there.
 
 ## Tools
 
-### Read (always available)
+Three tools grade the model, and they are a ladder worth climbing in order. Each is free, offline and instant; `check_design` runs five pipeline stages, so an agent that starts at the top still pays for an answer two thirds of which a cheaper tool had.
+
+| | Tool | Answers |
+|---|---|---|
+| 1 | `validate_model` | Is this a well-formed graph at all: cycles, dangling refs, duplicate names, orphans. |
+| 2 | `lint_model` | Does it break a design rule: attention head-dim and GQA divisibility, norm/activation ordering, dropout and feature ranges, missing residuals in deep stacks, the shape rules decidable statically. Returns `provenance`: for every rule that fired and has a published measurement behind it, the measurement. A rule with no number is absent rather than dressed up. |
+| 3 | `check_design` | Will it train, what will it cost, where can it run: readiness, parameter and cost estimates, the best deployment target and its latency, and the decisions still left to the human. Same code path as the app and `POST /api/v1/check`. |
+| 4 | `rank_designs` | **Which of k candidate designs deserves the training budget.** Candidates are paths, `zoo:`/`hf:` refs or inline graphs. Blocked ones (a pre-flight finding that means the graph will not forward-pass) rank last and come back as reclaimable budget; that part is measured, 96 of 96 blocked graphs crashed PyTorch forward and 80 of 80 passes ran. Legal candidates are ordered only by rules with a trained outcome behind them, and **a tie stays a tie**: `recommended` is null when nothing measured separates the top, which is the common answer. Params, cost and GPU fit are returned per candidate for you to break ties on your own budget; they never order. `calibration` ships inside every result (pairwise accuracy 51.4% at 8.3% coverage, in-sample), so the ordering cannot be read as a quality prediction. |
+
+### Inspect
 
 | Tool | What it does |
 |---|---|
-| `get_model_summary` | One-shot overview: layer count, total params, dominant types, input/output shape. |
-| `describe_architecture` | One-call orientation: topo-ordered pipeline, depth, IO shapes, total params/MACs, top-5 param **and** compute hotspots, validation rollup. Replaces a 4-tool chain. |
-| `get_layer` | Full definition of one layer by name: params, shapes, notes, upstream/downstream ids. |
-| `compare_layers` | Structural diff of two layers: same-type, param-count delta, shape match, and exactly which param keys differ. |
-| `find_layers` | Search layers by type, name regex, scope prefix, or augmentation (e.g. frozen layers); optionally rank by parameter count. |
-| `layer_impact` | Blast radius of changing a layer or matched set. Flags shape-sensitive and weight-carrying downstream layers. |
-| `validate_model` | Structural invariants: cycles, dangling connection refs, duplicate ids/names, orphan layers. |
-| `lint_model` | Neurarch's structural **design rules**, offline and with no API key: attention head-dim and GQA divisibility, norm/activation ordering, dropout and feature ranges, missing residuals in deep stacks, and the statically decidable shape rules. Same rule set the Neurarch CI action reports, so a clean result here is a clean CI run. |
-| `check_design` | Neurarch's **full verdict** on the model: readiness to train, parameter and cost estimates, the best deployment target and its latency, and any decision still left to the human. Broader than `validate_model`, which is the local structural subset. Offline, no API key, ~13ms. |
-| `find_path` | Shortest directed path between two layers, or `null` when unreachable. |
-| `list_connections` | Flat edge list with optional `from` / `to` filters. |
-| `param_count_by_block` | Parameter counts grouped by block / scope / type. |
-| `flops_by_block` | MAC counts (FLOPs ÷ 2) grouped by block / scope / type. |
-| `mermaid_diagram` | Render the model as Mermaid `flowchart TD` syntax; groups render as labelled subgraphs. Truncates past 60 layers (keeping the topological head). |
-| `list_blocks` | List collapsed groups (or scope-derived blocks if none): members, params, FLOPs. |
-| `get_block` | Drill into one block (group or scope prefix): per-layer params/FLOPs, totals, and the edges crossing the block boundary (what feeds it, what it feeds). |
-| `diff_models` | Structurally diff the current model against another `.neurarch.json` file: layers added / removed / modified (field-level) and connection changes. |
-| `list_hyperparams` | Model-level hyperparameters (learning rate, batch size, ...) the user set in the app. |
-| `get_design_notes` | Pinned design rationale: agent / advisor / manual notes, optionally filtered by layer. |
+| `describe_architecture` | One-call orientation: topo-ordered pipeline, depth, IO shapes, total params and MACs, top-5 param **and** compute hotspots, validation rollup. Start here. |
+| `get_model_summary` | Layer count, total params, dominant types, input/output shape. |
+| `get_layer` | One layer by name: params, shapes, notes, upstream/downstream. |
+| `find_layers` | Search by type, name regex, scope prefix or augmentation; rank by parameter count. |
+| `compare_layers` | Structural diff of two layers. |
+| `layer_impact` | **Blast radius** of changing a layer or matched set: shape-sensitive and weight-carrying downstream layers. Call it before recommending an edit. |
+| `find_path`, `list_connections` | Directed path between two layers; the edge list. |
+| `param_count_by_block`, `flops_by_block` | Params and MACs grouped by block, scope or type. |
+| `list_blocks`, `get_block` | Collapsed groups and what crosses their boundary. |
+| `diff_models` | Structural diff against another `.neurarch.json`. |
+| `mermaid_diagram` | The model as Mermaid `flowchart TD`. |
+| `list_hyperparams`, `get_design_notes` | What the user set and wrote in the app. |
+
+### Reference library and other models
+
+| Tool | What it does |
+|---|---|
+| `list_architectures` | Search the **81 reference architectures bundled with this server** (DeepSeek-V3, Qwen2.5, Llama, Mixtral, Gemma, Whisper, CLIP, BERT, ViT, ResNet and more), each with real dimensions from the model's config and a parameter count checked against the published one. Offline. |
+| `load_architecture` | Open one and describe it. Then `model_path: "zoo:<id>"` on any tool. |
+| `load_hf_model` | A Hugging Face repo as a graph. Listed only under `--hf`, because it is the one tool that opens a socket. |
+| `find_models` | Walk a directory for nn.Module definitions and saved graphs, try the parser on each, and say which need `neurarch-trace` instead. |
+| `export_pytorch` | The graph as a runnable `nn.Module`, the app's own generator. `save_to` needs `--write` and never targets the file the server was started from. |
 
 ### Write (opt in with `--write`)
 
-| Tool | What it does |
-|---|---|
-| `add_layer` | Insert a new layer, optionally auto-wired downstream of an existing one. |
-| `modify_layer` | Shallow-merge params, rename, or change scope. Returns a before/after diff. |
-| `add_connection` | Wire two existing layers. Fails on self-loops and duplicate edges. |
-| `delete_layer` | Remove a layer and every connection touching it. Invalidates downstream shapes. |
-| `delete_connection` | Remove a single directed edge. Invalidates the target's cached shape. |
-| `save_model` | Persist the in-memory model to disk. Call this after any mutation. |
+`add_layer`, `modify_layer`, `add_connection`, `delete_layer`, `delete_connection`, `save_model`. Mutations always target the file passed on the command line; write tools refuse `model_path`, so an agent cannot edit, and then save over, a path it invented. Refused on a `.py` (the graph was derived from it; use `export_pytorch` to emit new source).
 
-`layer_impact` is the headline read tool. Before the agent recommends `delete every conv_X`, it can call `layer_impact` and tell the user "this rewires 8 downstream layers, 3 of which carry weights and will need rebuild." `validate_model` is the headline safety tool — call it before recommending a destructive edit to surface pre-existing issues separately from the change. Three tools grade the model, and they are a ladder worth climbing in order:
-`validate_model` asks whether it is a well-formed graph at all (cycles, dangling
-refs, orphans), `lint_model` runs the design rules over it, and `check_design`
-answers what the file cannot -- readiness, training cost, deployment fit, and the
-decisions that are still the human's. All three are free, offline and instant:
-the verifier is vendored, not called. `check_design` is the most work of the
-three (five pipeline stages against one graph walk), so an agent that starts at
-the top still pays for an answer two thirds of which a cheaper tool had.
+Every tool declares what it does to your files (MCP annotations): read tools are read-only and closed-world, `load_hf_model` is open-world, the three that can destroy something say so. Results carry `structuredContent` alongside the JSON text.
 
-`lint_model` also returns `provenance`: for every rule that fired and has a
-published measurement behind it, the measurement. A rule with no number behind
-it is absent rather than dressed up.
+## Prompts and resources
+
+In Claude Desktop, Cursor and VS Code these show up as slash commands. Each is the tool ladder written out in order, with one rule on top: every number in the answer comes from a tool result, never from memory of similar models.
+
+| Prompt | Argument | What it does |
+|---|---|---|
+| `/review_design` | `focus?` | Structured review: readiness, risks, where the budget lives, the edits worth making with their blast radius. |
+| `/pre_train_checklist` | | Pass / fail / unknown per line, each backed by the tool that decided it, before you spend GPU time. |
+| `/shrink_for_target` | `target` | Fit "under 100M params" or "a T4 with batch 32": find where the budget lives, propose variants, rank them. |
+| `/compare_with_reference` | `architecture?` | The model next to a published one from the library, with the differences that would change training. |
+| `/explain_finding` | `rule` | What a finding means for this model, the evidence behind it, the smallest edit that clears it. |
+
+Resources a client can pin as context: `neurarch://model` (the graph), `neurarch://model/mermaid`, `neurarch://model/pytorch`, `neurarch://zoo`, `neurarch://zoo/{id}`, `neurarch://rules` (the provenance table).
+
+## Also a CLI
+
+```bash
+npx -y neurarch-mcp lint model.py                 # findings, exit 1 on a block
+npx -y neurarch-mcp lint a.py b.py --json         # for CI
+npx -y neurarch-mcp check model.py                # the full verdict
+npx -y neurarch-mcp check zoo:qwen2.5-7b          # on a reference architecture
+```
+
+## Client setup
+
+Use an **absolute** path in any global config: `npx` does not run from your project directory. Relative paths work in project-scoped configs (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`).
+
+<details open><summary><b>Claude Code</b></summary>
+
+```bash
+claude mcp add neurarch -- npx -y neurarch-mcp /abs/path/to/model.py
+```
+
+Or commit a project-scoped `.mcp.json` so every collaborator gets the server:
+
+```json
+{ "mcpServers": { "neurarch": { "command": "npx", "args": ["-y", "neurarch-mcp", "./model.py"] } } }
+```
+</details>
+
+<details><summary><b>Claude Desktop</b></summary>
+
+Download the `.mcpb` from [Releases](https://github.com/neurarch-ai/neurarch-mcp/releases/latest) and open it, or edit the config (**Settings → Developer → Edit Config**; macOS `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows `%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{ "mcpServers": { "neurarch": { "command": "npx", "args": ["-y", "neurarch-mcp", "/abs/path/to/model.py"] } } }
+```
+
+Fully quit and reopen Claude Desktop; the config is read at startup.
+</details>
+
+<details><summary><b>Cursor</b></summary>
+
+Click **Add to Cursor** above, or create `.cursor/mcp.json` (project) or `~/.cursor/mcp.json` (global):
+
+```json
+{ "mcpServers": { "neurarch": { "command": "npx", "args": ["-y", "neurarch-mcp", "./model.py"] } } }
+```
+</details>
+
+<details><summary><b>VS Code (Copilot agent mode)</b></summary>
+
+Click **Install in VS Code** above, or create `.vscode/mcp.json` (note the `servers` key):
+
+```json
+{ "servers": { "neurarch": { "command": "npx", "args": ["-y", "neurarch-mcp", "${workspaceFolder}/model.py"] } } }
+```
+</details>
+
+<details><summary><b>Windsurf, Codex, and anything speaking Streamable HTTP</b></summary>
+
+Same `command` + `args` shape; only the file location differs. For HTTP clients, run `npx neurarch-mcp model.py --http` and point the client at:
+
+```json
+{ "mcpServers": { "neurarch": { "type": "http", "url": "http://127.0.0.1:8787/mcp" } } }
+```
+</details>
+
+**Verify:** ask the agent *"List the Neurarch tools you can see."* From a shell, `npx -y neurarch-mcp --help` prints usage and the full tool list.
 
 ### Flags
 
-- `--write` — expose mutation tools. Off by default so accidental writes can't clobber a file you're editing in the Neurarch app.
-- `--watch` — poll the model file for changes and reload on save. Pair with the Neurarch app: edit visually, agent sees the latest graph without restarting the MCP server. Note: an external save will overwrite any unsaved in-memory edits made via `--write`.
-- `--http[=PORT]` — serve over Streamable HTTP instead of stdio (default port `8787`). See [Remote access](#remote-access) below.
-- `--host=ADDR` — bind address for `--http`. Defaults to `127.0.0.1` (loopback only).
-- `--version` (alias `-v`) — print the version and exit. `--help` (`-h`) prints usage and the full tool list.
-
-### One server, many models
-
-Every read tool takes an optional **`model_path`**, so a single server covers a
-whole repository instead of one file. Ask `get_model_summary` about
-`baseline.py`, then about `variant_b.neurarch.json`, without registering a
-second server or restarting anything. Files are cached and re-read whenever
-their mtime moves, so the answer is never stale.
-
-Write tools deliberately refuse `model_path`: mutations always target the file
-passed on the command line, so an agent cannot edit, and then save over, a path
-it invented.
-
-### Tool annotations
-
-Every tool declares what it does to your files. The read tools are marked
-read-only and closed-world, `check_design` included since the verifier stopped
-being a network call; `delete_layer`, `delete_connection`, `modify_layer` and
-`save_model` mark themselves destructive. Clients that honour annotations can
-therefore confirm the three tools that can actually destroy something instead of
-prompting on all thirty. Results also carry `structuredContent` alongside the
-JSON text, for clients that read it.
-
-## Remote access
-
-By default the server talks stdio, so the agent and the model file live on the same machine. `--http` serves the same tools over Streamable HTTP, so a **hosted or phone-based agent can drive a model running on your machine** — e.g. behind a Cloudflare or Tailscale tunnel.
-
-```bash
-# local only (safe default: loopback, no auth needed)
-npx neurarch-mcp model.neurarch.json --http
-
-# expose to a tunnel with a bearer token and write tools
-NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
-  npx neurarch-mcp model.neurarch.json --write --http --host=0.0.0.0
-# then point cloudflared / tailscale funnel at :8787 and connect the agent to
-# https://<tunnel>/mcp with the same token.
-```
-
-`POST` JSON-RPC to `/mcp`; `GET /health` is a liveness probe. Sessions follow the standard Streamable HTTP handshake (`Mcp-Session-Id`), so any MCP-aware client connects unchanged.
-
-**Security:**
-
-- Binds to `127.0.0.1` by default. Without a token, the `Host` header is checked against a loopback allowlist (DNS-rebinding protection) and no CORS headers are sent.
-- Set `NEURARCH_MCP_TOKEN` to require `Authorization: Bearer <token>` on every request (constant-time checked). It is **required** before `--write` may bind to a non-loopback host — the server refuses to start otherwise.
-
-## Sharing results with the corpus (opt-in)
-
-Set `NEURARCH_REPORT=1` to share one anonymous structure+verdict row per
-`validate_model` call with the Neurarch corpus: the structural fingerprint
-(8-char hash), the layer-type histogram and edge count that let the server
-verify it, and the finding (rule id, severity) pairs. Never the graph,
-parameter values, layer names, file paths, or any identity: the payload shape
-cannot carry them, and the server rejects rows whose fingerprint does not
-recompute from the histogram it came with.
-
-Off by default. Reporting is fire-and-forget with a 5-second cap, so it can
-never slow or fail a tool call. Policy:
-[neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+- `--write`: expose the six mutation tools. Off by default.
+- `--watch`: reload the model file on change. Pair with the app.
+- `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
+- `--tools=core`: advertise eleven tools instead of twenty-five (every tool stays callable by name). Trims what rides along in the agent's context on every turn.
+- `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
+- `--version`, `--help`.
 
 ## Network: one switch, off by default
 
-This server opens a socket for exactly one reason, and it does not happen unless
-you turn it on:
-
 | Switch | What it sends | When |
 |---|---|---|
-| `NEURARCH_REPORT=1` | An anonymous structure+verdict row (fingerprint, histogram, edge count, rule-id/severity pairs). **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model` or `check_design` call, fire and forget |
+| `--hf` | A request to huggingface.co for a repo's `config.json` (and `HF_TOKEN`, if set). Never your model. | Only on `load_hf_model` or an `hf:` ref. |
+| `NEURARCH_REPORT=1` | One anonymous structure+verdict row: structural fingerprint, layer-type histogram, edge count, (rule id, severity) pairs. **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model` or `check_design` call, fire and forget, 5s cap. |
 
-With it unset, this server makes **no network calls at all**, and no tool is an
-exception to that. Your model graph never leaves the machine.
+With both unset, this server makes **no network calls at all**, and no tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package. Your model never leaves the machine. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 
-Until 0.11.0 there was a second switch: `check_design` POSTed the graph to
-`/api/v1/check` with an API key. It no longer exists, and no key is read
-anywhere in this package. The verdict is a pure 13ms function of the graph, so
-it is vendored and computed here; the key bought no compute and captured no
-measurement, it only put a signup between a stranger and the one tool this
-product is built around. The hosted endpoint still exists for callers who are
-not running this server.
+## Remote access
+
+By default the server talks stdio, so the agent and the model file live on the same machine. `--http` serves the same tools over Streamable HTTP, so a hosted or phone-based agent can drive a model running on your machine, for example behind a Cloudflare or Tailscale tunnel.
+
+```bash
+npx neurarch-mcp model.py --http                        # loopback, no auth needed
+NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
+  npx neurarch-mcp model.neurarch.json --write --http --host=0.0.0.0
+```
+
+Binds to `127.0.0.1` by default with DNS-rebinding protection; `NEURARCH_MCP_TOKEN` requires `Authorization: Bearer <token>` on every request and is **required** before `--write` may bind to a non-loopback host.
+
+**Hosted, with no model on disk:** `npx neurarch-mcp --http --hf` serves a server that answers about whatever each call names (`model_path: "zoo:..."` / `"hf:..."`, or `model_source` with the model text inline). `Dockerfile`, `fly.toml` and [docs/HOSTED.md](./docs/HOSTED.md) carry the deploy. A hosted server sees the model text a client sends it, which the local one never does; say so wherever a URL is published.
+
+## Real shapes from real code: `neurarch-trace`
+
+Static parsing stops at the source. [`python/neurarch-trace`](./python/neurarch-trace) instantiates the model, runs one forward pass with hooks, and writes a `.neurarch.json` with every shape filled in, functional residual adds and concats included:
+
+```bash
+pip install neurarch-trace
+neurarch-trace models/resnet.py:ResNet18 --input 1,3,224,224 -o resnet18.neurarch.json
+neurarch-trace hf:bert-base-uncased --input 1,128 --dtype long          # needs transformers
+npx -y neurarch-mcp resnet18.neurarch.json
+```
+
+Shapes come out batchless (`[3,224,224]`, never `[1,3,224,224]`), the convention every tool here expects.
+
+## Development
+
+```bash
+git clone https://github.com/neurarch-ai/neurarch-mcp && cd neurarch-mcp
+npm install
+npm run typecheck && npm run build && npm test     # vitest, 240+ tests
+node dist/index.js --help
+npm run build:mcpb                                 # the Claude Desktop bundle
+```
+
+CI runs typecheck, build and test on Node 20 and 22. The package vendors from the main Neurarch repo so that it works with no network, no key and no second install: `src/vendor/engine.bundle.mjs` (registry, PyTorch parser, rule set, code generator, HF config converter) and `src/vendor/verifier.bundle.mjs` (five pipeline stages, provenance table, ranker). Both are generated, contract-tested, and asserted to contain no `import` (and, for the verifier, no `fetch`). `@modelcontextprotocol/sdk` is the only runtime dependency. `zoo/` is synced from [awesome-llm-model-zoo](https://github.com/neurarch-ai/awesome-llm-model-zoo) with `npm run sync:zoo`.
+
+A new tool is a small, self-contained PR: see [CONTRIBUTING.md](./CONTRIBUTING.md). The agent skill that teaches an evidence-gated edit loop over these tools lives in [`skills/`](./skills/neurarch-skill) (`npx skills add neurarch-ai/neurarch-mcp`).
 
 ## Troubleshooting
 
@@ -345,8 +264,9 @@ not running this server.
 
 ## What this is not
 
-- **Not a generic codebase indexer.** This serves one `.neurarch.json` file. For codebase structure, use [GitNexus](https://github.com/abhigyanpatwari/GitNexus) or similar.
-- **Not connected to your Neurarch workspace.** v1 reads a saved JSON file only. Live editing happens in the Neurarch web app.
+- **Not a generic codebase indexer.** It reads model definitions (`.py`, `.neurarch.json`, `zoo:`, `hf:`), not your whole tree. For codebase structure, use [GitNexus](https://github.com/abhigyanpatwari/GitNexus) or similar.
+- **Not a trainer.** It tells you whether a run would start, what it would cost and where the result could be served; it never spends your GPU time. `check_design` says when a decision is yours.
+- **Not connected to your Neurarch workspace.** It reads files. Live editing happens in the [Neurarch app](https://neurarch.com); `--watch` follows its saves.
 
 ## Issues & Feedback
 
@@ -388,9 +308,9 @@ CI runs `typecheck` + `build` + `test` on Node 20 and 22 for every push and PR.
 
 The package vendors from the main Neurarch repo, and everything is vendored for the same reason: this server has to work with no network, no API key and no second install step.
 
-- `src/lib/` — pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer), maintained as source here.
-- `src/vendor/engine.bundle.mjs` — the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
-- `src/vendor/verifier.bundle.mjs` — the compiled Neurarch verifier behind `check_design`: the five pipeline stages, plus the rule-provenance table. Same code path as the app and the hosted endpoint, so an agent here and a person in the app get the same answer. Same rules: generated, contract-tested (`verifier.contract.test.ts`), and asserted to contain no import and no `fetch`.
+- `src/lib/`: pure-TypeScript utilities (model types, parameter and FLOP estimators, impact analyzer), maintained as source here.
+- `src/vendor/engine.bundle.mjs`: the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
+- `src/vendor/verifier.bundle.mjs`: the compiled Neurarch verifier behind `check_design`: the five pipeline stages, plus the rule-provenance table. Same code path as the app and the hosted endpoint, so an agent here and a person in the app get the same answer. Same rules: generated, contract-tested (`verifier.contract.test.ts`), and asserted to contain no import and no `fetch`.
 
 Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
 
@@ -400,6 +320,6 @@ MIT. See [LICENSE](./LICENSE).
 
 ## Links
 
-- [Neurarch](https://neurarch.com) — the visual neural-network editor that produces the model files this server reads.
-- [Model Context Protocol](https://modelcontextprotocol.io) — the spec this server implements.
-- [npm](https://www.npmjs.com/package/neurarch-mcp) — package page.
+- [Neurarch](https://neurarch.com): the visual neural-network editor that produces the model files this server reads.
+- [Model Context Protocol](https://modelcontextprotocol.io): the spec this server implements.
+- [npm](https://www.npmjs.com/package/neurarch-mcp): package page.
