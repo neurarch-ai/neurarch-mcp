@@ -8,6 +8,7 @@
 [![PyPI neurarch-trace](https://img.shields.io/pypi/v/neurarch-trace.svg?label=neurarch-trace)](https://pypi.org/project/neurarch-trace/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-server-7c3aed.svg)](https://modelcontextprotocol.io)
+[![smithery badge](https://smithery.ai/badge/neurarch-ai/neurarch-mcp)](https://smithery.ai/servers/neurarch-ai/neurarch-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 
 Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead, plus the verifier: **the design rules, the full readiness / cost / deployment verdict, and which of several candidate designs is worth the GPU time.** Point it at a PyTorch `.py`, a saved graph, or a Hugging Face repo. Everything runs on your machine, with no API key, no account, and no network call unless you turn one on.
