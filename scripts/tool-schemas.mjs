@@ -7,4 +7,6 @@ import { writeFileSync } from 'node:fs';
 import { listedTools } from '../src/cli.ts';
 const out = Object.fromEntries(listedTools(false, 'full').map(t => [t.name, t.inputSchema]));
 writeFileSync(new URL('./tool-schemas.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
+const shorts = Object.fromEntries(listedTools(false, 'full').map(t => [t.name, t.description]));
+writeFileSync(new URL('./tool-short.json', import.meta.url), JSON.stringify(shorts, null, 2) + '\n');
 console.log(`tool-schemas.json: ${Object.keys(out).length} tools`);

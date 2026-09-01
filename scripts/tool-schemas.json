@@ -4,7 +4,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -14,7 +14,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -28,7 +28,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -65,7 +65,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -83,7 +83,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -116,7 +116,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -135,7 +135,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -153,7 +153,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -167,7 +167,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -177,7 +177,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -191,7 +191,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -208,7 +208,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -221,7 +221,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -240,7 +240,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -248,9 +248,17 @@
   "check_design": {
     "type": "object",
     "properties": {
+      "verbose": {
+        "type": "boolean",
+        "description": "Include every stage's machine-readable data (cost breakdown, deploy targets, contract). Default false: verdict, findings, stage headlines and the decision."
+      },
+      "ask_user": {
+        "type": "boolean",
+        "description": "If the verdict ends in a decision only the human can make, ask them through the client (MCP elicitation) and include their answer. Default false."
+      },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -268,7 +276,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -294,7 +302,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -304,7 +312,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -318,7 +326,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -356,7 +364,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -373,7 +381,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -395,7 +403,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "additionalProperties": false
@@ -413,7 +421,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
     "required": [
@@ -436,9 +444,89 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
       }
     },
+    "additionalProperties": false
+  },
+  "suggest_fix": {
+    "type": "object",
+    "properties": {
+      "rule": {
+        "type": "string",
+        "description": "Only this rule id (e.g. head-dim-divisibility). Default: every finding."
+      },
+      "layer": {
+        "type": "string",
+        "description": "Only findings on this layer name."
+      },
+      "severity": {
+        "type": "string",
+        "enum": [
+          "block",
+          "warn",
+          "info"
+        ],
+        "description": "Minimum severity to fix. Default: warn."
+      },
+      "save_to": {
+        "type": "string",
+        "description": "Write the patched file here (exact fixes only). Requires --write; never the source path itself."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+      }
+    },
+    "additionalProperties": false
+  },
+  "trace_model": {
+    "type": "object",
+    "properties": {
+      "target": {
+        "type": "string",
+        "description": "\"path/to/model.py:ClassName\", \"pkg.module:factory\", or \"hf:org/name\"."
+      },
+      "input": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "minItems": 1,
+        "description": "Input dims, batch first, one per model input: [\"1,3,224,224\"] or [\"1,128\"]. Append \":long\" for token ids."
+      },
+      "dtype": {
+        "type": "string",
+        "description": "Default dtype for inputs (float32; long for hf: targets)."
+      },
+      "depth": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Stop descending at this module depth (default: leaf modules)."
+      },
+      "name": {
+        "type": "string",
+        "description": "Graph name (default: the class or repo name)."
+      },
+      "save_to": {
+        "type": "string",
+        "description": "Also write the traced .neurarch.json here. Requires --write."
+      },
+      "timeout_s": {
+        "type": "integer",
+        "minimum": 5,
+        "maximum": 600,
+        "description": "Kill the trace after this many seconds (default 120)."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+      }
+    },
+    "required": [
+      "target",
+      "input"
+    ],
     "additionalProperties": false
   }
 }

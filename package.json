@@ -1,7 +1,7 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.13.0",
-  "description": "MCP server that gives Claude Code, Cursor, Claude Desktop, VS Code and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file, a Neurarch graph, or a Hugging Face repo and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), get the full readiness/cost/deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, export runnable PyTorch, and with --write edit the graph. Also a CLI: neurarch-mcp lint model.py.",
+  "version": "0.14.0",
+  "description": "MCP server that gives Claude Code, Cursor, Claude Desktop, VS Code and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file, a Neurarch graph, or a Hugging Face repo and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), get the full readiness/cost/deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, export runnable PyTorch, turn findings into diffs (suggest_fix), trace real shapes (trace_model), and with --write edit the graph. Also a CLI: neurarch-mcp lint model.py.",
   "type": "module",
   "bin": {
     "neurarch-mcp": "dist/index.js"
@@ -24,7 +24,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "build:mcpb": "npx tsx scripts/tool-schemas.mjs && node scripts/build-mcpb.mjs",
-    "sync:zoo": "node scripts/sync-zoo.mjs"
+    "sync:zoo": "node scripts/sync-zoo.mjs",
+    "eval:tools": "node scripts/eval-tool-selection.mjs"
   },
   "keywords": [
     "architecture-search",

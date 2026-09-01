@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "neurarch-mcp",
   "display_name": "Neurarch",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Structural awareness of a PyTorch model for the agent: layers, params, FLOPs, design rules, the full verdict, and which of k designs to train.",
   "long_description": "Point it at a PyTorch .py file or a .neurarch.json graph. The agent can read layers, parameters and FLOPs, run the design linter (lint_model), get the full readiness / cost / deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, and export runnable PyTorch. Everything runs on your machine; nothing opens a socket unless you turn it on.",
   "author": {

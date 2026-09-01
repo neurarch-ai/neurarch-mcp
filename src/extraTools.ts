@@ -9,8 +9,8 @@
  *   load_hf_model       a Hugging Face repo as a graph (behind --hf)
  *   find_models         what in this repository is a model at all
  */
-import { writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { writeFile, readFile } from 'node:fs/promises';
+import { resolve, basename } from 'node:path';
 import type { ModelArchitecture } from './lib/types.js';
 import type { ToolDef, ToolContext } from './tools.js';
 import { rankDesigns, MAX_CANDIDATES, type NamedCandidate } from './lib/rank.js';
@@ -18,7 +18,8 @@ import { describeArchitecture } from './lib/describe.js';
 import { loadModelCached } from './models.js';
 import { listZoo, loadZooModel, loadHFModel, isHfEnabled } from './sources.js';
 import { discoverModels } from './discover.js';
-import { generatePyTorchCode } from './vendor/engine.bundle.mjs';
+import { generatePyTorchCode, lintModelGraph } from './vendor/engine.bundle.mjs';
+import { suggestFixes } from './lib/suggestFix.js';
 
 /**
  * Creating a file is a write, even when the file is new. Tools that can save
@@ -262,3 +263,129 @@ export const HF_TOOLS: ToolDef[] = [loadHfModelTool];
 export function hfToolsIfEnabled(): ToolDef[] {
   return isHfEnabled() ? HF_TOOLS : [];
 }
+
+// ── suggest_fix ──────────────────────────────────────────────────────────────
+export const suggestFixTool: ToolDef = {
+  name: 'suggest_fix',
+  description:
+    'Turn lint findings into edits to the source file: a unified diff per finding, labelled exact (a number or '
+    + 'an order the rule pins, changed on every line that shares it) or proposal (a missing layer inserted with a '
+    + 'note on what forward() still needs). Works on a .py; for a .neurarch.json use the write tools. Findings with '
+    + 'no mechanical fix come back under notFixable with the reason. Apply the diff, then lint_model again.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      rule: { type: 'string', description: 'Only this rule id (e.g. head-dim-divisibility). Default: every finding.' },
+      layer: { type: 'string', description: 'Only findings on this layer name.' },
+      severity: { type: 'string', enum: ['block', 'warn', 'info'], description: 'Minimum severity to fix. Default: warn.' },
+      save_to: { type: 'string', description: 'Write the patched file here (exact fixes only). Requires --write; never the source path itself.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async ({ rule, layer, severity, save_to }: { rule?: string; layer?: string; severity?: 'block' | 'warn' | 'info'; save_to?: string }, model, ctx) => {
+    const path = ctx.currentPath ?? ctx.modelPath;
+    if (!path || !/\.py$/i.test(path)) {
+      return {
+        fixes: [], notFixable: [],
+        note: 'suggest_fix edits PyTorch source. This model did not come from a .py (pass model_path to a .py, or start the server on one); for a graph file use modify_layer / add_layer / delete_layer under --write.',
+      };
+    }
+    const source = await readFile(path, 'utf-8');
+    const order = { block: 0, warn: 1, info: 2 } as const;
+    const floor = order[severity ?? 'warn'];
+    const findings = lintModelGraph(model).filter(f =>
+      order[f.severity] <= floor && (!rule || f.rule === rule) && (!layer || f.componentName === layer));
+    const result = suggestFixes(model, findings, source, basename(path));
+    if (save_to && resolve(save_to) === resolve(path)) throw new Error('suggest_fix will not overwrite the source file; choose another save_to or apply the diff yourself.');
+    const saved = result.patchedSource ? await maybeSave(ctx, save_to, result.patchedSource) : {};
+    const { patchedSource: _omit, ...rest } = result;
+    return { ...rest, ...(save_to ? saved : {}), considered: findings.length };
+  },
+};
+EXTRA_TOOLS.push(suggestFixTool);
+
+// ── trace_model ──────────────────────────────────────────────────────────────
+/**
+ * The static parser reads source; this runs it. neurarch-trace (pip) builds
+ * the model, runs one forward with hooks and writes a .neurarch.json with
+ * real shapes, so every tool works on code the parser cannot follow. The
+ * server shells out rather than embedding Python: the model's own environment
+ * is the only place its imports resolve.
+ */
+export const traceModelTool: ToolDef = {
+  name: 'trace_model',
+  description:
+    'Trace the model at runtime with neurarch-trace (pip install neurarch-trace) and get a graph with real shapes: '
+    + 'instantiate it in Python, run one forward pass with hooks, write a .neurarch.json. Use when find_models or '
+    + 'parseQuality says the static parse is thin or partial. target is "path/to/file.py:ClassOrFactory", '
+    + '"module.path:attr" or "hf:<repo>"; input is the batch-first dims per model input. The graph is cached and '
+    + 'returned as a model_path any tool accepts. Runs the user\'s Python (NEURARCH_PYTHON or python3).',
+  annotations: { idempotentHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      target: { type: 'string', description: '"path/to/model.py:ClassName", "pkg.module:factory", or "hf:org/name".' },
+      input: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Input dims, batch first, one per model input: ["1,3,224,224"] or ["1,128"]. Append ":long" for token ids.' },
+      dtype: { type: 'string', description: 'Default dtype for inputs (float32; long for hf: targets).' },
+      depth: { type: 'integer', minimum: 1, description: 'Stop descending at this module depth (default: leaf modules).' },
+      name: { type: 'string', description: 'Graph name (default: the class or repo name).' },
+      save_to: { type: 'string', description: 'Also write the traced .neurarch.json here. Requires --write.' },
+      timeout_s: { type: 'integer', minimum: 5, maximum: 600, description: 'Kill the trace after this many seconds (default 120).' },
+    },
+    required: ['target', 'input'],
+    additionalProperties: false,
+  },
+  handler: async (args: { target: string; input: string[]; dtype?: string; depth?: number; name?: string; save_to?: string; timeout_s?: number }, _model, ctx) => {
+    const { spawn } = await import('node:child_process');
+    const { mkdir, readFile: rf, copyFile } = await import('node:fs/promises');
+    const { homedir } = await import('node:os');
+    const { join, isAbsolute } = await import('node:path');
+    const python = process.env.NEURARCH_PYTHON || 'python3';
+    const dir = process.env.NEURARCH_MCP_CACHE ? join(process.env.NEURARCH_MCP_CACHE, 'traces') : join(homedir(), '.cache', 'neurarch-mcp', 'traces');
+    await mkdir(dir, { recursive: true });
+    const stem = (args.name ?? args.target.split(/[:/\\]/).pop() ?? 'model').replace(/[^\w.-]+/g, '_');
+    const out = join(dir, `${stem}-${Date.now()}.neurarch.json`);
+    // A file target relative to the server's model directory resolves there,
+    // which is where an agent that just ran find_models expects it to.
+    let target = args.target;
+    const fileMatch = /^(.+\.py):(\w+)$/.exec(target);
+    if (fileMatch && !isAbsolute(fileMatch[1])) target = `${resolve(ctx.modelPath ? join(ctx.modelPath, '..') : '.', fileMatch[1])}:${fileMatch[2]}`;
+    const argv = ['-m', 'neurarch_trace', target, '-o', out];
+    for (const i of args.input) argv.push('--input', i);
+    if (args.dtype) argv.push('--dtype', args.dtype);
+    if (args.depth) argv.push('--depth', String(args.depth));
+    if (args.name) argv.push('--name', args.name);
+
+    const result = await new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(res => {
+      const child = spawn(python, argv, { cwd: fileMatch ? join(target.split(':')[0], '..') : process.cwd() });
+      let stdout = '', stderr = '', timedOut = false;
+      child.stdout.on('data', d => { stdout += d; });
+      child.stderr.on('data', d => { stderr += d; });
+      const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, (args.timeout_s ?? 120) * 1000);
+      child.on('error', e => { clearTimeout(timer); res({ code: null, stdout, stderr: stderr + e.message, timedOut }); });
+      child.on('close', code => { clearTimeout(timer); res({ code, stdout, stderr, timedOut }); });
+    });
+
+    if (result.timedOut) throw new Error(`trace_model: the trace did not finish in ${args.timeout_s ?? 120}s and was killed. Try a smaller input or --depth.`);
+    if (result.code !== 0) {
+      const tail = result.stderr.trim().split('\n').slice(-6).join('\n');
+      if (/No module named neurarch_trace/.test(result.stderr)) {
+        throw new Error(`trace_model: neurarch-trace is not installed for ${python}. Run: ${python} -m pip install neurarch-trace (set NEURARCH_PYTHON to the interpreter that has torch and the model's imports).`);
+      }
+      if (/ENOENT|spawn .* ENOENT/.test(result.stderr)) throw new Error(`trace_model: ${python} not found. Set NEURARCH_PYTHON to a Python with torch and neurarch-trace installed.`);
+      throw new Error(`trace_model failed (exit ${result.code}):\n${tail}`);
+    }
+    const graph = JSON.parse(await rf(out, 'utf-8')) as ModelArchitecture;
+    const saved = args.save_to ? await maybeSave(ctx, args.save_to, JSON.stringify(graph, null, 2) + '\n') : {};
+    void copyFile;
+    return {
+      modelPath: out,
+      layers: graph.components.length,
+      connections: graph.connections.length,
+      ...describeArchitecture(graph),
+      ...saved,
+      stderrTail: result.stderr.trim().split('\n').slice(-3).join('\n') || undefined,
+    };
+  },
+};
+EXTRA_TOOLS.push(traceModelTool);

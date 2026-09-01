@@ -33,7 +33,10 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
-import { type ToolContext } from './tools.js';
+import { resolve } from 'node:path';
+import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
+import { WRITE_TOOLS } from './writeTools.js';
+import { HF_TOOLS } from './extraTools.js';
 import { listedTools, resolveToolCall, isWriteTool, MODEL_PATH_PARAM, type ToolSetName } from './cli.js';
 import { reportingEnabled, buildCorpusReport, sendCorpusReport } from './lib/corpusReport.js';
 import { loadModelCached } from './models.js';
@@ -67,7 +70,7 @@ export interface McpServerOptions {
 /** Build a configured MCP Server (no transport attached yet). */
 export function createMcpServer(opts: McpServerOptions): Server {
   const { getModel, ctx, writeEnabled, version } = opts;
-  const toolSet = opts.toolSet ?? 'full';
+  const toolSet = opts.toolSet ?? 'core';
   const tools = listedTools(writeEnabled, toolSet).map(t => ({
     ...t,
     inputSchema: isWriteTool(t.name) ? t.inputSchema : withModelSource(t.inputSchema),
@@ -136,7 +139,13 @@ export function createMcpServer(opts: McpServerOptions): Server {
         model = getModel();
       }
 
-      const result = await tool.handler(args, model, ctx);
+      const base: ToolContext = wantsOtherModel && !/^(zoo|hf):/i.test(pathArg as string)
+        ? { ...ctx, currentPath: resolve(pathArg as string) }
+        : wantsOtherModel || wantsInline ? { ...ctx, currentPath: '' } : ctx;
+      // Elicitation is offered only when the client said it can answer.
+      const canAsk = !!server.getClientCapabilities()?.elicitation;
+      const callCtx: ToolContext = canAsk ? { ...base, elicit: (q) => elicit(server, q) } : base;
+      const result = await tool.handler(args, model, callCtx);
       // Opt-in corpus row (NEURARCH_REPORT=1). Fire and forget: it can neither
       // slow nor fail the tool call. Privacy scope in lib/corpusReport.ts.
       //
@@ -201,6 +210,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
     { uri: 'neurarch://model/pytorch', name: 'Current model as PyTorch', description: 'Runnable nn.Module source generated from the current graph.', mimeType: 'text/x-python' },
     { uri: 'neurarch://zoo', name: 'Reference architecture index', description: 'The bundled library of verified published architectures. Each entry is readable at neurarch://zoo/{id}.', mimeType: 'application/json' },
     { uri: 'neurarch://rules', name: 'Rule provenance', description: 'For every design rule with a published measurement behind it, the measurement and its source.', mimeType: 'application/json' },
+    { uri: 'neurarch://docs', name: 'Tool documentation', description: 'The long-form contract of every tool, including the ones --tools=core does not list. One read instead of 7k tokens on every turn.', mimeType: 'text/markdown' },
   ];
 
   server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: STATIC_RESOURCES }));
@@ -208,6 +218,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
   server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
     resourceTemplates: [
       { uriTemplate: 'neurarch://zoo/{id}', name: 'Reference architecture', description: 'One bundled architecture as .neurarch.json; ids come from neurarch://zoo.', mimeType: 'application/json' },
+      { uriTemplate: 'neurarch://docs/{tool}', name: 'Tool documentation', description: 'The full description and input schema of one tool.', mimeType: 'text/markdown' },
     ],
   }));
 
@@ -221,6 +232,13 @@ export function createMcpServer(opts: McpServerOptions): Server {
       if (uri === 'neurarch://rules') return { mimeType: 'application/json', text: JSON.stringify(RULE_PROVENANCE, null, 2) };
       const zoo = /^neurarch:\/\/zoo\/([\w.-]+)$/.exec(uri);
       if (zoo) return { mimeType: 'application/json', text: JSON.stringify(await loadZooModel(zoo[1]), null, 2) };
+      if (uri === 'neurarch://docs') return { mimeType: 'text/markdown', text: renderToolDocs(allToolDefs()) };
+      const doc = /^neurarch:\/\/docs\/([\w-]+)$/.exec(uri);
+      if (doc) {
+        const t = allToolDefs().find(x => x.name === doc[1]);
+        if (!t) throw new Error(`No tool named ${doc[1]}. Read neurarch://docs for the list.`);
+        return { mimeType: 'text/markdown', text: renderToolDocs([t]) };
+      }
       throw new Error(`Unknown resource: ${uri}`);
     };
     const { mimeType, text: body } = await text();
@@ -230,11 +248,50 @@ export function createMcpServer(opts: McpServerOptions): Server {
   return server;
 }
 
+function allToolDefs(): ToolDef[] {
+  return [...TOOLS, ...HF_TOOLS, ...WRITE_TOOLS];
+}
+
+function renderToolDocs(defs: ToolDef[]): string {
+  return defs.map(t => {
+    const gate = WRITE_TOOLS.includes(t) ? ' (write tool, needs --write)' : HF_TOOLS.includes(t) ? ' (needs --hf)' : '';
+    const props = ((t.inputSchema as { properties?: Record<string, { description?: string; type?: string }> }).properties) ?? {};
+    const args = Object.entries(props).map(([k, v]) => `- \`${k}\`${v.type ? ` (${v.type})` : ''}: ${v.description ?? ''}`).join('\n');
+    return `## ${t.name}${gate}\n\n${t.description}\n\n${args ? `Arguments:\n${args}\n` : 'No arguments.\n'}`;
+  }).join('\n');
+}
+
+/**
+ * One elicitation, shaped as a single-choice form. `value` comes back only on
+ * accept; decline and cancel are answers too and are passed through, because
+ * "the user did not want to decide" is information the tool should report.
+ */
+async function elicit(
+  server: Server,
+  q: { message: string; options: Array<{ value: string; label: string; hint?: string }> },
+): Promise<{ action: 'accept' | 'decline' | 'cancel'; value?: string }> {
+  const res = await server.elicitInput({
+    message: q.message,
+    requestedSchema: {
+      type: 'object',
+      properties: {
+        choice: {
+          type: 'string',
+          title: 'Your choice',
+          enum: q.options.map(o => o.value),
+          enumNames: q.options.map(o => (o.hint ? `${o.label}: ${o.hint}` : o.label)),
+        },
+      },
+      required: ['choice'],
+    },
+  });
+  const value = res.action === 'accept' ? String((res.content as Record<string, unknown> | undefined)?.choice ?? '') : undefined;
+  return { action: res.action, ...(value ? { value } : {}) };
+}
+
 const MODEL_SOURCE_PROPERTY = {
   type: 'string',
-  description:
-    'Optional. Answer this about model text passed inline (a .neurarch.json document or PyTorch source) instead of '
-    + 'a file. For clients with no shared filesystem, such as a hosted server. Read tools only.',
+  description: 'Optional: answer about model text passed inline (a .neurarch.json document or PyTorch source).',
 };
 
 function withModelSource(schema: Record<string, unknown>): Record<string, unknown> {

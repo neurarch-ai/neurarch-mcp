@@ -68,6 +68,11 @@ If these six tools are absent, the server is read-only. Stop before mutating and
 | What does this Hugging Face model look like? | `load_hf_model` | Listed only under `--hf`; the one network call. `configSource: "fallback"` means a family template, not the real dimensions. |
 | What in this repository is a model? | `find_models` | Distinguishes files the parser reads from ones that need `neurarch-trace`. |
 
+| This finding, as a change to the .py | `suggest_fix` | Unified diffs; `exact` where a number or order is pinned, `proposal` where a layer is missing. Apply, then `lint_model` again. |
+| The static parse is thin; I need real shapes | `trace_model` | Runs neurarch-trace in the user's Python with the input dims; returns a `model_path`. |
+
+The server advertises the core tools by default (`--tools=full` for all); every tool stays callable by name, and `neurarch://docs/<tool>` has the full contract.
+
 Any read tool also accepts `model_source` (inline `.neurarch.json` or PyTorch
 text) in place of `model_path`. Prompts (`review_design`, `pre_train_checklist`,
 `shrink_for_target`, `compare_with_reference`, `explain_finding`) are the same

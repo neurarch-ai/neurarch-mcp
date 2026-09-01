@@ -1,0 +1,110 @@
+{
+  "date": "2026-09-01",
+  "model": "default",
+  "passed": 6,
+  "total": 6,
+  "results": [
+    {
+      "id": "orient",
+      "ask": "What is this model and where does its parameter budget live? Use the Neurarch tools; do not guess numbers.",
+      "calls": [
+        "ToolSearch",
+        "describe_architecture",
+        "ToolSearch",
+        "find_layers",
+        "get_layer",
+        "get_layer"
+      ],
+      "pass": true,
+      "why": "orientation should start with describe_architecture (or the cheaper summary)",
+      "exit": 0,
+      "answer": "This is **tiny-vit**, a single-block Vision Transformer: patch embedding (16×16 patches, 3 input channels, embed dim 258), then one pre-norm transformer block (norm1 → attention → dropout → norm2 → MLP → GELU → proj), then a linear classification head. It has 11 nodes in a straight pipeline with no branching, and validation passes with no errors or warnings.\n\n**Parameter budget** (static parse, 99",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    },
+    {
+      "id": "ready",
+      "ask": "Is this model ready to train? Give me a verdict.",
+      "calls": [
+        "ToolSearch",
+        "ToolSearch",
+        "check_design",
+        "lint_model"
+      ],
+      "pass": true,
+      "why": "a readiness question is check_design or lint_model, not inspection tools",
+      "exit": 0,
+      "answer": "**Verdict: not ready.** The design check stops at preflight with two blockers, so a training run would crash on the first forward pass.\n\n- **Attention head split is broken.** The layer named `attn` has an embed dim of 258 and 8 heads. 258 does not divide by 8, so PyTorch will raise on construction. Change the embed dim to 256 or pick a head count that divides 258, such as 6 or 3.\n- **Output head h",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    },
+    {
+      "id": "lint-before-edit",
+      "ask": "Something is wrong with the attention layer. Find it and tell me exactly what to change in the file.",
+      "calls": [
+        "ToolSearch",
+        "ToolSearch",
+        "ToolSearch",
+        "describe_architecture",
+        "lint_model",
+        "find_layers",
+        "get_layer",
+        "suggest_fix"
+      ],
+      "pass": true,
+      "why": "find the finding with lint_model, then suggest_fix (or at least get_layer) rather than guessing",
+      "exit": 0,
+      "answer": "The attention layer in `tiny-vit.py` has an embedding width that is not divisible by its head count. `nn.MultiheadAttention` is built with embed_dim 258 and 8 heads, which gives a head dimension of 32.25. PyTorch rejects that at construction time, so the model crashes before any forward pass.\n\n**Fix:** change the width from 258 to 256 everywhere it appears, since every layer that shares the width ",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    },
+    {
+      "id": "rank",
+      "ask": "I have two candidate designs, examples/tiny-gpt.neurarch.json and examples/tiny-cnn.neurarch.json. Which one should I spend my training budget on?",
+      "calls": [
+        "ToolSearch",
+        "rank_designs"
+      ],
+      "pass": true,
+      "why": "a which-of-k question is rank_designs, not two check_design calls and a guess",
+      "exit": 0,
+      "answer": "Both designs pass the pre-flight check, so neither will crash on a forward pass. The ranking tool puts tiny-gpt first, but the evidence behind that ordering is thin, and the real decision depends on what task you're training for.\n\n**What the check found**\n\n| Design | Params | Est. cost | Fits | Findings |\n|---|---|---|---|---|\n| tiny-gpt | 57.8M | ~$0.11 | A10G 24GB | none |\n| tiny-cnn | 1.07M | ~",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    },
+    {
+      "id": "compare",
+      "ask": "How does this model compare with a published ViT? Use the reference library.",
+      "calls": [
+        "ToolSearch",
+        "describe_architecture",
+        "list_architectures",
+        "describe_architecture",
+        "ToolSearch",
+        "lint_model",
+        "get_layer",
+        "get_layer",
+        "get_layer",
+        "get_layer"
+      ],
+      "pass": true,
+      "why": "the reference library is list_architectures / load_architecture",
+      "exit": 0,
+      "answer": "The server's current model is \"tiny-vit\". I compared it against the reference-library entry for ViT-B/16, which is the published Vision Transformer from Dosovitskiy et al. 2020.\n\n**Headline:** tiny-vit is not a scaled-down ViT. It is a single transformer-style block with no residual connections and no positional encoding, and it has a blocking error that would crash a PyTorch forward pass.\n\n| | ti",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    },
+    {
+      "id": "blast-radius",
+      "ask": "If I halve the width of the mlp layer, what else breaks?",
+      "calls": [
+        "ToolSearch",
+        "find_layers",
+        "layer_impact",
+        "ToolSearch",
+        "get_layer",
+        "get_layer"
+      ],
+      "pass": true,
+      "why": "a what-breaks question is layer_impact",
+      "exit": 0,
+      "answer": "Halving `mlp` from 1024 to 512 output features breaks exactly one thing directly: the `proj` layer right after it. Everything else is either shape-agnostic or only affected by the residual stream, which you would not be touching.\n\n**What breaks**\n\n- **`proj` (linear, 1024 → 258).** Its input dimension is the `mlp` output width. It must become 512 → 258, and its existing weights cannot be reused. T",
+      "stderr": "Warning: no stdin data received in 3s, proceeding without it. If piping from a slow command, redirect stdin explicitly: < /dev/null to skip, or wait longer.\n"
+    }
+  ]
+}

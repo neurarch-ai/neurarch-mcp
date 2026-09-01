@@ -20,13 +20,14 @@ import type { ModelArchitecture } from './lib/types.js';
 
 let dir: string;
 
-async function connect(opts: { writeEnabled?: boolean; model?: ModelArchitecture } = {}) {
+async function connect(opts: { writeEnabled?: boolean; model?: ModelArchitecture; toolSet?: 'core' | 'full' } = {}) {
   const model = opts.model ?? makeModel();
   const server = createMcpServer({
     getModel: () => model,
     ctx: { modelPath: join(dir, 'model.neurarch.json') },
     writeEnabled: opts.writeEnabled ?? false,
     version: '0.0.0-test',
+    toolSet: opts.toolSet ?? 'full',
   });
   const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -98,7 +99,7 @@ describe('ListTools', () => {
   });
 
   it('offers model_path on read tools and withholds it from write tools', async () => {
-    const client = await connect({ writeEnabled: true });
+    const client = await connect({ writeEnabled: true, toolSet: 'full' });
     const { tools } = await client.listTools();
     const props = (t: { inputSchema: unknown }) =>
       ((t.inputSchema as { properties?: Record<string, unknown> }).properties ?? {});
@@ -295,5 +296,48 @@ describe('model_source and zoo: routing', () => {
     expect(tools.map(t => t.name)).not.toContain('list_connections');
     const r = await client.callTool({ name: 'list_connections', arguments: {} });
     expect(r.isError).toBeFalsy();
+  });
+});
+
+describe('docs resources and elicitation', () => {
+  it('serves every tool\'s long description as a resource, including the ones core does not list', async () => {
+    const client = await connect({ toolSet: 'core' });
+    const { tools } = await client.listTools();
+    expect(tools.map(t => t.name)).not.toContain('list_connections');
+    const all = await client.readResource({ uri: 'neurarch://docs' });
+    const text = (all.contents[0] as { text: string }).text;
+    expect(text).toMatch(/## list_connections/);
+    expect(text).toMatch(/## save_model \(write tool/);
+    const one = await client.readResource({ uri: 'neurarch://docs/rank_designs' });
+    expect((one.contents[0] as { text: string }).text).toMatch(/calibration/);
+    await expect(client.readResource({ uri: 'neurarch://docs/nope' })).rejects.toThrow(/No tool named/);
+    // The listed description is the short one, and it carries an output schema hint.
+    const cd = tools.find(t => t.name === 'check_design')!;
+    expect(cd.description!.length).toBeLessThan(220);
+    expect((cd as { outputSchema?: unknown }).outputSchema).toBeDefined();
+  });
+
+  it('check_design asks the human through elicitation when the client can answer', async () => {
+    const model = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../examples/tiny-gpt.neurarch.json', import.meta.url), 'utf-8'));
+    const server = createMcpServer({ getModel: () => model, ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test' });
+    const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: { elicitation: {} } });
+    const { ElicitRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
+    let asked: string | undefined;
+    client.setRequestHandler(ElicitRequestSchema, async (req) => {
+      asked = req.params.message;
+      const choices = ((req.params as any).requestedSchema as { properties: { choice: { enum: string[] } } }).properties.choice.enum;
+      return { action: 'accept', content: { choice: choices[choices.length - 1] } };
+    });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const r = await client.callTool({ name: 'check_design', arguments: { ask_user: true } });
+    const out = r.structuredContent as any;
+    expect(asked).toMatch(/data/i);
+    expect(out.decision.answer.action).toBe('accept');
+    expect(out.decision.answer.value).toBe('synthetic');
+    // Default output is the trimmed one.
+    expect(out.stages[0].data).toBeUndefined();
+    const verbose = await client.callTool({ name: 'check_design', arguments: { verbose: true } });
+    expect((verbose.structuredContent as any).stages[0].data).toBeDefined();
   });
 });

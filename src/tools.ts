@@ -19,6 +19,14 @@ export interface ToolContext {
   modelPath: string;
   /** --write. Tools that can create files (save_to) check this; mutation tools are gated at dispatch. */
   writeEnabled?: boolean;
+  /** The file the model for THIS call came from, when model_path named one; else the server's. */
+  currentPath?: string;
+  /**
+   * Ask the person at the client a question (MCP elicitation). Present only
+   * when the connected client declared the capability; a tool that needs an
+   * answer and finds this undefined puts the question in its result instead.
+   */
+  elicit?: (q: { message: string; options: Array<{ value: string; label: string; hint?: string }> }) => Promise<{ action: 'accept' | 'decline' | 'cancel'; value?: string }>;
 }
 
 /**
@@ -418,8 +426,31 @@ const checkDesignTool: ToolDef = {
     + 'Call this BEFORE proposing an architecture change and again after, so you can say what your '
     + 'edit actually did. Broader than validate_model, which is the local structural subset. '
     + 'Runs offline, needs no API key, and makes no network call.',
-  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  handler: (_args, model) => checkDesign(model),
+  inputSchema: {
+    type: 'object',
+    properties: {
+      verbose: { type: 'boolean', description: 'Include every stage\'s machine-readable data (cost breakdown, deploy targets, contract). Default false: verdict, findings, stage headlines and the decision.' },
+      ask_user: { type: 'boolean', description: 'If the verdict ends in a decision only the human can make, ask them through the client (MCP elicitation) and include their answer. Default false.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async ({ verbose, ask_user }: { verbose?: boolean; ask_user?: boolean }, model, ctx) => {
+    const full = checkDesign(model);
+    if ('error' in full) return full;
+    const out: Record<string, unknown> = verbose ? { ...full } : {
+      ...full,
+      stages: full.stages.map(s => ({ stage: s.stage, status: s.status, headline: s.headline })),
+      note: 'Stage data omitted; pass verbose:true for cost breakdown, deploy targets and the data contract.',
+    };
+    if (ask_user && full.decision && ctx.elicit) {
+      const answer = await ctx.elicit({
+        message: `${full.decision.question}\n${full.decision.because}`,
+        options: full.decision.options.map(o => ({ value: o.value, label: o.label, hint: o.hint })),
+      });
+      out.decision = { ...full.decision, answer };
+    }
+    return out;
+  },
 };
 
 // ── lint_model ───────────────────────────────────────────────────────────────

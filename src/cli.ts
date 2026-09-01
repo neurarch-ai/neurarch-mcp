@@ -6,6 +6,7 @@
 import { TOOLS, type ToolAnnotations, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 import { HF_TOOLS, hfToolsIfEnabled } from './extraTools.js';
+import { shortDescription } from './toolDocs.js';
 
 export interface ParsedFlags {
   versionRequested: boolean;
@@ -20,7 +21,7 @@ export interface ParsedFlags {
   httpHost?: string;
   /** Allow hf:<org/name> model refs and list load_hf_model: the one network switch. */
   hfEnabled: boolean;
-  /** Which read tools to advertise: 'full' (default) or the 'core' dozen. */
+  /** Which read tools to advertise: the 'core' dozen (default) or 'full'. */
   toolSet: ToolSetName;
   /** Serve with no model on stdio too (a container with nothing mounted); every call names its model. */
   hostedRequested: boolean;
@@ -56,6 +57,8 @@ export const CORE_TOOLS: readonly string[] = [
   'lint_model',
   'check_design',
   'rank_designs',
+  'suggest_fix',
+  'trace_model',
   'mermaid_diagram',
   'export_pytorch',
   'list_architectures',
@@ -87,7 +90,7 @@ export function parseFlags(argv: string[]): ParsedFlags {
   return {
     hfEnabled: has('--hf'),
     hostedRequested: has('--hosted'),
-    toolSet: toolsRaw === 'core' ? 'core' : 'full',
+    toolSet: toolsRaw === 'full' ? 'full' : 'core',
     command,
     json: has('--json'),
     positional,
@@ -109,7 +112,7 @@ export function parseFlags(argv: string[]): ParsedFlags {
  * what is callable: resolveToolCall still finds a full-set tool by name, so an
  * agent that read the docs can use one the listing left out.
  */
-export function selectTools(writeEnabled: boolean, toolSet: ToolSetName = 'full'): ToolDef[] {
+export function selectTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'): ToolDef[] {
   const reads = [...TOOLS, ...hfToolsIfEnabled()];
   const advertised = toolSet === 'core' ? reads.filter(t => CORE_TOOLS.includes(t.name)) : reads;
   return writeEnabled ? [...advertised, ...WRITE_TOOLS] : advertised;
@@ -120,11 +123,7 @@ export const MODEL_PATH_PARAM = 'model_path';
 
 const MODEL_PATH_PROPERTY = {
   type: 'string',
-  description:
-    'Optional. Answer this about a different model file instead of the one this server was '
-    + 'started with, so one server can cover a whole repository of architectures. Absolute, or '
-    + 'relative to the server working directory. Read tools only: mutations always target the '
-    + 'file passed on the command line, so an agent cannot write to a path it just made up.',
+  description: 'Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>).',
 };
 
 /**
@@ -161,23 +160,45 @@ export interface ListedTool {
   description: string;
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotations;
+  outputSchema?: Record<string, unknown>;
 }
+
+/**
+ * Output schemas, declared loosely on purpose. A client validates
+ * structuredContent against these and fails the call on a mismatch, so each
+ * one names the keys an agent should rely on and leaves the rest open
+ * (additionalProperties: true). A drift between handler and schema then
+ * costs a missing hint, not a broken tool.
+ */
+const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  check_design: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },
+  lint_model: { type: 'object', additionalProperties: true, properties: { clean: { type: 'boolean' }, counts: { type: 'object' }, findings: { type: 'array' } } },
+  validate_model: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' } } },
+  rank_designs: { type: 'object', additionalProperties: true, properties: { ranked: { type: 'array' }, recommended: { type: ['string', 'null'] }, recommendation: { type: 'string' }, calibration: { type: 'object' } } },
+  suggest_fix: { type: 'object', additionalProperties: true, properties: { fixes: { type: 'array' }, notFixable: { type: 'array' } } },
+  describe_architecture: { type: 'object', additionalProperties: true, properties: { pipeline: { type: 'array' }, layerCount: { type: 'number' } } },
+  layer_impact: { type: 'object', additionalProperties: true },
+  export_pytorch: { type: 'object', additionalProperties: true, properties: { code: { type: 'string' }, language: { type: 'string' } } },
+  list_architectures: { type: 'object', additionalProperties: true, properties: { architectures: { type: 'array' } } },
+  find_models: { type: 'object', additionalProperties: true, properties: { models: { type: 'array' } } },
+};
 
 /**
  * Build the ListTools payload: schemas with `model_path` where it applies, and
  * annotations resolved from the per-tool overrides over the read defaults.
  */
-export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'full'): ListedTool[] {
+export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'): ListedTool[] {
   const reads = selectTools(false, toolSet).map(t => ({
     name: t.name,
-    description: t.description,
+    description: shortDescription(t.name, t.description),
     inputSchema: withModelPath(t.inputSchema),
     annotations: { ...READ_TOOL_DEFAULTS, ...(t.annotations ?? {}) },
+    ...(OUTPUT_SCHEMAS[t.name] ? { outputSchema: OUTPUT_SCHEMAS[t.name] } : {}),
   }));
   if (!writeEnabled) return reads;
   const writes = WRITE_TOOLS.map(t => ({
     name: t.name,
-    description: t.description,
+    description: shortDescription(t.name, t.description),
     inputSchema: t.inputSchema,
     // Write tools always declare their own; the fallback exists so a new one
     // added without annotations is still never advertised as read-only.

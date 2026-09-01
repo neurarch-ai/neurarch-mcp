@@ -64,10 +64,11 @@ Flags:
             one switch that lets a tool open a socket on your behalf
             (huggingface.co, to read config.json). HF_TOKEN is sent for gated
             repos. Results are cached for a day under ~/.cache/neurarch-mcp.
-  --tools=core
-            Advertise only the core tools (${CORE_TOOLS.length}: ${CORE_TOOLS.join(', ')})
-            instead of all of them. Every tool stays callable by name; this
-            trims what rides along in the agent's context on every turn.
+  --tools=full
+            Advertise every read tool. The default is the core set
+            (${CORE_TOOLS.length}: ${CORE_TOOLS.join(', ')});
+            every tool stays callable by name either way, and the full
+            contract of each is one read away at neurarch://docs/<tool>.
 
 Environment:
   NEURARCH_MCP_TOKEN  When set, --http requires 'Authorization: Bearer <token>'
