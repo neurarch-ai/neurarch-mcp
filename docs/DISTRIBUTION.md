@@ -7,12 +7,13 @@ matters: the official registry first, because the directories crawl it.
 |---|---|---|---|
 | npm | `npm publish` | 0.13.0 live 2026-09-01 | version bump, `npm publish` |
 | Official MCP Registry | `server.json` + `mcp-publisher publish` (GitHub auth for the `io.github.neurarch-ai/*` namespace) | listed since 0.10; 0.13.0 republish pending login | bump `version` in both places in `server.json`, republish |
-| Smithery | `smithery.yaml` in repo root; claim the server at smithery.ai/new with the GitHub repo | file added 0.13, claim pending | nothing; Smithery re-reads the repo |
-| Glama | `glama.json` in repo root; claim at glama.ai/mcp/servers | file added 0.13, claim pending | nothing |
-| PulseMCP, mcp.so | submission form (pulsemcp.com/submit, mcp.so/submit) with npm + GitHub URLs | pending | nothing |
+| Smithery | Now takes an HTTP URL or the `.mcpb`: `npx @smithery/cli mcp publish ./neurarch-mcp-<v>.mcpb -n neurarch-ai/neurarch-mcp` (needs `SMITHERY_API_KEY` from smithery.ai/account/api-keys). `smithery.yaml` kept for the legacy stdio path. | account created 2026-09-01; publish pending API key | rebuild the bundle, republish |
+| Glama | `glama.json` in repo root; submitted via Add Server at glama.ai/mcp/servers | submitted 2026-09-01, pending review | nothing |
+| PulseMCP | submissions paused until mid-August 2026; it ingests the Official MCP Registry automatically | will pick us up from the registry | nothing |
+| mcp.so | submission form mcp.so/submit | pending | nothing |
 | Docker MCP Catalog | PR to github.com/docker/mcp-registry adding `servers/neurarch-mcp/server.yaml` (below) | [PR #4867](https://github.com/docker/mcp-registry/pull/4867) open | bump the image tag in the PR |
 | Claude Desktop | `.mcpb` from `npm run build:mcpb`, attached to the GitHub release; submit to the Desktop Extension directory from the Anthropic form | v0.13.0 release carries the bundle; directory submission pending | rebuild, attach to release |
-| Cursor directory | cursor.directory/mcp submit form; the README's Add-to-Cursor deeplink | pending | nothing |
+| Cursor directory | cursor.directory/plugins/new (scans the repo; skill auto-detected, MCP component added by hand) | submitted 2026-09-01, security scan pending: cursor.directory/plugins/neurarch-mcp | nothing |
 | awesome-mcp-servers | PR to github.com/punkpeye/awesome-mcp-servers (entry below) | [PR #13342](https://github.com/punkpeye/awesome-mcp-servers/pull/13342) open | nothing |
 | VS Code | the `vscode.dev/redirect/mcp/install` badge in the README | live | nothing |
 
