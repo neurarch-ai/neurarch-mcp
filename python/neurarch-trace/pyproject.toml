@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neurarch-trace"
-version = "0.1.0"
+version = "0.1.1"
 description = "Run one forward pass over a PyTorch model and write a .neurarch.json graph with real per-layer shapes, for neurarch-mcp."
 readme = "README.md"
 license = { text = "MIT" }
