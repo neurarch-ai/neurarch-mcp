@@ -34,6 +34,20 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   which-of-k question, layer_impact for what-breaks). Results land in
   `docs/tool-selection-eval.json` with the date. Costs tokens; not in CI.
 
+- **The parser reads real repositories now, mostly.** Regenerated engine
+  bundle from neurarch-ai/neurarch#128: same-file classes are inlined
+  (`self.model = LlamaModel(config)` becomes `model.layers.0.self_attn.q_proj`
+  and so on, depth 4), `ModuleList` / `Sequential(*list)` / `append` loops and
+  comprehensions over bare `nn.X(...)` are followed, multi-line constructors
+  parse, `torch.nn.X` counts, the root class is chosen rather than the last
+  one (`graphFromPyTorchSource(code, name, { className })` overrides), and
+  every component carries `sourceLine` and `sourceClass`, which is what
+  `suggest_fix` locates by. On the 116 files of the real-repos study: a graph
+  for 86% (was 63%), a recognisable one for 41% (was 8%), median 8 layers
+  (was 2). `docs/REAL_REPOS_STUDY_2.md` has the table and the caveats: HF
+  files parse to dozens of nodes whose `config.*` dims are still text, and
+  this round's findings were not hand-judged.
+
 ### Changed
 - **The default listing is the core set.** Thirteen tools instead of
   twenty-six; `--tools=full` advertises all. Every tool stays callable by

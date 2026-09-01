@@ -179,6 +179,10 @@ export interface MLComponent {
   colorTag?: string;         // user-assigned color label for visual grouping
   locked?: boolean;          // locked nodes cannot be moved or deleted
   lockedParams?: string[];   // param keys frozen from edits
+  /** 1-based line of the source statement this layer was parsed from (code importer only). */
+  sourceLine?: number;
+  /** Class whose __init__ defined this layer (code importer only). */
+  sourceClass?: string;
   /**
    * Where this layer came from. Populated by importers (paper / code / HF /
    * agent) and surfaced in the inspector + academic export. Letting layers

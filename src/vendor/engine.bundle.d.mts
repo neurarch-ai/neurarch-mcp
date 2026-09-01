@@ -24,11 +24,23 @@ export interface EngineFinding {
   componentType?: string;
 }
 
+/** Options for graphFromPyTorchSource. */
+export interface GraphFromSourceOptions {
+  /** Parse this class instead of the auto-selected root class (the class no
+   *  other class in the file instantiates, with the most layers). */
+  className?: string;
+}
+
 /**
  * Reconstruct a model graph from PyTorch source. Returns null when the file has
  * no recognizable model class, or parses to nothing but an input/output stub.
+ * `name` is usually the file path; its stem is a tie-break between root classes.
  */
-export function graphFromPyTorchSource(code: string, name?: string): ModelArchitecture | null;
+export function graphFromPyTorchSource(
+  code: string,
+  name?: string,
+  opts?: GraphFromSourceOptions,
+): ModelArchitecture | null;
 
 /** Run the structural rule set over a graph. */
 export function lintModelGraph(model: ModelArchitecture): EngineFinding[];
