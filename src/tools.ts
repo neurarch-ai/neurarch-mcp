@@ -12,9 +12,12 @@ import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
 import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
+import { EXTRA_TOOLS } from './extraTools.js';
 
 export interface ToolContext {
   modelPath: string;
+  /** --write. Tools that can create files (save_to) check this; mutation tools are gated at dispatch. */
+  writeEnabled?: boolean;
 }
 
 /**
@@ -679,6 +682,7 @@ export const TOOLS: ToolDef[] = [
   listConnections,
   listHyperparams,
   getDesignNotes,
+  ...EXTRA_TOOLS,
 ];
 
 // Suppress unused-export TS warning when not destructured elsewhere
