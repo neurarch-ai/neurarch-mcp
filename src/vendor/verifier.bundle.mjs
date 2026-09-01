@@ -1,34 +1,3 @@
-// GENERATED FILE. Do not edit.
-//
-// The Neurarch verifier, compiled from the private main repo:
-//
-//   npx esbuild <entry> --bundle --format=esm --platform=node --alias:@=./src \
-//     --outfile=<this file>
-//
-//   where <entry> is:
-//     export { checkDesign } from '@/utils/pipelineStages';
-//     export { provenanceFor, RULE_PROVENANCE } from '../lib/ruleProvenance';
-//
-// checkDesign is a pure, synchronous function of the graph: it runs the five
-// pipeline stages (pre-flight, data, train, evaluate, deploy) and returns the
-// verdict in ~13ms with no I/O of any kind. It is the same code path the app
-// and https://www.neurarch.com/api/v1/check run, so an agent here and a person
-// in the app get the same answer.
-//
-// It used to live behind that endpoint and an API key. Nothing about it needed
-// to: the key bought no compute (13ms) and captured no measurement (the corpus
-// row is written by a separate, unauthenticated endpoint). All it did was put
-// a signup between someone and the tool this product is built around.
-//
-// provenanceFor returns the published measurement behind a rule. It is bundled
-// rather than fetched because the measurements are already public at
-// https://www.neurarch.com/docs/structural-checks: charging for a number you
-// can read on the website is theatre. What is not bundled, and cannot be, is
-// live corpus statistics, which do not exist yet.
-//
-// Regenerate whenever the pipeline stages or the provenance table move;
-// src/vendor/verifier.contract.test.ts fails loudly if the exports drift.
-
 // src/components/MLComponents/componentRegistry.ts
 var convDim = (v, i, fallback) => {
   const raw = Array.isArray(v) ? v[i] ?? v[0] : v;
@@ -5608,6 +5577,10 @@ function emptyCanvasResult(stage) {
     evidence: evidenceFor(stage)
   };
 }
+var VOWEL_SOUND_INITIALS = /* @__PURE__ */ new Set(["A", "E", "F", "H", "I", "L", "M", "N", "O", "R", "S", "X"]);
+function gpuArticle(name) {
+  return VOWEL_SOUND_INITIALS.has((name?.[0] ?? "").toUpperCase()) ? "an" : "a";
+}
 function evidenceFor(stage) {
   const event = {
     preflight: "preflight:open",
@@ -5637,7 +5610,7 @@ function runPreflightStage(model) {
   }));
   const { block, warn } = report.counts;
   const m = report.metrics;
-  const costLine = m.estTrainSec > 0 ? `${fmtUsd(m.estCostUsd)} / ${fmtDuration(m.estTrainSec)} on a ${m.fitsGpu}` : null;
+  const costLine = m.estTrainSec > 0 ? `${fmtUsd(m.estCostUsd)} / ${fmtDuration(m.estTrainSec)} on ${gpuArticle(m.fitsGpu)} ${m.fitsGpu}` : null;
   let status;
   let headline;
   if (block > 0) {
@@ -5761,7 +5734,7 @@ function runTrainStage(model) {
   const cost = report.metrics.estCostUsd;
   const dur = report.metrics.estTrainSec;
   const gpu = report.metrics.fitsGpu;
-  const costLine = dur > 0 ? `${fmtUsd(cost)} / ${fmtDuration(dur)} on a ${gpu}` : "cost not estimable";
+  const costLine = dur > 0 ? `${fmtUsd(cost)} / ${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}` : "cost not estimable";
   if (run) {
     const insights = deriveRunInsights(run);
     const notes = insights.map((i) => ({
@@ -5800,7 +5773,7 @@ function runTrainStage(model) {
       options: [
         { label: "Simulate it (free, instant)", value: "simulate", hint: "Architecture-based curves, useful to check the wiring, not a measurement" },
         { label: "Free GPU (Colab / Kaggle)", value: "free_gpu", hint: "A notebook you run yourself; results report back into the app" },
-        { label: `Managed GPU (about ${fmtUsd(cost)})`, value: "managed_gpu", hint: `${fmtDuration(dur)} on a ${gpu}, confirmed in the runner before anything starts` }
+        { label: `Managed GPU (about ${fmtUsd(cost)})`, value: "managed_gpu", hint: `${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}, confirmed in the runner before anything starts` }
       ]
     },
     evidence: evidenceFor("train")
@@ -6038,7 +6011,8 @@ function checkDesign(model) {
 var STRUCTURAL_STUDY = "https://neurarch.com/docs/structural-checks";
 var CRASH_STUDY = {
   evidence: "In a 264-graph study (two seeds, torch 2.8), all 96 graphs blocked by the structural checks crashed PyTorch forward and all 80 that passed ran clean.",
-  source: STRUCTURAL_STUDY
+  source: STRUCTURAL_STUDY,
+  kind: "crash"
 };
 var RULE_PROVENANCE = {
   "head-dim-divisibility": CRASH_STUDY,
@@ -6049,13 +6023,16 @@ var RULE_PROVENANCE = {
   "invalid-output-shape": CRASH_STUDY,
   "unknown-layer-type": {
     evidence: "Outcome-derived: in a grounded training campaign a statically-clean design carrying an unknown layer type trained to below-random accuracy because the trainer dropped the layer; the same design trained to 66.9% once the type resolved.",
-    source: STRUCTURAL_STUDY
+    source: STRUCTURAL_STUDY,
+    kind: "outcome"
   },
   "deep-no-norm": {
     evidence: "Outcome-mined from the production training corpus: unnormalized conv-run length correlates at Spearman -0.53 with trained accuracy (n=15 distinct designs), and every run-of-6 design reached only 15-27% of its reference under an identical budget.",
-    source: STRUCTURAL_STUDY
+    source: STRUCTURAL_STUDY,
+    kind: "outcome"
   }
 };
+var OUTCOME_RULE_IDS = Object.entries(RULE_PROVENANCE).filter(([, p]) => p.kind === "outcome").map(([id]) => id);
 function provenanceFor(ruleIds) {
   const out = {};
   for (const id of ruleIds) {
@@ -6063,8 +6040,170 @@ function provenanceFor(ruleIds) {
   }
   return out;
 }
+
+// lib/rankCandidates.ts
+var RANK_CALIBRATION = {
+  exclusion: {
+    claim: "A design with a pre-flight blocker does not forward-pass.",
+    evidence: "264-graph study, torch 2.8: 96 of 96 blocked graphs crashed PyTorch forward, 80 of 80 passes ran clean."
+  },
+  ordering: {
+    claim: "Ordering two legal designs is weakly supported and usually abstains.",
+    pairwiseAccuracy: 0.514,
+    coverage: 0.083,
+    sampleSize: 36,
+    basis: "in-sample: 24 designs over 6 tasks trained end to end on one T4 (scripts/rl-benchmark/grounded-results.json)",
+    comparators: {
+      chance: 0.5,
+      "zheng-2026-best": 0.615,
+      "foster-2026-best": 0.6935
+    }
+  },
+  source: "https://neurarch.com/docs/structural-checks"
+};
+var cmp = (a, b) => (a.tier === b.tier ? 0 : a.tier === "blocked" ? 1 : -1) || a.outcomeFlags.length - b.outcomeFlags.length || a.warnings - b.warnings;
+function reasonsFor(c, tier) {
+  const out = [];
+  if (tier === "blocked") {
+    out.push(`${c.blocking} blocking finding${c.blocking === 1 ? "" : "s"}: this graph does not forward-pass, so executing it spends budget on a crash.`);
+    return out;
+  }
+  if (c.outcomeFlags.length > 0) {
+    out.push(`Carries ${c.outcomeFlags.length} finding${c.outcomeFlags.length === 1 ? "" : "s"} measured against trained outcomes (${c.outcomeFlags.join(", ")}), which is the only evidence here that separates two runnable designs.`);
+  } else {
+    out.push("Runs, and trips no rule with a trained-outcome measurement behind it.");
+  }
+  if (c.warnings > 0) out.push(`${c.warnings} pre-flight warning${c.warnings === 1 ? "" : "s"} with no outcome measurement behind them; used only to break ties.`);
+  for (const b of c.otherStageBlockers ?? []) {
+    out.push(`Blocked at ${b.stage}: ${b.title}. Reported, not ranked on: it does not bear on whether training this design is worth the budget.`);
+  }
+  return out;
+}
+function signalsFromCheck(id, check, firedRuleIds, outcomeRuleIds) {
+  const c = check;
+  if (!c || typeof c !== "object") return null;
+  if (!Array.isArray(c.findings) || !Array.isArray(c.stages)) return null;
+  const findings = c.findings.filter(
+    (f) => !!f && typeof f === "object"
+  );
+  const stages = c.stages.filter((s) => !!s && typeof s === "object");
+  const outcome = new Set(outcomeRuleIds);
+  const preflight = stages.find((s) => s.stage === "preflight");
+  const data = preflight?.data ?? {};
+  const num2 = (k) => typeof data[k] === "number" && Number.isFinite(data[k]) ? data[k] : null;
+  const blocks = findings.filter((f) => f.severity === "block");
+  return {
+    id,
+    blocking: blocks.filter((f) => f.stage === "preflight").length,
+    warnings: findings.filter((f) => f.severity === "warn" && f.stage === "preflight").length,
+    otherStageBlockers: blocks.filter((f) => f.stage !== "preflight").map((f) => ({ stage: f.stage, title: f.title })),
+    outcomeFlags: [...new Set([...firedRuleIds].filter((r) => r && outcome.has(r)))],
+    params: num2("params"),
+    estCostUsd: num2("estCostUsd"),
+    fitsGpu: typeof data.gpu === "string" ? data.gpu : null,
+    summary: typeof c.summary === "string" ? c.summary : void 0
+  };
+}
+function rankCandidates(candidates) {
+  const withTier = candidates.map((c) => {
+    const tier = c.blocking > 0 ? "blocked" : "legal";
+    return { ...c, tier, rank: 0, tiedWith: 1, reasons: reasonsFor(c, tier) };
+  });
+  const sorted = [...withTier].sort(cmp);
+  let rank = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if (i === 0 || cmp(sorted[i - 1], sorted[i]) !== 0) rank = i + 1;
+    sorted[i].rank = rank;
+  }
+  const groupSize = /* @__PURE__ */ new Map();
+  for (const c of sorted) groupSize.set(c.rank, (groupSize.get(c.rank) ?? 0) + 1);
+  for (const c of sorted) c.tiedWith = groupSize.get(c.rank) ?? 1;
+  const legal = sorted.filter((c) => c.tier === "legal");
+  const blocked = sorted.filter((c) => c.tier === "blocked");
+  let recommended = null;
+  let recommendation;
+  if (legal.length === 0) {
+    recommendation = blocked.length === 0 ? "No candidates were submitted." : "Every candidate has a blocking finding. None of them will forward-pass, so none should be given execution budget as submitted.";
+  } else if (legal[0].tiedWith > 1) {
+    recommendation = `${legal[0].tiedWith} of ${legal.length} legal candidates are tied at the top and nothing measured separates them. Pick on your own budget (params, cost and GPU fit are returned per candidate), or run more than one: a verifier that abstains is telling you the truth about what it can see.`;
+  } else {
+    recommended = legal[0].id;
+    recommendation = `${legal[0].id} is the only candidate at the top rank. ${legal[0].reasons[0]}`;
+  }
+  return {
+    ranked: sorted,
+    recommended,
+    recommendation,
+    budget: {
+      candidates: sorted.length,
+      blocked: blocked.length,
+      legal: legal.length,
+      wouldNotRun: blocked.map((c) => c.id),
+      reclaimed: sorted.length === 0 ? 0 : blocked.length / sorted.length
+    },
+    calibration: RANK_CALIBRATION
+  };
+}
+
+// lib/normalizeGraph.ts
+function normalizeGraphConnections(graph) {
+  const g = graph;
+  if (!g || typeof g !== "object") return graph;
+  const components = g.components;
+  const connections = g.connections;
+  if (!Array.isArray(components) || !Array.isArray(connections)) return graph;
+  const ids = /* @__PURE__ */ new Set();
+  for (const c of components) {
+    if (c && typeof c.id === "string") ids.add(c.id);
+  }
+  const nameCounts = /* @__PURE__ */ new Map();
+  for (const c of components) {
+    if (c && typeof c.name === "string") {
+      nameCounts.set(c.name, (nameCounts.get(c.name) ?? 0) + 1);
+    }
+  }
+  const idByName = /* @__PURE__ */ new Map();
+  for (const c of components) {
+    if (!c || typeof c.name !== "string" || typeof c.id !== "string") continue;
+    if (nameCounts.get(c.name) === 1 && !ids.has(c.name)) idByName.set(c.name, c.id);
+  }
+  const resolve = (endpoint) => {
+    if (typeof endpoint !== "string") return endpoint;
+    if (ids.has(endpoint)) return endpoint;
+    return idByName.get(endpoint) ?? endpoint;
+  };
+  let changed = false;
+  const rewritten = connections.map((conn) => {
+    if (!conn || typeof conn !== "object") return conn;
+    const from = resolve(conn.from);
+    const to = resolve(conn.to);
+    if (from === conn.from && to === conn.to) return conn;
+    changed = true;
+    return { ...conn, from, to };
+  });
+  return changed ? { ...g, connections: rewritten } : graph;
+}
+function ensureComponentIds(graph) {
+  const g = graph;
+  if (!g || typeof g !== "object" || !Array.isArray(g.components)) return graph;
+  const components = g.components;
+  if (components.length === 0) return graph;
+  if (components.some((c) => c && typeof c.id === "string" && c.id)) return graph;
+  return {
+    ...g,
+    components: components.map((c, i) => c && typeof c === "object" ? { ...c, id: `n${i}` } : c)
+  };
+}
+function normalizeGraphForVerification(graph) {
+  return normalizeGraphConnections(ensureComponentIds(graph));
+}
 export {
+  OUTCOME_RULE_IDS,
+  RANK_CALIBRATION,
   RULE_PROVENANCE,
   checkDesign,
-  provenanceFor
+  normalizeGraphForVerification,
+  provenanceFor,
+  rankCandidates,
+  signalsFromCheck
 };

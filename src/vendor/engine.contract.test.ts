@@ -28,3 +28,25 @@ describe('vendored engine contract', () => {
     expect(src).not.toMatch(/\brequire\(/);
   });
 });
+
+describe('vendored engine contract, 0.13 additions', () => {
+  it('exports the code generator and the HF pieces', () => {
+    expect(typeof engine.generatePyTorchCode).toBe('function');
+    expect(typeof engine.convertHFConfigToModel).toBe('function');
+    expect(typeof engine.fetchHFModelConfig).toBe('function');
+  });
+  it('builds a graph from a config with no network', () => {
+    const { components, connections } = engine.convertHFConfigToModel('t/llama', {
+      model_type: 'llama', architectures: ['LlamaForCausalLM'], hidden_size: 256, num_hidden_layers: 2,
+      num_attention_heads: 4, intermediate_size: 512, vocab_size: 1000, max_position_embeddings: 64,
+    });
+    expect(components.length).toBeGreaterThan(5);
+    expect(connections.length).toBeGreaterThan(4);
+  });
+  it('generates source that mentions every named layer type it supports', async () => {
+    const { makeModel } = await import('../test/fixtures.js');
+    const code = engine.generatePyTorchCode(makeModel());
+    expect(code).toMatch(/class \w+\(nn\.Module\)/);
+    expect(code).toMatch(/nn\.Embedding/);
+  });
+});

@@ -50,3 +50,19 @@ describe('vendored verifier contract', () => {
     expect(some['not-a-real-rule']).toBeUndefined();
   });
 });
+
+describe('vendored verifier contract, 0.13 additions', () => {
+  it('exports the ranker with its calibration and the outcome rule list', () => {
+    expect(typeof verifier.rankCandidates).toBe('function');
+    expect(typeof verifier.signalsFromCheck).toBe('function');
+    expect(typeof verifier.normalizeGraphForVerification).toBe('function');
+    expect(Array.isArray(verifier.OUTCOME_RULE_IDS)).toBe(true);
+    expect(verifier.RANK_CALIBRATION.ordering.pairwiseAccuracy).toBeGreaterThan(0.4);
+    expect(verifier.RANK_CALIBRATION.ordering.coverage).toBeLessThan(0.2);
+  });
+  it('signalsFromCheck returns null, not a clean default, for an unreadable verdict', () => {
+    expect(verifier.signalsFromCheck('x', { nonsense: true }, [], [])).toBeNull();
+    const sig = verifier.signalsFromCheck('x', verifier.checkDesign(makeModel()), [], []);
+    expect(sig?.id).toBe('x');
+  });
+});
