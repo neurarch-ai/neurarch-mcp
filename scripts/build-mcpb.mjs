@@ -43,5 +43,27 @@ if (official.status !== 0) {
   const zip = spawnSync('zip', ['-qr', out, '.'], { cwd: stage, stdio: 'inherit' });
   if (zip.status !== 0) process.exit(zip.status ?? 1);
 }
+// Smithery reads the same bundle but validates the manifest more strictly
+// than Anthropic's packer: prompt arguments must be objects and every tool
+// needs an inputSchema. Emit a second bundle with those two edits rather
+// than fork the manifest, so the two never drift.
+//   npx @smithery/cli mcp publish neurarch-mcp-<v>.smithery.mcpb -n neurarch-ai/neurarch-mcp
+const smitheryManifest = JSON.parse(readFileSync(join(stage, 'manifest.json'), 'utf-8'));
+for (const p of smitheryManifest.prompts ?? []) {
+  if (Array.isArray(p.arguments)) {
+    p.arguments = p.arguments.map((a) => (typeof a === 'string' ? { name: a, description: a, required: true } : a));
+  }
+}
+const schemas = JSON.parse(readFileSync(join(root, 'scripts', 'tool-schemas.json'), 'utf-8'));
+for (const t of smitheryManifest.tools ?? []) {
+  t.inputSchema = schemas[t.name] ?? { type: 'object', properties: {} };
+}
+writeFileSync(join(stage, 'manifest.json'), JSON.stringify(smitheryManifest, null, 2));
+const outSmithery = join(root, `neurarch-mcp-${pkg.version}.smithery.mcpb`);
+rmSync(outSmithery, { force: true });
+const zip2 = spawnSync('zip', ['-qr', outSmithery, '.'], { cwd: stage, stdio: 'inherit' });
+if (zip2.status !== 0) process.exit(zip2.status ?? 1);
+
 rmSync(stage, { recursive: true, force: true });
 console.log(`wrote ${out}`);
+console.log(`wrote ${outSmithery}`);

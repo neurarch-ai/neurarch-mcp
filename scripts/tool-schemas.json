@@ -1,0 +1,444 @@
+{
+  "get_model_summary": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "describe_architecture": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "get_layer": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Layer name or id. Substring match if no exact hit."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "find_layers": {
+    "type": "object",
+    "properties": {
+      "type": {
+        "type": "string",
+        "description": "Exact component type (e.g. \"conv2d\", \"linear\", \"multiHeadAttention\")."
+      },
+      "namePattern": {
+        "type": "string",
+        "description": "Regex source matched against layer name."
+      },
+      "scope": {
+        "type": "string",
+        "description": "Scope prefix, e.g. \"encoder.layer.3\" (matches that scope and anything nested under it)."
+      },
+      "augmentation": {
+        "type": "string",
+        "description": "Only layers carrying this augmentation overlay, e.g. \"freeze\", \"quantize_int8\", \"gradient_checkpoint\", \"amp\"."
+      },
+      "sortByParams": {
+        "type": "boolean",
+        "description": "When true, rank results by estimated parameter count (largest first) before applying limit."
+      },
+      "limit": {
+        "type": "number",
+        "description": "Max results (default 100)."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "compare_layers": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "string",
+        "description": "First layer name or id."
+      },
+      "b": {
+        "type": "string",
+        "description": "Second layer name or id."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "a",
+      "b"
+    ],
+    "additionalProperties": false
+  },
+  "layer_impact": {
+    "type": "object",
+    "properties": {
+      "names": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Layer names or ids to use as targets."
+      },
+      "namePattern": {
+        "type": "string",
+        "description": "Alternative to names — regex source matching layer names."
+      },
+      "maxDistance": {
+        "type": "number",
+        "description": "Limit BFS depth. Omit for full reachability."
+      },
+      "includeUpstream": {
+        "type": "boolean",
+        "description": "Default true. Set false to only return downstream."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "param_count_by_block": {
+    "type": "object",
+    "properties": {
+      "groupBy": {
+        "type": "string",
+        "enum": [
+          "block",
+          "scope",
+          "type"
+        ],
+        "description": "Default \"block\" (collapsed groups). Falls back to scope when no groups exist."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "flops_by_block": {
+    "type": "object",
+    "properties": {
+      "groupBy": {
+        "type": "string",
+        "enum": [
+          "block",
+          "scope",
+          "type"
+        ]
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "mermaid_diagram": {
+    "type": "object",
+    "properties": {
+      "maxLayers": {
+        "type": "number",
+        "description": "Truncate after N layers (default 60). Returns a note when truncated."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "list_blocks": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "get_block": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Group name or id, or a scope prefix (e.g. \"encoder\" matches \"encoder.layer.0\")."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "additionalProperties": false
+  },
+  "diff_models": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "description": "Path to the other .neurarch.json file to compare against."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "additionalProperties": false
+  },
+  "validate_model": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "lint_model": {
+    "type": "object",
+    "properties": {
+      "severity": {
+        "type": "string",
+        "enum": [
+          "block",
+          "warn",
+          "info"
+        ],
+        "description": "Optional minimum severity to report. Defaults to reporting everything."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "check_design": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "find_path": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string",
+        "description": "Source layer name or id."
+      },
+      "to": {
+        "type": "string",
+        "description": "Target layer name or id."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "from",
+      "to"
+    ],
+    "additionalProperties": false
+  },
+  "list_connections": {
+    "type": "object",
+    "properties": {
+      "from": {
+        "type": "string",
+        "description": "Optional source layer name or id filter."
+      },
+      "to": {
+        "type": "string",
+        "description": "Optional target layer name or id filter."
+      },
+      "limit": {
+        "type": "number",
+        "description": "Max results (default 200)."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "list_hyperparams": {
+    "type": "object",
+    "properties": {
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "get_design_notes": {
+    "type": "object",
+    "properties": {
+      "layer": {
+        "type": "string",
+        "description": "Optional layer name or id. When set, return only notes affecting that layer."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "rank_designs": {
+    "type": "object",
+    "properties": {
+      "candidates": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 32,
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Label for this candidate in the result. Defaults to the path or candidate-N."
+            },
+            "model_path": {
+              "type": "string",
+              "description": "A .py or .neurarch.json path, or zoo:<id> / hf:<org/name>."
+            },
+            "model": {
+              "type": "object",
+              "description": "An inline graph ({components, connections}) instead of a path."
+            }
+          },
+          "additionalProperties": false
+        },
+        "description": "The designs to order. Each needs either model_path or model."
+      },
+      "include_current": {
+        "type": "boolean",
+        "description": "Also rank the model this server was started with, as \"current\". Default false."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "candidates"
+    ],
+    "additionalProperties": false
+  },
+  "export_pytorch": {
+    "type": "object",
+    "properties": {
+      "save_to": {
+        "type": "string",
+        "description": "Optional path to write the generated .py to. Requires --write."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "list_architectures": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Substring match on id, title, type or domain (case-insensitive)."
+      },
+      "domain": {
+        "type": "string",
+        "description": "Exact domain filter, e.g. \"Language models\"."
+      },
+      "attention": {
+        "type": "string",
+        "description": "Only entries using this attention type, e.g. \"groupedQueryAttention\"."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  },
+  "load_architecture": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Entry id from list_architectures, e.g. \"qwen2.5-7b\"."
+      },
+      "save_to": {
+        "type": "string",
+        "description": "Optional path for a .neurarch.json copy. Requires --write."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "additionalProperties": false
+  },
+  "find_models": {
+    "type": "object",
+    "properties": {
+      "dir": {
+        "type": "string",
+        "description": "Directory to scan. Defaults to the directory of the model this server was started with."
+      },
+      "max_files": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5000,
+        "description": "Cap on files opened (default 400)."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional. Answer this about a different model file instead of the one this server was started with, so one server can cover a whole repository of architectures. Absolute, or relative to the server working directory. Read tools only: mutations always target the file passed on the command line, so an agent cannot write to a path it just made up."
+      }
+    },
+    "additionalProperties": false
+  }
+}

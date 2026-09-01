@@ -7,7 +7,7 @@ matters: the official registry first, because the directories crawl it.
 |---|---|---|---|
 | npm | `npm publish` | 0.13.0 live 2026-09-01 | version bump, `npm publish` |
 | Official MCP Registry | `server.json` + `mcp-publisher publish` (GitHub auth for the `io.github.neurarch-ai/*` namespace) | listed since 0.10; 0.13.0 republish pending login | bump `version` in both places in `server.json`, republish |
-| Smithery | Now takes an HTTP URL or the `.mcpb`: `npx @smithery/cli mcp publish ./neurarch-mcp-<v>.mcpb -n neurarch-ai/neurarch-mcp` (needs `SMITHERY_API_KEY` from smithery.ai/account/api-keys). `smithery.yaml` kept for the legacy stdio path. | account created 2026-09-01; publish pending API key | rebuild the bundle, republish |
+| Smithery | Now takes an HTTP URL or the `.mcpb`: `npx @smithery/cli mcp publish ./neurarch-mcp-<v>.mcpb -n neurarch-ai/neurarch-mcp` (needs `SMITHERY_API_KEY` from smithery.ai/account/api-keys). `smithery.yaml` kept for the legacy stdio path. | live 2026-09-01: smithery.ai/servers/neurarch-ai/neurarch-mcp (published from `neurarch-mcp-<v>.smithery.mcpb`, which `npm run build:mcpb` now emits alongside the Anthropic one) | `npm run build:mcpb`, then `npx @smithery/cli mcp publish neurarch-mcp-<v>.smithery.mcpb -n neurarch-ai/neurarch-mcp` (`npx @smithery/cli auth login` once per machine) |
 | Glama | `glama.json` in repo root; submitted via Add Server at glama.ai/mcp/servers | submitted 2026-09-01, pending review | nothing |
 | PulseMCP | submissions paused until mid-August 2026; it ingests the Official MCP Registry automatically | will pick us up from the registry | nothing |
 | mcp.so | submission form mcp.so/submit | pending | nothing |

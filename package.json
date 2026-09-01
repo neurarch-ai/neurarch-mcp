@@ -23,7 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "build:mcpb": "npx tsx scripts/tool-schemas.mjs && node scripts/build-mcpb.mjs",
     "sync:zoo": "node scripts/sync-zoo.mjs"
   },
   "keywords": [
