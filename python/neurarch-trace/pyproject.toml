@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neurarch-trace"
+version = "0.1.0"
+description = "Run one forward pass over a PyTorch model and write a .neurarch.json graph with real per-layer shapes, for neurarch-mcp."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [{ name = "neurarch-ai" }]
+keywords = ["pytorch", "mcp", "neurarch", "model-graph", "tracing"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = ["torch>=2.0"]
+
+[project.optional-dependencies]
+hf = ["transformers"]
+dev = ["pytest"]
+
+[project.scripts]
+neurarch-trace = "neurarch_trace.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/neurarch-ai/neurarch-mcp"
+Repository = "https://github.com/neurarch-ai/neurarch-mcp"
+
+[tool.setuptools.packages.find]
+include = ["neurarch_trace*"]

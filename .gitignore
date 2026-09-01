@@ -6,3 +6,8 @@ npm-debug.log*
 .env
 .env.local
 *.tgz
+*.mcpb
+__pycache__/
+.pytest_cache/
+python/**/build/
+python/**/*.egg-info/

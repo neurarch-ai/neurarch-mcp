@@ -26,6 +26,7 @@ import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { type ToolContext } from './tools.js';
 import { createMcpServer } from './server.js';
+import type { ToolSetName } from './cli.js';
 
 export const DEFAULT_HTTP_PORT = 8787;
 export const DEFAULT_HTTP_HOST = '127.0.0.1';
@@ -67,6 +68,9 @@ function sessionHeader(req: IncomingMessage): string | undefined {
 
 export interface HttpServerOptions {
   getModel: () => ModelArchitecture;
+  toolSet?: ToolSetName;
+  /** Started with no model: /health reports that instead of a model name. */
+  hosted?: boolean;
   ctx: ToolContext;
   writeEnabled: boolean;
   version: string;
@@ -78,7 +82,7 @@ export interface HttpServerOptions {
 
 /** Start the Streamable HTTP transport and register signal handlers. */
 export function startHttpServer(opts: HttpServerOptions): void {
-  const { getModel, ctx, writeEnabled, version, host, port, token } = opts;
+  const { getModel, ctx, writeEnabled, version, host, port, token, toolSet, hosted } = opts;
   // A bearer token defeats browser CSRF (the page can't read the secret to
   // forge the header), so host-checking is redundant there and would only break
   // tunnels whose Host header is the tunnel domain. Without a token we lean on
@@ -144,7 +148,7 @@ export function startHttpServer(opts: HttpServerOptions): void {
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
-    const server = createMcpServer({ getModel, ctx, writeEnabled, version });
+    const server = createMcpServer({ getModel, ctx, writeEnabled, version, toolSet });
     await server.connect(transport);
     await transport.handleRequest(req, res, body);
   }
@@ -153,8 +157,12 @@ export function startHttpServer(opts: HttpServerOptions): void {
     const url = (req.url ?? '/').split('?')[0];
 
     if (req.method === 'GET' && url === '/health') {
-      const m = getModel();
       res.writeHead(200, { 'content-type': 'application/json' });
+      if (hosted) {
+        res.end(JSON.stringify({ ok: true, hosted: true, version, write: writeEnabled }));
+        return;
+      }
+      const m = getModel();
       res.end(JSON.stringify({ ok: true, name: m.name, layers: m.components.length, write: writeEnabled }));
       return;
     }

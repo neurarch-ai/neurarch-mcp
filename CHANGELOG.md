@@ -6,6 +6,102 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.13.0]
+
+### Added
+- **`rank_designs`**: which of k candidate designs to spend a training run on,
+  computed locally with the same contract as `POST /api/v1/rank`. Candidates
+  are paths, `zoo:`/`hf:` refs or inline graphs; `include_current` adds the
+  server's model. Blocked candidates (a pre-flight finding that means the graph
+  will not forward-pass, the measured part: 96/96 crashed, 80/80 ran) rank
+  last and come back as reclaimable budget. Legal candidates are ordered only
+  by rules with a trained outcome behind them, and a tie stays a tie:
+  `recommended` is null when nothing measured separates the top, which is the
+  common answer and the honest one. Params, cost and GPU fit are returned per
+  candidate and never used to order. `calibration` ships inside every result.
+
+- **`export_pytorch`**: the graph as a runnable `nn.Module`, the app's own
+  generator. `save_to` is honoured only under `--write` and never over the file
+  the server was started from.
+
+- **81 reference architectures bundled** (`zoo/`, 320KB gzipped, synced from
+  github.com/neurarch-ai/awesome-llm-model-zoo): DeepSeek-V3, Qwen2.5, Llama,
+  Mixtral, Gemma, Whisper, CLIP, BERT, ViT, ResNet and more, with real
+  dimensions from each model's config and a parameter count checked against
+  the published one. `list_architectures` searches them, `load_architecture`
+  opens one, and any read tool accepts `model_path: "zoo:<id>"`. Offline.
+
+- **Hugging Face input, behind `--hf`**: `load_hf_model` and `model_path:
+  "hf:<org/name>"` build a graph from a repo's config.json. It is the one tool
+  that opens a socket, which is why it is listed only when the flag is on;
+  `HF_TOKEN` is sent for gated repos, results are cached for a day under
+  `~/.cache/neurarch-mcp`. The result says whether it came from the real config
+  or a family template (`configSource`) and quotes the parameter count HF
+  publishes, so the agent can see how close the graph is (Qwen2.5-0.5B: graph
+  494.00M against 494,032,768 published).
+
+- **`find_models`**: walk a directory for nn.Module definitions and saved
+  graphs, try the parser on each, and say which need a runtime trace instead.
+
+- **`neurarch-trace`** (`python/neurarch-trace`, PyPI): instantiate the model,
+  run one forward with hooks, write a `.neurarch.json` with real shapes. Covers
+  what static parsing cannot: `from_pretrained`, timm, models spread across
+  files, dynamic construction. `pip install neurarch-trace`, then
+  `neurarch-trace my_pkg.model:build --input 1,3,224,224`.
+
+- **MCP prompts**: `review_design`, `pre_train_checklist`, `shrink_for_target`,
+  `compare_with_reference`, `explain_finding`. These render as slash commands
+  in Claude Desktop, Cursor and VS Code, and each is the tool ladder written
+  out in order, with the rule that every number comes from a tool result.
+
+- **MCP resources**: `neurarch://model` (the graph), `neurarch://model/mermaid`,
+  `neurarch://model/pytorch`, `neurarch://zoo`, `neurarch://zoo/{id}`,
+  `neurarch://rules` (the provenance table). A resource is pinned as context;
+  a tool result scrolls away.
+
+- **`model_source`**: any read tool accepts inline model text (a
+  `.neurarch.json` document or PyTorch source) instead of a path, for clients
+  with no shared filesystem.
+
+- **Hosted mode**: `--http` with no model argument serves a server that answers
+  about whatever each call names (`model_path` zoo:/hf:, or `model_source`).
+  `Dockerfile`, `fly.toml` and `docs/HOSTED.md` carry the deploy.
+
+- **`neurarch-mcp lint <files...>` and `neurarch-mcp check <file>`**: the two
+  grading tools as a CLI, exit 1 on a block, `--json` for CI. One package that
+  is both the server and the linter; `neurarch-lint` on npm stays as an alias.
+
+- **`--tools=core`**: advertise eleven tools instead of twenty-five. Every tool
+  stays callable by name; this trims what rides along in the agent's context.
+
+- **Claude Desktop bundle**: `manifest.json` and `npm run build:mcpb` produce
+  the one-click `.mcpb`.
+
+- **`skills/neurarch-skill`**: the evidence-gated edit loop skill now lives in
+  this repo (`npx skills add neurarch-ai/neurarch-mcp`).
+
+- **`docs/REAL_REPOS_STUDY.md`**: the static parser and linter measured against
+  116 model files from 59 popular repositories. A graph came back for 63% of
+  files, a recognisable one for 8%, and all 103 findings on real code were
+  hand-judged to be parser artefacts or design choices: zero real bugs. It is
+  in the repo because the alternative is a README that says "point it at a
+  .py and it works" about code where it mostly does not.
+
+  Three consequences shipped with it: `describe_architecture` and `lint_model`
+  return a `parseQuality` grade (`full` / `partial` / `thin`) with the fix
+  named; dimension rules are held back on layers whose dimension is still
+  source text (54 of 54 such `invalid-output-shape` warnings were false) and
+  reported as `suppressed` rather than dropped; `find_models` marks thin
+  parses `partial`.
+
+### Changed
+- The README leads with a GIF (GitHub strips `<video>`), has Cursor and VS Code
+  install buttons, and is written for the search terms people use.
+- stdio mode routes `console.log` to stderr for the life of the process, so
+  nothing in the vendored engine can corrupt a JSON-RPC frame.
+- `ToolContext` carries `writeEnabled`; tools that can create files
+  (`save_to`) refuse without it, the same way `save_model` is gated.
+
 ## [0.12.0]
 
 ### Changed

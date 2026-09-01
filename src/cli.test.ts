@@ -99,3 +99,32 @@ describe('resolveToolCall', () => {
     expect(r.errorText).not.toMatch(/--write/);
   });
 });
+
+describe('0.13 flags and subcommands', () => {
+  it('parses --hf, --tools=core and --json', () => {
+    const f = parseFlags(['m.py', '--hf', '--tools=core', '--json']);
+    expect(f.hfEnabled).toBe(true);
+    expect(f.toolSet).toBe('core');
+    expect(f.json).toBe(true);
+    expect(f.unknownFlags).toEqual([]);
+    expect(parseFlags(['m.py']).toolSet).toBe('full');
+    expect(parseFlags(['m.py', '--tools=bogus']).toolSet).toBe('full');
+  });
+  it('recognises lint and check as commands and keeps their files positional', () => {
+    const f = parseFlags(['lint', 'a.py', 'zoo:bert-base', '--json']);
+    expect(f.command).toBe('lint');
+    expect(f.positional).toEqual(['a.py', 'zoo:bert-base']);
+    expect(f.modelArg).toBe('a.py');
+    expect(parseFlags(['check', 'a.py']).command).toBe('check');
+    expect(parseFlags(['a.py']).command).toBeUndefined();
+  });
+  it('--tools=core narrows what is advertised, never what resolves', () => {
+    const core = selectTools(false, 'core').map(t => t.name);
+    expect(core.length).toBeLessThan(TOOLS.length);
+    expect(core).toContain('check_design');
+    expect(resolveToolCall('list_connections', false).tool?.name).toBe('list_connections');
+  });
+  it('points at --hf when load_hf_model is called without it', () => {
+    expect(resolveToolCall('load_hf_model', false).errorText).toMatch(/--hf/);
+  });
+});

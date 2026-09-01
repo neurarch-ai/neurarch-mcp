@@ -38,3 +38,61 @@ export function checkDesign(model: ModelArchitecture): DesignCheck;
 export function provenanceFor(ruleIds: Iterable<string>): Record<string, RuleProvenance>;
 
 export const RULE_PROVENANCE: Record<string, RuleProvenance>;
+
+/** Rule ids whose provenance is a trained outcome, the only ones that may order two legal designs. */
+export const OUTCOME_RULE_IDS: readonly string[];
+
+/** What the ranking is worth, measured. Shipped inside every rank result. */
+export const RANK_CALIBRATION: {
+  exclusion: { claim: string; evidence: string };
+  ordering: {
+    claim: string;
+    pairwiseAccuracy: number;
+    coverage: number;
+    sampleSize: number;
+    basis: string;
+    comparators: Record<string, number>;
+  };
+  [key: string]: unknown;
+};
+
+export interface CandidateSignals {
+  id: string;
+  blocking: number;
+  warnings: number;
+  otherStageBlockers?: Array<{ stage: string; title: string }>;
+  outcomeFlags: string[];
+  params: number | null;
+  estCostUsd: number | null;
+  fitsGpu: string | null;
+  summary?: string;
+}
+
+export interface RankedCandidate extends CandidateSignals {
+  rank: number;
+  tier: 'legal' | 'blocked';
+  tiedWith: number;
+  reasons: string[];
+}
+
+export interface RankResult {
+  ranked: RankedCandidate[];
+  recommended: string | null;
+  recommendation: string;
+  budget: { candidates: number; blocked: number; legal: number; wouldNotRun: string[]; reclaimed: number };
+  calibration: typeof RANK_CALIBRATION;
+}
+
+/** Extract the ranker's inputs from a verdict. Null when the verdict cannot be read; never a clean default. */
+export function signalsFromCheck(
+  id: string,
+  check: unknown,
+  firedRuleIds: Iterable<string>,
+  outcomeRuleIds: Iterable<string>,
+): CandidateSignals | null;
+
+/** Order candidates: blocked last, outcome rules only, ties stay ties. */
+export function rankCandidates(candidates: CandidateSignals[]): RankResult;
+
+/** Resolve name-keyed connections to ids and fill missing ids, the way the hosted endpoint does. */
+export function normalizeGraphForVerification<T>(graph: T): T;

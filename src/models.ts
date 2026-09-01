@@ -23,6 +23,7 @@ import { resolve } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { loadModelFile } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
+import { parseModelRef, loadZooModel, loadHFModel } from './sources.js';
 
 /** Small on purpose: this is a working set, not a database. */
 const MAX_CACHED = 8;
@@ -37,7 +38,14 @@ const cache = new Map<string, { mtimeMs: number; model: ModelArchitecture }>();
  * generic cache-layer message would be.
  */
 export async function loadModelCached(path: string): Promise<ModelArchitecture> {
-  const abs = resolve(path);
+  // `zoo:` and `hf:` are not files. The zoo is read from the package (fresh by
+  // construction, it only changes with a release); the HF loader keeps its own
+  // on-disk cache with a TTL, because a config.json can change upstream.
+  const ref = parseModelRef(path);
+  if (ref.kind === 'zoo') return loadZooModel(ref.id);
+  if (ref.kind === 'hf') return (await loadHFModel(ref.id)).model;
+
+  const abs = resolve(ref.path);
 
   // A failed stat is not cached, and not swallowed either: loadModelFile
   // produces the good message for a missing or unreadable path, so let it.

@@ -38,3 +38,42 @@ export const ADVISOR_RULE_IDS: readonly string[];
 
 /** Rule ids in the shape set. */
 export const SHAPE_RULE_IDS: readonly string[];
+
+/**
+ * Render the graph as a runnable PyTorch module. Same generator as the app's
+ * Export panel. Layer types the generator has no template for are reported on
+ * stderr and left as a comment in the output rather than silently dropped.
+ */
+export function generatePyTorchCode(model: ModelArchitecture): string;
+
+/** A Hugging Face config.json, plus the loader's own annotations. */
+export interface HFModelConfig {
+  model_type?: string;
+  architectures?: string[];
+  hidden_size?: number;
+  num_hidden_layers?: number;
+  num_attention_heads?: number;
+  num_key_value_heads?: number;
+  intermediate_size?: number;
+  vocab_size?: number;
+  max_position_embeddings?: number;
+  /** Where the dimensions came from. 'fallback' means a generic family template, not the real model. */
+  _configSource?: 'config' | 'diffusers' | 'fallback';
+  /** Authoritative parameter count from safetensors metadata, when HF publishes one. */
+  _realParamCount?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Fetch and normalise a model's config.json from the Hub. The only function in
+ * this bundle that opens a socket; the server exposes it behind --hf. Reads
+ * HF_TOKEN from the environment for gated repos. Null when nothing usable
+ * could be fetched or inferred.
+ */
+export function fetchHFModelConfig(modelId: string): Promise<HFModelConfig | null>;
+
+/** Build the graph for a config. Pure: no network. */
+export function convertHFConfigToModel(
+  modelId: string,
+  config: HFModelConfig,
+): { components: ModelArchitecture['components']; connections: ModelArchitecture['connections'] };

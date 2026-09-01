@@ -1,0 +1,130 @@
+{
+  "manifest_version": "0.2",
+  "name": "neurarch-mcp",
+  "display_name": "Neurarch",
+  "version": "0.13.0",
+  "description": "Structural awareness of a PyTorch model for the agent: layers, params, FLOPs, design rules, the full verdict, and which of k designs to train.",
+  "long_description": "Point it at a PyTorch .py file or a .neurarch.json graph. The agent can read layers, parameters and FLOPs, run the design linter (lint_model), get the full readiness / cost / deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, and export runnable PyTorch. Everything runs on your machine; nothing opens a socket unless you turn it on.",
+  "author": {
+    "name": "neurarch-ai",
+    "url": "https://neurarch.com"
+  },
+  "homepage": "https://www.neurarch.com/mcp",
+  "documentation": "https://github.com/neurarch-ai/neurarch-mcp#readme",
+  "support": "https://github.com/neurarch-ai/neurarch-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurarch-ai/neurarch-mcp"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pytorch",
+    "neural-network",
+    "lint",
+    "architecture",
+    "machine-learning",
+    "code-review"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js",
+        "${user_config.model_path}",
+        "--watch"
+      ],
+      "env": {}
+    }
+  },
+  "user_config": {
+    "model_path": {
+      "type": "file",
+      "title": "Model file",
+      "description": "A PyTorch .py file or a .neurarch.json graph. Try zoo:qwen2.5-7b for a bundled reference architecture.",
+      "required": true
+    }
+  },
+  "tools": [
+    {
+      "name": "describe_architecture",
+      "description": "One-call orientation: pipeline, depth, params, MACs, hotspots, validation."
+    },
+    {
+      "name": "lint_model",
+      "description": "The structural design rules, with provenance."
+    },
+    {
+      "name": "check_design",
+      "description": "Readiness, cost, deployment fit and the decisions left to the human."
+    },
+    {
+      "name": "rank_designs",
+      "description": "Order candidate designs; blocked last, ties stay ties, calibration included."
+    },
+    {
+      "name": "layer_impact",
+      "description": "Blast radius of changing a layer."
+    },
+    {
+      "name": "export_pytorch",
+      "description": "The graph as runnable PyTorch."
+    },
+    {
+      "name": "list_architectures",
+      "description": "Search 81 bundled reference architectures."
+    },
+    {
+      "name": "find_models",
+      "description": "Find model definitions in a repository."
+    }
+  ],
+  "prompts": [
+    {
+      "name": "review_design",
+      "description": "A structured design review, every number from the tools.",
+      "text": "Review the design of the current model: run describe_architecture, validate_model, lint_model and check_design, and report a verdict, the risks, and the edits worth making, every number from the tools."
+    },
+    {
+      "name": "pre_train_checklist",
+      "description": "What to check before spending GPU time.",
+      "text": "Run the pre-training checklist on the current model: graph well-formed, no blocking rule, warnings listed, forward pass runs, cost and GPU fit, shapes known, decisions still owed."
+    },
+    {
+      "name": "shrink_for_target",
+      "description": "Fit a parameter, memory or latency budget with the least damage.",
+      "arguments": [
+        "target"
+      ],
+      "text": "Bring the current model within this budget: {target}. Find where the budget lives, propose at most three variants, check each with layer_impact and rank them with rank_designs."
+    },
+    {
+      "name": "compare_with_reference",
+      "description": "Put the model next to a published architecture.",
+      "arguments": [
+        "architecture"
+      ],
+      "text": "Compare the current model with the reference architecture {architecture} from the bundled library: depth, width, attention configuration, normalisation, parameter distribution, and the rules that fire on one but not the other."
+    },
+    {
+      "name": "explain_finding",
+      "description": "What a finding means and the smallest edit that clears it.",
+      "arguments": [
+        "rule"
+      ],
+      "text": "Explain the finding {rule} on the current model: what the rule checks, the evidence behind it, and the smallest edit that clears it with its blast radius."
+    }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}

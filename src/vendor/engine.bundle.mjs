@@ -1,19 +1,2483 @@
-// GENERATED FILE. Do not edit.
-//
-// The Neurarch lint engine, compiled from the private main repo:
-//
-//   npx esbuild src/utils/lintEngine.ts --bundle --format=esm --platform=node \
-//     --external:web-tree-sitter --outfile=<this file>
-//
-// It is vendored rather than depended on because it has no npm package: the
-// source lives in the app repo, and this server has to work with no network,
-// no API key, and no second install step. Self-contained by construction (the
-// bundle has zero imports), which is also why it can be dropped in wholesale.
-//
-// What it gives this server: graphFromPyTorchSource (read a .py file as a
-// graph) and lintModelGraph (the structural rules, offline). Regenerate it
-// whenever the app's component registry or rule set moves; src/vendor/
-// engine.contract.test.ts fails loudly if the exports drift.
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esm = (fn, res, err) => function __init() {
+  if (err) throw err[0];
+  try {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  } catch (e) {
+    throw err = [e], e;
+  }
+};
+var __commonJS = (cb, mod) => function __require() {
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// src/utils/paramEstimator.ts
+var init_paramEstimator = __esm({
+  "src/utils/paramEstimator.ts"() {
+    "use strict";
+  }
+});
+
+// ../Neurarch/node_modules/react/cjs/react.production.min.js
+var require_react_production_min = __commonJS({
+  "../Neurarch/node_modules/react/cjs/react.production.min.js"(exports) {
+    "use strict";
+    var l = /* @__PURE__ */ Symbol.for("react.element");
+    var n = /* @__PURE__ */ Symbol.for("react.portal");
+    var p = /* @__PURE__ */ Symbol.for("react.fragment");
+    var q = /* @__PURE__ */ Symbol.for("react.strict_mode");
+    var r = /* @__PURE__ */ Symbol.for("react.profiler");
+    var t = /* @__PURE__ */ Symbol.for("react.provider");
+    var u = /* @__PURE__ */ Symbol.for("react.context");
+    var v = /* @__PURE__ */ Symbol.for("react.forward_ref");
+    var w = /* @__PURE__ */ Symbol.for("react.suspense");
+    var x = /* @__PURE__ */ Symbol.for("react.memo");
+    var y = /* @__PURE__ */ Symbol.for("react.lazy");
+    var z = Symbol.iterator;
+    function A(a) {
+      if (null === a || "object" !== typeof a) return null;
+      a = z && a[z] || a["@@iterator"];
+      return "function" === typeof a ? a : null;
+    }
+    var B = { isMounted: function() {
+      return false;
+    }, enqueueForceUpdate: function() {
+    }, enqueueReplaceState: function() {
+    }, enqueueSetState: function() {
+    } };
+    var C = Object.assign;
+    var D = {};
+    function E(a, b, e) {
+      this.props = a;
+      this.context = b;
+      this.refs = D;
+      this.updater = e || B;
+    }
+    E.prototype.isReactComponent = {};
+    E.prototype.setState = function(a, b) {
+      if ("object" !== typeof a && "function" !== typeof a && null != a) throw Error("setState(...): takes an object of state variables to update or a function which returns an object of state variables.");
+      this.updater.enqueueSetState(this, a, b, "setState");
+    };
+    E.prototype.forceUpdate = function(a) {
+      this.updater.enqueueForceUpdate(this, a, "forceUpdate");
+    };
+    function F() {
+    }
+    F.prototype = E.prototype;
+    function G(a, b, e) {
+      this.props = a;
+      this.context = b;
+      this.refs = D;
+      this.updater = e || B;
+    }
+    var H = G.prototype = new F();
+    H.constructor = G;
+    C(H, E.prototype);
+    H.isPureReactComponent = true;
+    var I = Array.isArray;
+    var J = Object.prototype.hasOwnProperty;
+    var K = { current: null };
+    var L = { key: true, ref: true, __self: true, __source: true };
+    function M(a, b, e) {
+      var d, c = {}, k = null, h = null;
+      if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L.hasOwnProperty(d) && (c[d] = b[d]);
+      var g = arguments.length - 2;
+      if (1 === g) c.children = e;
+      else if (1 < g) {
+        for (var f = Array(g), m = 0; m < g; m++) f[m] = arguments[m + 2];
+        c.children = f;
+      }
+      if (a && a.defaultProps) for (d in g = a.defaultProps, g) void 0 === c[d] && (c[d] = g[d]);
+      return { $$typeof: l, type: a, key: k, ref: h, props: c, _owner: K.current };
+    }
+    function N(a, b) {
+      return { $$typeof: l, type: a.type, key: b, ref: a.ref, props: a.props, _owner: a._owner };
+    }
+    function O(a) {
+      return "object" === typeof a && null !== a && a.$$typeof === l;
+    }
+    function escape(a) {
+      var b = { "=": "=0", ":": "=2" };
+      return "$" + a.replace(/[=:]/g, function(a2) {
+        return b[a2];
+      });
+    }
+    var P = /\/+/g;
+    function Q(a, b) {
+      return "object" === typeof a && null !== a && null != a.key ? escape("" + a.key) : b.toString(36);
+    }
+    function R(a, b, e, d, c) {
+      var k = typeof a;
+      if ("undefined" === k || "boolean" === k) a = null;
+      var h = false;
+      if (null === a) h = true;
+      else switch (k) {
+        case "string":
+        case "number":
+          h = true;
+          break;
+        case "object":
+          switch (a.$$typeof) {
+            case l:
+            case n:
+              h = true;
+          }
+      }
+      if (h) return h = a, c = c(h), a = "" === d ? "." + Q(h, 0) : d, I(c) ? (e = "", null != a && (e = a.replace(P, "$&/") + "/"), R(c, b, e, "", function(a2) {
+        return a2;
+      })) : null != c && (O(c) && (c = N(c, e + (!c.key || h && h.key === c.key ? "" : ("" + c.key).replace(P, "$&/") + "/") + a)), b.push(c)), 1;
+      h = 0;
+      d = "" === d ? "." : d + ":";
+      if (I(a)) for (var g = 0; g < a.length; g++) {
+        k = a[g];
+        var f = d + Q(k, g);
+        h += R(k, b, e, f, c);
+      }
+      else if (f = A(a), "function" === typeof f) for (a = f.call(a), g = 0; !(k = a.next()).done; ) k = k.value, f = d + Q(k, g++), h += R(k, b, e, f, c);
+      else if ("object" === k) throw b = String(a), Error("Objects are not valid as a React child (found: " + ("[object Object]" === b ? "object with keys {" + Object.keys(a).join(", ") + "}" : b) + "). If you meant to render a collection of children, use an array instead.");
+      return h;
+    }
+    function S(a, b, e) {
+      if (null == a) return a;
+      var d = [], c = 0;
+      R(a, d, "", "", function(a2) {
+        return b.call(e, a2, c++);
+      });
+      return d;
+    }
+    function T(a) {
+      if (-1 === a._status) {
+        var b = a._result;
+        b = b();
+        b.then(function(b2) {
+          if (0 === a._status || -1 === a._status) a._status = 1, a._result = b2;
+        }, function(b2) {
+          if (0 === a._status || -1 === a._status) a._status = 2, a._result = b2;
+        });
+        -1 === a._status && (a._status = 0, a._result = b);
+      }
+      if (1 === a._status) return a._result.default;
+      throw a._result;
+    }
+    var U = { current: null };
+    var V = { transition: null };
+    var W = { ReactCurrentDispatcher: U, ReactCurrentBatchConfig: V, ReactCurrentOwner: K };
+    function X() {
+      throw Error("act(...) is not supported in production builds of React.");
+    }
+    exports.Children = { map: S, forEach: function(a, b, e) {
+      S(a, function() {
+        b.apply(this, arguments);
+      }, e);
+    }, count: function(a) {
+      var b = 0;
+      S(a, function() {
+        b++;
+      });
+      return b;
+    }, toArray: function(a) {
+      return S(a, function(a2) {
+        return a2;
+      }) || [];
+    }, only: function(a) {
+      if (!O(a)) throw Error("React.Children.only expected to receive a single React element child.");
+      return a;
+    } };
+    exports.Component = E;
+    exports.Fragment = p;
+    exports.Profiler = r;
+    exports.PureComponent = G;
+    exports.StrictMode = q;
+    exports.Suspense = w;
+    exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = W;
+    exports.act = X;
+    exports.cloneElement = function(a, b, e) {
+      if (null === a || void 0 === a) throw Error("React.cloneElement(...): The argument must be a React element, but you passed " + a + ".");
+      var d = C({}, a.props), c = a.key, k = a.ref, h = a._owner;
+      if (null != b) {
+        void 0 !== b.ref && (k = b.ref, h = K.current);
+        void 0 !== b.key && (c = "" + b.key);
+        if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
+        for (f in b) J.call(b, f) && !L.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+      }
+      var f = arguments.length - 2;
+      if (1 === f) d.children = e;
+      else if (1 < f) {
+        g = Array(f);
+        for (var m = 0; m < f; m++) g[m] = arguments[m + 2];
+        d.children = g;
+      }
+      return { $$typeof: l, type: a.type, key: c, ref: k, props: d, _owner: h };
+    };
+    exports.createContext = function(a) {
+      a = { $$typeof: u, _currentValue: a, _currentValue2: a, _threadCount: 0, Provider: null, Consumer: null, _defaultValue: null, _globalName: null };
+      a.Provider = { $$typeof: t, _context: a };
+      return a.Consumer = a;
+    };
+    exports.createElement = M;
+    exports.createFactory = function(a) {
+      var b = M.bind(null, a);
+      b.type = a;
+      return b;
+    };
+    exports.createRef = function() {
+      return { current: null };
+    };
+    exports.forwardRef = function(a) {
+      return { $$typeof: v, render: a };
+    };
+    exports.isValidElement = O;
+    exports.lazy = function(a) {
+      return { $$typeof: y, _payload: { _status: -1, _result: a }, _init: T };
+    };
+    exports.memo = function(a, b) {
+      return { $$typeof: x, type: a, compare: void 0 === b ? null : b };
+    };
+    exports.startTransition = function(a) {
+      var b = V.transition;
+      V.transition = {};
+      try {
+        a();
+      } finally {
+        V.transition = b;
+      }
+    };
+    exports.unstable_act = X;
+    exports.useCallback = function(a, b) {
+      return U.current.useCallback(a, b);
+    };
+    exports.useContext = function(a) {
+      return U.current.useContext(a);
+    };
+    exports.useDebugValue = function() {
+    };
+    exports.useDeferredValue = function(a) {
+      return U.current.useDeferredValue(a);
+    };
+    exports.useEffect = function(a, b) {
+      return U.current.useEffect(a, b);
+    };
+    exports.useId = function() {
+      return U.current.useId();
+    };
+    exports.useImperativeHandle = function(a, b, e) {
+      return U.current.useImperativeHandle(a, b, e);
+    };
+    exports.useInsertionEffect = function(a, b) {
+      return U.current.useInsertionEffect(a, b);
+    };
+    exports.useLayoutEffect = function(a, b) {
+      return U.current.useLayoutEffect(a, b);
+    };
+    exports.useMemo = function(a, b) {
+      return U.current.useMemo(a, b);
+    };
+    exports.useReducer = function(a, b, e) {
+      return U.current.useReducer(a, b, e);
+    };
+    exports.useRef = function(a) {
+      return U.current.useRef(a);
+    };
+    exports.useState = function(a) {
+      return U.current.useState(a);
+    };
+    exports.useSyncExternalStore = function(a, b, e) {
+      return U.current.useSyncExternalStore(a, b, e);
+    };
+    exports.useTransition = function() {
+      return U.current.useTransition();
+    };
+    exports.version = "18.3.1";
+  }
+});
+
+// ../Neurarch/node_modules/react/cjs/react.development.js
+var require_react_development = __commonJS({
+  "../Neurarch/node_modules/react/cjs/react.development.js"(exports, module) {
+    "use strict";
+    if (process.env.NODE_ENV !== "production") {
+      (function() {
+        "use strict";
+        if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart === "function") {
+          __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(new Error());
+        }
+        var ReactVersion = "18.3.1";
+        var REACT_ELEMENT_TYPE = /* @__PURE__ */ Symbol.for("react.element");
+        var REACT_PORTAL_TYPE = /* @__PURE__ */ Symbol.for("react.portal");
+        var REACT_FRAGMENT_TYPE = /* @__PURE__ */ Symbol.for("react.fragment");
+        var REACT_STRICT_MODE_TYPE = /* @__PURE__ */ Symbol.for("react.strict_mode");
+        var REACT_PROFILER_TYPE = /* @__PURE__ */ Symbol.for("react.profiler");
+        var REACT_PROVIDER_TYPE = /* @__PURE__ */ Symbol.for("react.provider");
+        var REACT_CONTEXT_TYPE = /* @__PURE__ */ Symbol.for("react.context");
+        var REACT_FORWARD_REF_TYPE = /* @__PURE__ */ Symbol.for("react.forward_ref");
+        var REACT_SUSPENSE_TYPE = /* @__PURE__ */ Symbol.for("react.suspense");
+        var REACT_SUSPENSE_LIST_TYPE = /* @__PURE__ */ Symbol.for("react.suspense_list");
+        var REACT_MEMO_TYPE = /* @__PURE__ */ Symbol.for("react.memo");
+        var REACT_LAZY_TYPE = /* @__PURE__ */ Symbol.for("react.lazy");
+        var REACT_OFFSCREEN_TYPE = /* @__PURE__ */ Symbol.for("react.offscreen");
+        var MAYBE_ITERATOR_SYMBOL = Symbol.iterator;
+        var FAUX_ITERATOR_SYMBOL = "@@iterator";
+        function getIteratorFn(maybeIterable) {
+          if (maybeIterable === null || typeof maybeIterable !== "object") {
+            return null;
+          }
+          var maybeIterator = MAYBE_ITERATOR_SYMBOL && maybeIterable[MAYBE_ITERATOR_SYMBOL] || maybeIterable[FAUX_ITERATOR_SYMBOL];
+          if (typeof maybeIterator === "function") {
+            return maybeIterator;
+          }
+          return null;
+        }
+        var ReactCurrentDispatcher = {
+          /**
+           * @internal
+           * @type {ReactComponent}
+           */
+          current: null
+        };
+        var ReactCurrentBatchConfig = {
+          transition: null
+        };
+        var ReactCurrentActQueue = {
+          current: null,
+          // Used to reproduce behavior of `batchedUpdates` in legacy mode.
+          isBatchingLegacy: false,
+          didScheduleLegacyUpdate: false
+        };
+        var ReactCurrentOwner = {
+          /**
+           * @internal
+           * @type {ReactComponent}
+           */
+          current: null
+        };
+        var ReactDebugCurrentFrame = {};
+        var currentExtraStackFrame = null;
+        function setExtraStackFrame(stack) {
+          {
+            currentExtraStackFrame = stack;
+          }
+        }
+        {
+          ReactDebugCurrentFrame.setExtraStackFrame = function(stack) {
+            {
+              currentExtraStackFrame = stack;
+            }
+          };
+          ReactDebugCurrentFrame.getCurrentStack = null;
+          ReactDebugCurrentFrame.getStackAddendum = function() {
+            var stack = "";
+            if (currentExtraStackFrame) {
+              stack += currentExtraStackFrame;
+            }
+            var impl = ReactDebugCurrentFrame.getCurrentStack;
+            if (impl) {
+              stack += impl() || "";
+            }
+            return stack;
+          };
+        }
+        var enableScopeAPI = false;
+        var enableCacheElement = false;
+        var enableTransitionTracing = false;
+        var enableLegacyHidden = false;
+        var enableDebugTracing = false;
+        var ReactSharedInternals = {
+          ReactCurrentDispatcher,
+          ReactCurrentBatchConfig,
+          ReactCurrentOwner
+        };
+        {
+          ReactSharedInternals.ReactDebugCurrentFrame = ReactDebugCurrentFrame;
+          ReactSharedInternals.ReactCurrentActQueue = ReactCurrentActQueue;
+        }
+        function warn(format) {
+          {
+            {
+              for (var _len = arguments.length, args = new Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+                args[_key - 1] = arguments[_key];
+              }
+              printWarning("warn", format, args);
+            }
+          }
+        }
+        function error(format) {
+          {
+            {
+              for (var _len2 = arguments.length, args = new Array(_len2 > 1 ? _len2 - 1 : 0), _key2 = 1; _key2 < _len2; _key2++) {
+                args[_key2 - 1] = arguments[_key2];
+              }
+              printWarning("error", format, args);
+            }
+          }
+        }
+        function printWarning(level, format, args) {
+          {
+            var ReactDebugCurrentFrame2 = ReactSharedInternals.ReactDebugCurrentFrame;
+            var stack = ReactDebugCurrentFrame2.getStackAddendum();
+            if (stack !== "") {
+              format += "%s";
+              args = args.concat([stack]);
+            }
+            var argsWithFormat = args.map(function(item) {
+              return String(item);
+            });
+            argsWithFormat.unshift("Warning: " + format);
+            Function.prototype.apply.call(console[level], console, argsWithFormat);
+          }
+        }
+        var didWarnStateUpdateForUnmountedComponent = {};
+        function warnNoop(publicInstance, callerName) {
+          {
+            var _constructor = publicInstance.constructor;
+            var componentName = _constructor && (_constructor.displayName || _constructor.name) || "ReactClass";
+            var warningKey = componentName + "." + callerName;
+            if (didWarnStateUpdateForUnmountedComponent[warningKey]) {
+              return;
+            }
+            error("Can't call %s on a component that is not yet mounted. This is a no-op, but it might indicate a bug in your application. Instead, assign to `this.state` directly or define a `state = {};` class property with the desired state in the %s component.", callerName, componentName);
+            didWarnStateUpdateForUnmountedComponent[warningKey] = true;
+          }
+        }
+        var ReactNoopUpdateQueue = {
+          /**
+           * Checks whether or not this composite component is mounted.
+           * @param {ReactClass} publicInstance The instance we want to test.
+           * @return {boolean} True if mounted, false otherwise.
+           * @protected
+           * @final
+           */
+          isMounted: function(publicInstance) {
+            return false;
+          },
+          /**
+           * Forces an update. This should only be invoked when it is known with
+           * certainty that we are **not** in a DOM transaction.
+           *
+           * You may want to call this when you know that some deeper aspect of the
+           * component's state has changed but `setState` was not called.
+           *
+           * This will not invoke `shouldComponentUpdate`, but it will invoke
+           * `componentWillUpdate` and `componentDidUpdate`.
+           *
+           * @param {ReactClass} publicInstance The instance that should rerender.
+           * @param {?function} callback Called after component is updated.
+           * @param {?string} callerName name of the calling function in the public API.
+           * @internal
+           */
+          enqueueForceUpdate: function(publicInstance, callback, callerName) {
+            warnNoop(publicInstance, "forceUpdate");
+          },
+          /**
+           * Replaces all of the state. Always use this or `setState` to mutate state.
+           * You should treat `this.state` as immutable.
+           *
+           * There is no guarantee that `this.state` will be immediately updated, so
+           * accessing `this.state` after calling this method may return the old value.
+           *
+           * @param {ReactClass} publicInstance The instance that should rerender.
+           * @param {object} completeState Next state.
+           * @param {?function} callback Called after component is updated.
+           * @param {?string} callerName name of the calling function in the public API.
+           * @internal
+           */
+          enqueueReplaceState: function(publicInstance, completeState, callback, callerName) {
+            warnNoop(publicInstance, "replaceState");
+          },
+          /**
+           * Sets a subset of the state. This only exists because _pendingState is
+           * internal. This provides a merging strategy that is not available to deep
+           * properties which is confusing. TODO: Expose pendingState or don't use it
+           * during the merge.
+           *
+           * @param {ReactClass} publicInstance The instance that should rerender.
+           * @param {object} partialState Next partial state to be merged with state.
+           * @param {?function} callback Called after component is updated.
+           * @param {?string} Name of the calling function in the public API.
+           * @internal
+           */
+          enqueueSetState: function(publicInstance, partialState, callback, callerName) {
+            warnNoop(publicInstance, "setState");
+          }
+        };
+        var assign = Object.assign;
+        var emptyObject = {};
+        {
+          Object.freeze(emptyObject);
+        }
+        function Component(props, context, updater) {
+          this.props = props;
+          this.context = context;
+          this.refs = emptyObject;
+          this.updater = updater || ReactNoopUpdateQueue;
+        }
+        Component.prototype.isReactComponent = {};
+        Component.prototype.setState = function(partialState, callback) {
+          if (typeof partialState !== "object" && typeof partialState !== "function" && partialState != null) {
+            throw new Error("setState(...): takes an object of state variables to update or a function which returns an object of state variables.");
+          }
+          this.updater.enqueueSetState(this, partialState, callback, "setState");
+        };
+        Component.prototype.forceUpdate = function(callback) {
+          this.updater.enqueueForceUpdate(this, callback, "forceUpdate");
+        };
+        {
+          var deprecatedAPIs = {
+            isMounted: ["isMounted", "Instead, make sure to clean up subscriptions and pending requests in componentWillUnmount to prevent memory leaks."],
+            replaceState: ["replaceState", "Refactor your code to use setState instead (see https://github.com/facebook/react/issues/3236)."]
+          };
+          var defineDeprecationWarning = function(methodName, info) {
+            Object.defineProperty(Component.prototype, methodName, {
+              get: function() {
+                warn("%s(...) is deprecated in plain JavaScript React classes. %s", info[0], info[1]);
+                return void 0;
+              }
+            });
+          };
+          for (var fnName in deprecatedAPIs) {
+            if (deprecatedAPIs.hasOwnProperty(fnName)) {
+              defineDeprecationWarning(fnName, deprecatedAPIs[fnName]);
+            }
+          }
+        }
+        function ComponentDummy() {
+        }
+        ComponentDummy.prototype = Component.prototype;
+        function PureComponent(props, context, updater) {
+          this.props = props;
+          this.context = context;
+          this.refs = emptyObject;
+          this.updater = updater || ReactNoopUpdateQueue;
+        }
+        var pureComponentPrototype = PureComponent.prototype = new ComponentDummy();
+        pureComponentPrototype.constructor = PureComponent;
+        assign(pureComponentPrototype, Component.prototype);
+        pureComponentPrototype.isPureReactComponent = true;
+        function createRef() {
+          var refObject = {
+            current: null
+          };
+          {
+            Object.seal(refObject);
+          }
+          return refObject;
+        }
+        var isArrayImpl = Array.isArray;
+        function isArray(a) {
+          return isArrayImpl(a);
+        }
+        function typeName(value) {
+          {
+            var hasToStringTag = typeof Symbol === "function" && Symbol.toStringTag;
+            var type = hasToStringTag && value[Symbol.toStringTag] || value.constructor.name || "Object";
+            return type;
+          }
+        }
+        function willCoercionThrow(value) {
+          {
+            try {
+              testStringCoercion(value);
+              return false;
+            } catch (e) {
+              return true;
+            }
+          }
+        }
+        function testStringCoercion(value) {
+          return "" + value;
+        }
+        function checkKeyStringCoercion(value) {
+          {
+            if (willCoercionThrow(value)) {
+              error("The provided key is an unsupported type %s. This value must be coerced to a string before before using it here.", typeName(value));
+              return testStringCoercion(value);
+            }
+          }
+        }
+        function getWrappedName(outerType, innerType, wrapperName) {
+          var displayName = outerType.displayName;
+          if (displayName) {
+            return displayName;
+          }
+          var functionName = innerType.displayName || innerType.name || "";
+          return functionName !== "" ? wrapperName + "(" + functionName + ")" : wrapperName;
+        }
+        function getContextName(type) {
+          return type.displayName || "Context";
+        }
+        function getComponentNameFromType(type) {
+          if (type == null) {
+            return null;
+          }
+          {
+            if (typeof type.tag === "number") {
+              error("Received an unexpected object in getComponentNameFromType(). This is likely a bug in React. Please file an issue.");
+            }
+          }
+          if (typeof type === "function") {
+            return type.displayName || type.name || null;
+          }
+          if (typeof type === "string") {
+            return type;
+          }
+          switch (type) {
+            case REACT_FRAGMENT_TYPE:
+              return "Fragment";
+            case REACT_PORTAL_TYPE:
+              return "Portal";
+            case REACT_PROFILER_TYPE:
+              return "Profiler";
+            case REACT_STRICT_MODE_TYPE:
+              return "StrictMode";
+            case REACT_SUSPENSE_TYPE:
+              return "Suspense";
+            case REACT_SUSPENSE_LIST_TYPE:
+              return "SuspenseList";
+          }
+          if (typeof type === "object") {
+            switch (type.$$typeof) {
+              case REACT_CONTEXT_TYPE:
+                var context = type;
+                return getContextName(context) + ".Consumer";
+              case REACT_PROVIDER_TYPE:
+                var provider = type;
+                return getContextName(provider._context) + ".Provider";
+              case REACT_FORWARD_REF_TYPE:
+                return getWrappedName(type, type.render, "ForwardRef");
+              case REACT_MEMO_TYPE:
+                var outerName = type.displayName || null;
+                if (outerName !== null) {
+                  return outerName;
+                }
+                return getComponentNameFromType(type.type) || "Memo";
+              case REACT_LAZY_TYPE: {
+                var lazyComponent = type;
+                var payload = lazyComponent._payload;
+                var init = lazyComponent._init;
+                try {
+                  return getComponentNameFromType(init(payload));
+                } catch (x) {
+                  return null;
+                }
+              }
+            }
+          }
+          return null;
+        }
+        var hasOwnProperty = Object.prototype.hasOwnProperty;
+        var RESERVED_PROPS = {
+          key: true,
+          ref: true,
+          __self: true,
+          __source: true
+        };
+        var specialPropKeyWarningShown, specialPropRefWarningShown, didWarnAboutStringRefs;
+        {
+          didWarnAboutStringRefs = {};
+        }
+        function hasValidRef(config) {
+          {
+            if (hasOwnProperty.call(config, "ref")) {
+              var getter = Object.getOwnPropertyDescriptor(config, "ref").get;
+              if (getter && getter.isReactWarning) {
+                return false;
+              }
+            }
+          }
+          return config.ref !== void 0;
+        }
+        function hasValidKey(config) {
+          {
+            if (hasOwnProperty.call(config, "key")) {
+              var getter = Object.getOwnPropertyDescriptor(config, "key").get;
+              if (getter && getter.isReactWarning) {
+                return false;
+              }
+            }
+          }
+          return config.key !== void 0;
+        }
+        function defineKeyPropWarningGetter(props, displayName) {
+          var warnAboutAccessingKey = function() {
+            {
+              if (!specialPropKeyWarningShown) {
+                specialPropKeyWarningShown = true;
+                error("%s: `key` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://reactjs.org/link/special-props)", displayName);
+              }
+            }
+          };
+          warnAboutAccessingKey.isReactWarning = true;
+          Object.defineProperty(props, "key", {
+            get: warnAboutAccessingKey,
+            configurable: true
+          });
+        }
+        function defineRefPropWarningGetter(props, displayName) {
+          var warnAboutAccessingRef = function() {
+            {
+              if (!specialPropRefWarningShown) {
+                specialPropRefWarningShown = true;
+                error("%s: `ref` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://reactjs.org/link/special-props)", displayName);
+              }
+            }
+          };
+          warnAboutAccessingRef.isReactWarning = true;
+          Object.defineProperty(props, "ref", {
+            get: warnAboutAccessingRef,
+            configurable: true
+          });
+        }
+        function warnIfStringRefCannotBeAutoConverted(config) {
+          {
+            if (typeof config.ref === "string" && ReactCurrentOwner.current && config.__self && ReactCurrentOwner.current.stateNode !== config.__self) {
+              var componentName = getComponentNameFromType(ReactCurrentOwner.current.type);
+              if (!didWarnAboutStringRefs[componentName]) {
+                error('Component "%s" contains the string ref "%s". Support for string refs will be removed in a future major release. This case cannot be automatically converted to an arrow function. We ask you to manually fix this case by using useRef() or createRef() instead. Learn more about using refs safely here: https://reactjs.org/link/strict-mode-string-ref', componentName, config.ref);
+                didWarnAboutStringRefs[componentName] = true;
+              }
+            }
+          }
+        }
+        var ReactElement = function(type, key, ref, self, source, owner, props) {
+          var element = {
+            // This tag allows us to uniquely identify this as a React Element
+            $$typeof: REACT_ELEMENT_TYPE,
+            // Built-in properties that belong on the element
+            type,
+            key,
+            ref,
+            props,
+            // Record the component responsible for creating this element.
+            _owner: owner
+          };
+          {
+            element._store = {};
+            Object.defineProperty(element._store, "validated", {
+              configurable: false,
+              enumerable: false,
+              writable: true,
+              value: false
+            });
+            Object.defineProperty(element, "_self", {
+              configurable: false,
+              enumerable: false,
+              writable: false,
+              value: self
+            });
+            Object.defineProperty(element, "_source", {
+              configurable: false,
+              enumerable: false,
+              writable: false,
+              value: source
+            });
+            if (Object.freeze) {
+              Object.freeze(element.props);
+              Object.freeze(element);
+            }
+          }
+          return element;
+        };
+        function createElement(type, config, children) {
+          var propName;
+          var props = {};
+          var key = null;
+          var ref = null;
+          var self = null;
+          var source = null;
+          if (config != null) {
+            if (hasValidRef(config)) {
+              ref = config.ref;
+              {
+                warnIfStringRefCannotBeAutoConverted(config);
+              }
+            }
+            if (hasValidKey(config)) {
+              {
+                checkKeyStringCoercion(config.key);
+              }
+              key = "" + config.key;
+            }
+            self = config.__self === void 0 ? null : config.__self;
+            source = config.__source === void 0 ? null : config.__source;
+            for (propName in config) {
+              if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
+                props[propName] = config[propName];
+              }
+            }
+          }
+          var childrenLength = arguments.length - 2;
+          if (childrenLength === 1) {
+            props.children = children;
+          } else if (childrenLength > 1) {
+            var childArray = Array(childrenLength);
+            for (var i = 0; i < childrenLength; i++) {
+              childArray[i] = arguments[i + 2];
+            }
+            {
+              if (Object.freeze) {
+                Object.freeze(childArray);
+              }
+            }
+            props.children = childArray;
+          }
+          if (type && type.defaultProps) {
+            var defaultProps = type.defaultProps;
+            for (propName in defaultProps) {
+              if (props[propName] === void 0) {
+                props[propName] = defaultProps[propName];
+              }
+            }
+          }
+          {
+            if (key || ref) {
+              var displayName = typeof type === "function" ? type.displayName || type.name || "Unknown" : type;
+              if (key) {
+                defineKeyPropWarningGetter(props, displayName);
+              }
+              if (ref) {
+                defineRefPropWarningGetter(props, displayName);
+              }
+            }
+          }
+          return ReactElement(type, key, ref, self, source, ReactCurrentOwner.current, props);
+        }
+        function cloneAndReplaceKey(oldElement, newKey) {
+          var newElement = ReactElement(oldElement.type, newKey, oldElement.ref, oldElement._self, oldElement._source, oldElement._owner, oldElement.props);
+          return newElement;
+        }
+        function cloneElement(element, config, children) {
+          if (element === null || element === void 0) {
+            throw new Error("React.cloneElement(...): The argument must be a React element, but you passed " + element + ".");
+          }
+          var propName;
+          var props = assign({}, element.props);
+          var key = element.key;
+          var ref = element.ref;
+          var self = element._self;
+          var source = element._source;
+          var owner = element._owner;
+          if (config != null) {
+            if (hasValidRef(config)) {
+              ref = config.ref;
+              owner = ReactCurrentOwner.current;
+            }
+            if (hasValidKey(config)) {
+              {
+                checkKeyStringCoercion(config.key);
+              }
+              key = "" + config.key;
+            }
+            var defaultProps;
+            if (element.type && element.type.defaultProps) {
+              defaultProps = element.type.defaultProps;
+            }
+            for (propName in config) {
+              if (hasOwnProperty.call(config, propName) && !RESERVED_PROPS.hasOwnProperty(propName)) {
+                if (config[propName] === void 0 && defaultProps !== void 0) {
+                  props[propName] = defaultProps[propName];
+                } else {
+                  props[propName] = config[propName];
+                }
+              }
+            }
+          }
+          var childrenLength = arguments.length - 2;
+          if (childrenLength === 1) {
+            props.children = children;
+          } else if (childrenLength > 1) {
+            var childArray = Array(childrenLength);
+            for (var i = 0; i < childrenLength; i++) {
+              childArray[i] = arguments[i + 2];
+            }
+            props.children = childArray;
+          }
+          return ReactElement(element.type, key, ref, self, source, owner, props);
+        }
+        function isValidElement(object) {
+          return typeof object === "object" && object !== null && object.$$typeof === REACT_ELEMENT_TYPE;
+        }
+        var SEPARATOR = ".";
+        var SUBSEPARATOR = ":";
+        function escape(key) {
+          var escapeRegex = /[=:]/g;
+          var escaperLookup = {
+            "=": "=0",
+            ":": "=2"
+          };
+          var escapedString = key.replace(escapeRegex, function(match) {
+            return escaperLookup[match];
+          });
+          return "$" + escapedString;
+        }
+        var didWarnAboutMaps = false;
+        var userProvidedKeyEscapeRegex = /\/+/g;
+        function escapeUserProvidedKey(text) {
+          return text.replace(userProvidedKeyEscapeRegex, "$&/");
+        }
+        function getElementKey(element, index) {
+          if (typeof element === "object" && element !== null && element.key != null) {
+            {
+              checkKeyStringCoercion(element.key);
+            }
+            return escape("" + element.key);
+          }
+          return index.toString(36);
+        }
+        function mapIntoArray(children, array, escapedPrefix, nameSoFar, callback) {
+          var type = typeof children;
+          if (type === "undefined" || type === "boolean") {
+            children = null;
+          }
+          var invokeCallback = false;
+          if (children === null) {
+            invokeCallback = true;
+          } else {
+            switch (type) {
+              case "string":
+              case "number":
+                invokeCallback = true;
+                break;
+              case "object":
+                switch (children.$$typeof) {
+                  case REACT_ELEMENT_TYPE:
+                  case REACT_PORTAL_TYPE:
+                    invokeCallback = true;
+                }
+            }
+          }
+          if (invokeCallback) {
+            var _child = children;
+            var mappedChild = callback(_child);
+            var childKey = nameSoFar === "" ? SEPARATOR + getElementKey(_child, 0) : nameSoFar;
+            if (isArray(mappedChild)) {
+              var escapedChildKey = "";
+              if (childKey != null) {
+                escapedChildKey = escapeUserProvidedKey(childKey) + "/";
+              }
+              mapIntoArray(mappedChild, array, escapedChildKey, "", function(c) {
+                return c;
+              });
+            } else if (mappedChild != null) {
+              if (isValidElement(mappedChild)) {
+                {
+                  if (mappedChild.key && (!_child || _child.key !== mappedChild.key)) {
+                    checkKeyStringCoercion(mappedChild.key);
+                  }
+                }
+                mappedChild = cloneAndReplaceKey(
+                  mappedChild,
+                  // Keep both the (mapped) and old keys if they differ, just as
+                  // traverseAllChildren used to do for objects as children
+                  escapedPrefix + // $FlowFixMe Flow incorrectly thinks React.Portal doesn't have a key
+                  (mappedChild.key && (!_child || _child.key !== mappedChild.key) ? (
+                    // $FlowFixMe Flow incorrectly thinks existing element's key can be a number
+                    // eslint-disable-next-line react-internal/safe-string-coercion
+                    escapeUserProvidedKey("" + mappedChild.key) + "/"
+                  ) : "") + childKey
+                );
+              }
+              array.push(mappedChild);
+            }
+            return 1;
+          }
+          var child;
+          var nextName;
+          var subtreeCount = 0;
+          var nextNamePrefix = nameSoFar === "" ? SEPARATOR : nameSoFar + SUBSEPARATOR;
+          if (isArray(children)) {
+            for (var i = 0; i < children.length; i++) {
+              child = children[i];
+              nextName = nextNamePrefix + getElementKey(child, i);
+              subtreeCount += mapIntoArray(child, array, escapedPrefix, nextName, callback);
+            }
+          } else {
+            var iteratorFn = getIteratorFn(children);
+            if (typeof iteratorFn === "function") {
+              var iterableChildren = children;
+              {
+                if (iteratorFn === iterableChildren.entries) {
+                  if (!didWarnAboutMaps) {
+                    warn("Using Maps as children is not supported. Use an array of keyed ReactElements instead.");
+                  }
+                  didWarnAboutMaps = true;
+                }
+              }
+              var iterator = iteratorFn.call(iterableChildren);
+              var step;
+              var ii = 0;
+              while (!(step = iterator.next()).done) {
+                child = step.value;
+                nextName = nextNamePrefix + getElementKey(child, ii++);
+                subtreeCount += mapIntoArray(child, array, escapedPrefix, nextName, callback);
+              }
+            } else if (type === "object") {
+              var childrenString = String(children);
+              throw new Error("Objects are not valid as a React child (found: " + (childrenString === "[object Object]" ? "object with keys {" + Object.keys(children).join(", ") + "}" : childrenString) + "). If you meant to render a collection of children, use an array instead.");
+            }
+          }
+          return subtreeCount;
+        }
+        function mapChildren(children, func, context) {
+          if (children == null) {
+            return children;
+          }
+          var result = [];
+          var count = 0;
+          mapIntoArray(children, result, "", "", function(child) {
+            return func.call(context, child, count++);
+          });
+          return result;
+        }
+        function countChildren(children) {
+          var n = 0;
+          mapChildren(children, function() {
+            n++;
+          });
+          return n;
+        }
+        function forEachChildren(children, forEachFunc, forEachContext) {
+          mapChildren(children, function() {
+            forEachFunc.apply(this, arguments);
+          }, forEachContext);
+        }
+        function toArray(children) {
+          return mapChildren(children, function(child) {
+            return child;
+          }) || [];
+        }
+        function onlyChild(children) {
+          if (!isValidElement(children)) {
+            throw new Error("React.Children.only expected to receive a single React element child.");
+          }
+          return children;
+        }
+        function createContext(defaultValue) {
+          var context = {
+            $$typeof: REACT_CONTEXT_TYPE,
+            // As a workaround to support multiple concurrent renderers, we categorize
+            // some renderers as primary and others as secondary. We only expect
+            // there to be two concurrent renderers at most: React Native (primary) and
+            // Fabric (secondary); React DOM (primary) and React ART (secondary).
+            // Secondary renderers store their context values on separate fields.
+            _currentValue: defaultValue,
+            _currentValue2: defaultValue,
+            // Used to track how many concurrent renderers this context currently
+            // supports within in a single renderer. Such as parallel server rendering.
+            _threadCount: 0,
+            // These are circular
+            Provider: null,
+            Consumer: null,
+            // Add these to use same hidden class in VM as ServerContext
+            _defaultValue: null,
+            _globalName: null
+          };
+          context.Provider = {
+            $$typeof: REACT_PROVIDER_TYPE,
+            _context: context
+          };
+          var hasWarnedAboutUsingNestedContextConsumers = false;
+          var hasWarnedAboutUsingConsumerProvider = false;
+          var hasWarnedAboutDisplayNameOnConsumer = false;
+          {
+            var Consumer = {
+              $$typeof: REACT_CONTEXT_TYPE,
+              _context: context
+            };
+            Object.defineProperties(Consumer, {
+              Provider: {
+                get: function() {
+                  if (!hasWarnedAboutUsingConsumerProvider) {
+                    hasWarnedAboutUsingConsumerProvider = true;
+                    error("Rendering <Context.Consumer.Provider> is not supported and will be removed in a future major release. Did you mean to render <Context.Provider> instead?");
+                  }
+                  return context.Provider;
+                },
+                set: function(_Provider) {
+                  context.Provider = _Provider;
+                }
+              },
+              _currentValue: {
+                get: function() {
+                  return context._currentValue;
+                },
+                set: function(_currentValue) {
+                  context._currentValue = _currentValue;
+                }
+              },
+              _currentValue2: {
+                get: function() {
+                  return context._currentValue2;
+                },
+                set: function(_currentValue2) {
+                  context._currentValue2 = _currentValue2;
+                }
+              },
+              _threadCount: {
+                get: function() {
+                  return context._threadCount;
+                },
+                set: function(_threadCount) {
+                  context._threadCount = _threadCount;
+                }
+              },
+              Consumer: {
+                get: function() {
+                  if (!hasWarnedAboutUsingNestedContextConsumers) {
+                    hasWarnedAboutUsingNestedContextConsumers = true;
+                    error("Rendering <Context.Consumer.Consumer> is not supported and will be removed in a future major release. Did you mean to render <Context.Consumer> instead?");
+                  }
+                  return context.Consumer;
+                }
+              },
+              displayName: {
+                get: function() {
+                  return context.displayName;
+                },
+                set: function(displayName) {
+                  if (!hasWarnedAboutDisplayNameOnConsumer) {
+                    warn("Setting `displayName` on Context.Consumer has no effect. You should set it directly on the context with Context.displayName = '%s'.", displayName);
+                    hasWarnedAboutDisplayNameOnConsumer = true;
+                  }
+                }
+              }
+            });
+            context.Consumer = Consumer;
+          }
+          {
+            context._currentRenderer = null;
+            context._currentRenderer2 = null;
+          }
+          return context;
+        }
+        var Uninitialized = -1;
+        var Pending = 0;
+        var Resolved = 1;
+        var Rejected = 2;
+        function lazyInitializer(payload) {
+          if (payload._status === Uninitialized) {
+            var ctor = payload._result;
+            var thenable = ctor();
+            thenable.then(function(moduleObject2) {
+              if (payload._status === Pending || payload._status === Uninitialized) {
+                var resolved = payload;
+                resolved._status = Resolved;
+                resolved._result = moduleObject2;
+              }
+            }, function(error2) {
+              if (payload._status === Pending || payload._status === Uninitialized) {
+                var rejected = payload;
+                rejected._status = Rejected;
+                rejected._result = error2;
+              }
+            });
+            if (payload._status === Uninitialized) {
+              var pending = payload;
+              pending._status = Pending;
+              pending._result = thenable;
+            }
+          }
+          if (payload._status === Resolved) {
+            var moduleObject = payload._result;
+            {
+              if (moduleObject === void 0) {
+                error("lazy: Expected the result of a dynamic import() call. Instead received: %s\n\nYour code should look like: \n  const MyComponent = lazy(() => import('./MyComponent'))\n\nDid you accidentally put curly braces around the import?", moduleObject);
+              }
+            }
+            {
+              if (!("default" in moduleObject)) {
+                error("lazy: Expected the result of a dynamic import() call. Instead received: %s\n\nYour code should look like: \n  const MyComponent = lazy(() => import('./MyComponent'))", moduleObject);
+              }
+            }
+            return moduleObject.default;
+          } else {
+            throw payload._result;
+          }
+        }
+        function lazy(ctor) {
+          var payload = {
+            // We use these fields to store the result.
+            _status: Uninitialized,
+            _result: ctor
+          };
+          var lazyType = {
+            $$typeof: REACT_LAZY_TYPE,
+            _payload: payload,
+            _init: lazyInitializer
+          };
+          {
+            var defaultProps;
+            var propTypes;
+            Object.defineProperties(lazyType, {
+              defaultProps: {
+                configurable: true,
+                get: function() {
+                  return defaultProps;
+                },
+                set: function(newDefaultProps) {
+                  error("React.lazy(...): It is not supported to assign `defaultProps` to a lazy component import. Either specify them where the component is defined, or create a wrapping component around it.");
+                  defaultProps = newDefaultProps;
+                  Object.defineProperty(lazyType, "defaultProps", {
+                    enumerable: true
+                  });
+                }
+              },
+              propTypes: {
+                configurable: true,
+                get: function() {
+                  return propTypes;
+                },
+                set: function(newPropTypes) {
+                  error("React.lazy(...): It is not supported to assign `propTypes` to a lazy component import. Either specify them where the component is defined, or create a wrapping component around it.");
+                  propTypes = newPropTypes;
+                  Object.defineProperty(lazyType, "propTypes", {
+                    enumerable: true
+                  });
+                }
+              }
+            });
+          }
+          return lazyType;
+        }
+        function forwardRef(render) {
+          {
+            if (render != null && render.$$typeof === REACT_MEMO_TYPE) {
+              error("forwardRef requires a render function but received a `memo` component. Instead of forwardRef(memo(...)), use memo(forwardRef(...)).");
+            } else if (typeof render !== "function") {
+              error("forwardRef requires a render function but was given %s.", render === null ? "null" : typeof render);
+            } else {
+              if (render.length !== 0 && render.length !== 2) {
+                error("forwardRef render functions accept exactly two parameters: props and ref. %s", render.length === 1 ? "Did you forget to use the ref parameter?" : "Any additional parameter will be undefined.");
+              }
+            }
+            if (render != null) {
+              if (render.defaultProps != null || render.propTypes != null) {
+                error("forwardRef render functions do not support propTypes or defaultProps. Did you accidentally pass a React component?");
+              }
+            }
+          }
+          var elementType = {
+            $$typeof: REACT_FORWARD_REF_TYPE,
+            render
+          };
+          {
+            var ownName;
+            Object.defineProperty(elementType, "displayName", {
+              enumerable: false,
+              configurable: true,
+              get: function() {
+                return ownName;
+              },
+              set: function(name) {
+                ownName = name;
+                if (!render.name && !render.displayName) {
+                  render.displayName = name;
+                }
+              }
+            });
+          }
+          return elementType;
+        }
+        var REACT_MODULE_REFERENCE;
+        {
+          REACT_MODULE_REFERENCE = /* @__PURE__ */ Symbol.for("react.module.reference");
+        }
+        function isValidElementType(type) {
+          if (typeof type === "string" || typeof type === "function") {
+            return true;
+          }
+          if (type === REACT_FRAGMENT_TYPE || type === REACT_PROFILER_TYPE || enableDebugTracing || type === REACT_STRICT_MODE_TYPE || type === REACT_SUSPENSE_TYPE || type === REACT_SUSPENSE_LIST_TYPE || enableLegacyHidden || type === REACT_OFFSCREEN_TYPE || enableScopeAPI || enableCacheElement || enableTransitionTracing) {
+            return true;
+          }
+          if (typeof type === "object" && type !== null) {
+            if (type.$$typeof === REACT_LAZY_TYPE || type.$$typeof === REACT_MEMO_TYPE || type.$$typeof === REACT_PROVIDER_TYPE || type.$$typeof === REACT_CONTEXT_TYPE || type.$$typeof === REACT_FORWARD_REF_TYPE || // This needs to include all possible module reference object
+            // types supported by any Flight configuration anywhere since
+            // we don't know which Flight build this will end up being used
+            // with.
+            type.$$typeof === REACT_MODULE_REFERENCE || type.getModuleId !== void 0) {
+              return true;
+            }
+          }
+          return false;
+        }
+        function memo(type, compare) {
+          {
+            if (!isValidElementType(type)) {
+              error("memo: The first argument must be a component. Instead received: %s", type === null ? "null" : typeof type);
+            }
+          }
+          var elementType = {
+            $$typeof: REACT_MEMO_TYPE,
+            type,
+            compare: compare === void 0 ? null : compare
+          };
+          {
+            var ownName;
+            Object.defineProperty(elementType, "displayName", {
+              enumerable: false,
+              configurable: true,
+              get: function() {
+                return ownName;
+              },
+              set: function(name) {
+                ownName = name;
+                if (!type.name && !type.displayName) {
+                  type.displayName = name;
+                }
+              }
+            });
+          }
+          return elementType;
+        }
+        function resolveDispatcher() {
+          var dispatcher = ReactCurrentDispatcher.current;
+          {
+            if (dispatcher === null) {
+              error("Invalid hook call. Hooks can only be called inside of the body of a function component. This could happen for one of the following reasons:\n1. You might have mismatching versions of React and the renderer (such as React DOM)\n2. You might be breaking the Rules of Hooks\n3. You might have more than one copy of React in the same app\nSee https://reactjs.org/link/invalid-hook-call for tips about how to debug and fix this problem.");
+            }
+          }
+          return dispatcher;
+        }
+        function useContext(Context) {
+          var dispatcher = resolveDispatcher();
+          {
+            if (Context._context !== void 0) {
+              var realContext = Context._context;
+              if (realContext.Consumer === Context) {
+                error("Calling useContext(Context.Consumer) is not supported, may cause bugs, and will be removed in a future major release. Did you mean to call useContext(Context) instead?");
+              } else if (realContext.Provider === Context) {
+                error("Calling useContext(Context.Provider) is not supported. Did you mean to call useContext(Context) instead?");
+              }
+            }
+          }
+          return dispatcher.useContext(Context);
+        }
+        function useState(initialState) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useState(initialState);
+        }
+        function useReducer(reducer, initialArg, init) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useReducer(reducer, initialArg, init);
+        }
+        function useRef(initialValue) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useRef(initialValue);
+        }
+        function useEffect(create2, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useEffect(create2, deps);
+        }
+        function useInsertionEffect(create2, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useInsertionEffect(create2, deps);
+        }
+        function useLayoutEffect(create2, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useLayoutEffect(create2, deps);
+        }
+        function useCallback(callback, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useCallback(callback, deps);
+        }
+        function useMemo(create2, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useMemo(create2, deps);
+        }
+        function useImperativeHandle(ref, create2, deps) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useImperativeHandle(ref, create2, deps);
+        }
+        function useDebugValue2(value, formatterFn) {
+          {
+            var dispatcher = resolveDispatcher();
+            return dispatcher.useDebugValue(value, formatterFn);
+          }
+        }
+        function useTransition() {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useTransition();
+        }
+        function useDeferredValue(value) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useDeferredValue(value);
+        }
+        function useId() {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useId();
+        }
+        function useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot) {
+          var dispatcher = resolveDispatcher();
+          return dispatcher.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+        }
+        var disabledDepth = 0;
+        var prevLog;
+        var prevInfo;
+        var prevWarn;
+        var prevError;
+        var prevGroup;
+        var prevGroupCollapsed;
+        var prevGroupEnd;
+        function disabledLog() {
+        }
+        disabledLog.__reactDisabledLog = true;
+        function disableLogs() {
+          {
+            if (disabledDepth === 0) {
+              prevLog = console.log;
+              prevInfo = console.info;
+              prevWarn = console.warn;
+              prevError = console.error;
+              prevGroup = console.group;
+              prevGroupCollapsed = console.groupCollapsed;
+              prevGroupEnd = console.groupEnd;
+              var props = {
+                configurable: true,
+                enumerable: true,
+                value: disabledLog,
+                writable: true
+              };
+              Object.defineProperties(console, {
+                info: props,
+                log: props,
+                warn: props,
+                error: props,
+                group: props,
+                groupCollapsed: props,
+                groupEnd: props
+              });
+            }
+            disabledDepth++;
+          }
+        }
+        function reenableLogs() {
+          {
+            disabledDepth--;
+            if (disabledDepth === 0) {
+              var props = {
+                configurable: true,
+                enumerable: true,
+                writable: true
+              };
+              Object.defineProperties(console, {
+                log: assign({}, props, {
+                  value: prevLog
+                }),
+                info: assign({}, props, {
+                  value: prevInfo
+                }),
+                warn: assign({}, props, {
+                  value: prevWarn
+                }),
+                error: assign({}, props, {
+                  value: prevError
+                }),
+                group: assign({}, props, {
+                  value: prevGroup
+                }),
+                groupCollapsed: assign({}, props, {
+                  value: prevGroupCollapsed
+                }),
+                groupEnd: assign({}, props, {
+                  value: prevGroupEnd
+                })
+              });
+            }
+            if (disabledDepth < 0) {
+              error("disabledDepth fell below zero. This is a bug in React. Please file an issue.");
+            }
+          }
+        }
+        var ReactCurrentDispatcher$1 = ReactSharedInternals.ReactCurrentDispatcher;
+        var prefix;
+        function describeBuiltInComponentFrame(name, source, ownerFn) {
+          {
+            if (prefix === void 0) {
+              try {
+                throw Error();
+              } catch (x) {
+                var match = x.stack.trim().match(/\n( *(at )?)/);
+                prefix = match && match[1] || "";
+              }
+            }
+            return "\n" + prefix + name;
+          }
+        }
+        var reentry = false;
+        var componentFrameCache;
+        {
+          var PossiblyWeakMap = typeof WeakMap === "function" ? WeakMap : Map;
+          componentFrameCache = new PossiblyWeakMap();
+        }
+        function describeNativeComponentFrame(fn, construct) {
+          if (!fn || reentry) {
+            return "";
+          }
+          {
+            var frame = componentFrameCache.get(fn);
+            if (frame !== void 0) {
+              return frame;
+            }
+          }
+          var control;
+          reentry = true;
+          var previousPrepareStackTrace = Error.prepareStackTrace;
+          Error.prepareStackTrace = void 0;
+          var previousDispatcher;
+          {
+            previousDispatcher = ReactCurrentDispatcher$1.current;
+            ReactCurrentDispatcher$1.current = null;
+            disableLogs();
+          }
+          try {
+            if (construct) {
+              var Fake = function() {
+                throw Error();
+              };
+              Object.defineProperty(Fake.prototype, "props", {
+                set: function() {
+                  throw Error();
+                }
+              });
+              if (typeof Reflect === "object" && Reflect.construct) {
+                try {
+                  Reflect.construct(Fake, []);
+                } catch (x) {
+                  control = x;
+                }
+                Reflect.construct(fn, [], Fake);
+              } else {
+                try {
+                  Fake.call();
+                } catch (x) {
+                  control = x;
+                }
+                fn.call(Fake.prototype);
+              }
+            } else {
+              try {
+                throw Error();
+              } catch (x) {
+                control = x;
+              }
+              fn();
+            }
+          } catch (sample) {
+            if (sample && control && typeof sample.stack === "string") {
+              var sampleLines = sample.stack.split("\n");
+              var controlLines = control.stack.split("\n");
+              var s = sampleLines.length - 1;
+              var c = controlLines.length - 1;
+              while (s >= 1 && c >= 0 && sampleLines[s] !== controlLines[c]) {
+                c--;
+              }
+              for (; s >= 1 && c >= 0; s--, c--) {
+                if (sampleLines[s] !== controlLines[c]) {
+                  if (s !== 1 || c !== 1) {
+                    do {
+                      s--;
+                      c--;
+                      if (c < 0 || sampleLines[s] !== controlLines[c]) {
+                        var _frame = "\n" + sampleLines[s].replace(" at new ", " at ");
+                        if (fn.displayName && _frame.includes("<anonymous>")) {
+                          _frame = _frame.replace("<anonymous>", fn.displayName);
+                        }
+                        {
+                          if (typeof fn === "function") {
+                            componentFrameCache.set(fn, _frame);
+                          }
+                        }
+                        return _frame;
+                      }
+                    } while (s >= 1 && c >= 0);
+                  }
+                  break;
+                }
+              }
+            }
+          } finally {
+            reentry = false;
+            {
+              ReactCurrentDispatcher$1.current = previousDispatcher;
+              reenableLogs();
+            }
+            Error.prepareStackTrace = previousPrepareStackTrace;
+          }
+          var name = fn ? fn.displayName || fn.name : "";
+          var syntheticFrame = name ? describeBuiltInComponentFrame(name) : "";
+          {
+            if (typeof fn === "function") {
+              componentFrameCache.set(fn, syntheticFrame);
+            }
+          }
+          return syntheticFrame;
+        }
+        function describeFunctionComponentFrame(fn, source, ownerFn) {
+          {
+            return describeNativeComponentFrame(fn, false);
+          }
+        }
+        function shouldConstruct(Component2) {
+          var prototype = Component2.prototype;
+          return !!(prototype && prototype.isReactComponent);
+        }
+        function describeUnknownElementTypeFrameInDEV(type, source, ownerFn) {
+          if (type == null) {
+            return "";
+          }
+          if (typeof type === "function") {
+            {
+              return describeNativeComponentFrame(type, shouldConstruct(type));
+            }
+          }
+          if (typeof type === "string") {
+            return describeBuiltInComponentFrame(type);
+          }
+          switch (type) {
+            case REACT_SUSPENSE_TYPE:
+              return describeBuiltInComponentFrame("Suspense");
+            case REACT_SUSPENSE_LIST_TYPE:
+              return describeBuiltInComponentFrame("SuspenseList");
+          }
+          if (typeof type === "object") {
+            switch (type.$$typeof) {
+              case REACT_FORWARD_REF_TYPE:
+                return describeFunctionComponentFrame(type.render);
+              case REACT_MEMO_TYPE:
+                return describeUnknownElementTypeFrameInDEV(type.type, source, ownerFn);
+              case REACT_LAZY_TYPE: {
+                var lazyComponent = type;
+                var payload = lazyComponent._payload;
+                var init = lazyComponent._init;
+                try {
+                  return describeUnknownElementTypeFrameInDEV(init(payload), source, ownerFn);
+                } catch (x) {
+                }
+              }
+            }
+          }
+          return "";
+        }
+        var loggedTypeFailures = {};
+        var ReactDebugCurrentFrame$1 = ReactSharedInternals.ReactDebugCurrentFrame;
+        function setCurrentlyValidatingElement(element) {
+          {
+            if (element) {
+              var owner = element._owner;
+              var stack = describeUnknownElementTypeFrameInDEV(element.type, element._source, owner ? owner.type : null);
+              ReactDebugCurrentFrame$1.setExtraStackFrame(stack);
+            } else {
+              ReactDebugCurrentFrame$1.setExtraStackFrame(null);
+            }
+          }
+        }
+        function checkPropTypes(typeSpecs, values, location, componentName, element) {
+          {
+            var has = Function.call.bind(hasOwnProperty);
+            for (var typeSpecName in typeSpecs) {
+              if (has(typeSpecs, typeSpecName)) {
+                var error$1 = void 0;
+                try {
+                  if (typeof typeSpecs[typeSpecName] !== "function") {
+                    var err = Error((componentName || "React class") + ": " + location + " type `" + typeSpecName + "` is invalid; it must be a function, usually from the `prop-types` package, but received `" + typeof typeSpecs[typeSpecName] + "`.This often happens because of typos such as `PropTypes.function` instead of `PropTypes.func`.");
+                    err.name = "Invariant Violation";
+                    throw err;
+                  }
+                  error$1 = typeSpecs[typeSpecName](values, typeSpecName, componentName, location, null, "SECRET_DO_NOT_PASS_THIS_OR_YOU_WILL_BE_FIRED");
+                } catch (ex) {
+                  error$1 = ex;
+                }
+                if (error$1 && !(error$1 instanceof Error)) {
+                  setCurrentlyValidatingElement(element);
+                  error("%s: type specification of %s `%s` is invalid; the type checker function must return `null` or an `Error` but returned a %s. You may have forgotten to pass an argument to the type checker creator (arrayOf, instanceOf, objectOf, oneOf, oneOfType, and shape all require an argument).", componentName || "React class", location, typeSpecName, typeof error$1);
+                  setCurrentlyValidatingElement(null);
+                }
+                if (error$1 instanceof Error && !(error$1.message in loggedTypeFailures)) {
+                  loggedTypeFailures[error$1.message] = true;
+                  setCurrentlyValidatingElement(element);
+                  error("Failed %s type: %s", location, error$1.message);
+                  setCurrentlyValidatingElement(null);
+                }
+              }
+            }
+          }
+        }
+        function setCurrentlyValidatingElement$1(element) {
+          {
+            if (element) {
+              var owner = element._owner;
+              var stack = describeUnknownElementTypeFrameInDEV(element.type, element._source, owner ? owner.type : null);
+              setExtraStackFrame(stack);
+            } else {
+              setExtraStackFrame(null);
+            }
+          }
+        }
+        var propTypesMisspellWarningShown;
+        {
+          propTypesMisspellWarningShown = false;
+        }
+        function getDeclarationErrorAddendum() {
+          if (ReactCurrentOwner.current) {
+            var name = getComponentNameFromType(ReactCurrentOwner.current.type);
+            if (name) {
+              return "\n\nCheck the render method of `" + name + "`.";
+            }
+          }
+          return "";
+        }
+        function getSourceInfoErrorAddendum(source) {
+          if (source !== void 0) {
+            var fileName = source.fileName.replace(/^.*[\\\/]/, "");
+            var lineNumber = source.lineNumber;
+            return "\n\nCheck your code at " + fileName + ":" + lineNumber + ".";
+          }
+          return "";
+        }
+        function getSourceInfoErrorAddendumForProps(elementProps) {
+          if (elementProps !== null && elementProps !== void 0) {
+            return getSourceInfoErrorAddendum(elementProps.__source);
+          }
+          return "";
+        }
+        var ownerHasKeyUseWarning = {};
+        function getCurrentComponentErrorInfo(parentType) {
+          var info = getDeclarationErrorAddendum();
+          if (!info) {
+            var parentName = typeof parentType === "string" ? parentType : parentType.displayName || parentType.name;
+            if (parentName) {
+              info = "\n\nCheck the top-level render call using <" + parentName + ">.";
+            }
+          }
+          return info;
+        }
+        function validateExplicitKey(element, parentType) {
+          if (!element._store || element._store.validated || element.key != null) {
+            return;
+          }
+          element._store.validated = true;
+          var currentComponentErrorInfo = getCurrentComponentErrorInfo(parentType);
+          if (ownerHasKeyUseWarning[currentComponentErrorInfo]) {
+            return;
+          }
+          ownerHasKeyUseWarning[currentComponentErrorInfo] = true;
+          var childOwner = "";
+          if (element && element._owner && element._owner !== ReactCurrentOwner.current) {
+            childOwner = " It was passed a child from " + getComponentNameFromType(element._owner.type) + ".";
+          }
+          {
+            setCurrentlyValidatingElement$1(element);
+            error('Each child in a list should have a unique "key" prop.%s%s See https://reactjs.org/link/warning-keys for more information.', currentComponentErrorInfo, childOwner);
+            setCurrentlyValidatingElement$1(null);
+          }
+        }
+        function validateChildKeys(node, parentType) {
+          if (typeof node !== "object") {
+            return;
+          }
+          if (isArray(node)) {
+            for (var i = 0; i < node.length; i++) {
+              var child = node[i];
+              if (isValidElement(child)) {
+                validateExplicitKey(child, parentType);
+              }
+            }
+          } else if (isValidElement(node)) {
+            if (node._store) {
+              node._store.validated = true;
+            }
+          } else if (node) {
+            var iteratorFn = getIteratorFn(node);
+            if (typeof iteratorFn === "function") {
+              if (iteratorFn !== node.entries) {
+                var iterator = iteratorFn.call(node);
+                var step;
+                while (!(step = iterator.next()).done) {
+                  if (isValidElement(step.value)) {
+                    validateExplicitKey(step.value, parentType);
+                  }
+                }
+              }
+            }
+          }
+        }
+        function validatePropTypes(element) {
+          {
+            var type = element.type;
+            if (type === null || type === void 0 || typeof type === "string") {
+              return;
+            }
+            var propTypes;
+            if (typeof type === "function") {
+              propTypes = type.propTypes;
+            } else if (typeof type === "object" && (type.$$typeof === REACT_FORWARD_REF_TYPE || // Note: Memo only checks outer props here.
+            // Inner props are checked in the reconciler.
+            type.$$typeof === REACT_MEMO_TYPE)) {
+              propTypes = type.propTypes;
+            } else {
+              return;
+            }
+            if (propTypes) {
+              var name = getComponentNameFromType(type);
+              checkPropTypes(propTypes, element.props, "prop", name, element);
+            } else if (type.PropTypes !== void 0 && !propTypesMisspellWarningShown) {
+              propTypesMisspellWarningShown = true;
+              var _name = getComponentNameFromType(type);
+              error("Component %s declared `PropTypes` instead of `propTypes`. Did you misspell the property assignment?", _name || "Unknown");
+            }
+            if (typeof type.getDefaultProps === "function" && !type.getDefaultProps.isReactClassApproved) {
+              error("getDefaultProps is only used on classic React.createClass definitions. Use a static property named `defaultProps` instead.");
+            }
+          }
+        }
+        function validateFragmentProps(fragment) {
+          {
+            var keys = Object.keys(fragment.props);
+            for (var i = 0; i < keys.length; i++) {
+              var key = keys[i];
+              if (key !== "children" && key !== "key") {
+                setCurrentlyValidatingElement$1(fragment);
+                error("Invalid prop `%s` supplied to `React.Fragment`. React.Fragment can only have `key` and `children` props.", key);
+                setCurrentlyValidatingElement$1(null);
+                break;
+              }
+            }
+            if (fragment.ref !== null) {
+              setCurrentlyValidatingElement$1(fragment);
+              error("Invalid attribute `ref` supplied to `React.Fragment`.");
+              setCurrentlyValidatingElement$1(null);
+            }
+          }
+        }
+        function createElementWithValidation(type, props, children) {
+          var validType = isValidElementType(type);
+          if (!validType) {
+            var info = "";
+            if (type === void 0 || typeof type === "object" && type !== null && Object.keys(type).length === 0) {
+              info += " You likely forgot to export your component from the file it's defined in, or you might have mixed up default and named imports.";
+            }
+            var sourceInfo = getSourceInfoErrorAddendumForProps(props);
+            if (sourceInfo) {
+              info += sourceInfo;
+            } else {
+              info += getDeclarationErrorAddendum();
+            }
+            var typeString;
+            if (type === null) {
+              typeString = "null";
+            } else if (isArray(type)) {
+              typeString = "array";
+            } else if (type !== void 0 && type.$$typeof === REACT_ELEMENT_TYPE) {
+              typeString = "<" + (getComponentNameFromType(type.type) || "Unknown") + " />";
+              info = " Did you accidentally export a JSX literal instead of a component?";
+            } else {
+              typeString = typeof type;
+            }
+            {
+              error("React.createElement: type is invalid -- expected a string (for built-in components) or a class/function (for composite components) but got: %s.%s", typeString, info);
+            }
+          }
+          var element = createElement.apply(this, arguments);
+          if (element == null) {
+            return element;
+          }
+          if (validType) {
+            for (var i = 2; i < arguments.length; i++) {
+              validateChildKeys(arguments[i], type);
+            }
+          }
+          if (type === REACT_FRAGMENT_TYPE) {
+            validateFragmentProps(element);
+          } else {
+            validatePropTypes(element);
+          }
+          return element;
+        }
+        var didWarnAboutDeprecatedCreateFactory = false;
+        function createFactoryWithValidation(type) {
+          var validatedFactory = createElementWithValidation.bind(null, type);
+          validatedFactory.type = type;
+          {
+            if (!didWarnAboutDeprecatedCreateFactory) {
+              didWarnAboutDeprecatedCreateFactory = true;
+              warn("React.createFactory() is deprecated and will be removed in a future major release. Consider using JSX or use React.createElement() directly instead.");
+            }
+            Object.defineProperty(validatedFactory, "type", {
+              enumerable: false,
+              get: function() {
+                warn("Factory.type is deprecated. Access the class directly before passing it to createFactory.");
+                Object.defineProperty(this, "type", {
+                  value: type
+                });
+                return type;
+              }
+            });
+          }
+          return validatedFactory;
+        }
+        function cloneElementWithValidation(element, props, children) {
+          var newElement = cloneElement.apply(this, arguments);
+          for (var i = 2; i < arguments.length; i++) {
+            validateChildKeys(arguments[i], newElement.type);
+          }
+          validatePropTypes(newElement);
+          return newElement;
+        }
+        function startTransition(scope, options) {
+          var prevTransition = ReactCurrentBatchConfig.transition;
+          ReactCurrentBatchConfig.transition = {};
+          var currentTransition = ReactCurrentBatchConfig.transition;
+          {
+            ReactCurrentBatchConfig.transition._updatedFibers = /* @__PURE__ */ new Set();
+          }
+          try {
+            scope();
+          } finally {
+            ReactCurrentBatchConfig.transition = prevTransition;
+            {
+              if (prevTransition === null && currentTransition._updatedFibers) {
+                var updatedFibersCount = currentTransition._updatedFibers.size;
+                if (updatedFibersCount > 10) {
+                  warn("Detected a large number of updates inside startTransition. If this is due to a subscription please re-write it to use React provided hooks. Otherwise concurrent mode guarantees are off the table.");
+                }
+                currentTransition._updatedFibers.clear();
+              }
+            }
+          }
+        }
+        var didWarnAboutMessageChannel = false;
+        var enqueueTaskImpl = null;
+        function enqueueTask(task) {
+          if (enqueueTaskImpl === null) {
+            try {
+              var requireString = ("require" + Math.random()).slice(0, 7);
+              var nodeRequire = module && module[requireString];
+              enqueueTaskImpl = nodeRequire.call(module, "timers").setImmediate;
+            } catch (_err) {
+              enqueueTaskImpl = function(callback) {
+                {
+                  if (didWarnAboutMessageChannel === false) {
+                    didWarnAboutMessageChannel = true;
+                    if (typeof MessageChannel === "undefined") {
+                      error("This browser does not have a MessageChannel implementation, so enqueuing tasks via await act(async () => ...) will fail. Please file an issue at https://github.com/facebook/react/issues if you encounter this warning.");
+                    }
+                  }
+                }
+                var channel = new MessageChannel();
+                channel.port1.onmessage = callback;
+                channel.port2.postMessage(void 0);
+              };
+            }
+          }
+          return enqueueTaskImpl(task);
+        }
+        var actScopeDepth = 0;
+        var didWarnNoAwaitAct = false;
+        function act(callback) {
+          {
+            var prevActScopeDepth = actScopeDepth;
+            actScopeDepth++;
+            if (ReactCurrentActQueue.current === null) {
+              ReactCurrentActQueue.current = [];
+            }
+            var prevIsBatchingLegacy = ReactCurrentActQueue.isBatchingLegacy;
+            var result;
+            try {
+              ReactCurrentActQueue.isBatchingLegacy = true;
+              result = callback();
+              if (!prevIsBatchingLegacy && ReactCurrentActQueue.didScheduleLegacyUpdate) {
+                var queue = ReactCurrentActQueue.current;
+                if (queue !== null) {
+                  ReactCurrentActQueue.didScheduleLegacyUpdate = false;
+                  flushActQueue(queue);
+                }
+              }
+            } catch (error2) {
+              popActScope(prevActScopeDepth);
+              throw error2;
+            } finally {
+              ReactCurrentActQueue.isBatchingLegacy = prevIsBatchingLegacy;
+            }
+            if (result !== null && typeof result === "object" && typeof result.then === "function") {
+              var thenableResult = result;
+              var wasAwaited = false;
+              var thenable = {
+                then: function(resolve, reject) {
+                  wasAwaited = true;
+                  thenableResult.then(function(returnValue2) {
+                    popActScope(prevActScopeDepth);
+                    if (actScopeDepth === 0) {
+                      recursivelyFlushAsyncActWork(returnValue2, resolve, reject);
+                    } else {
+                      resolve(returnValue2);
+                    }
+                  }, function(error2) {
+                    popActScope(prevActScopeDepth);
+                    reject(error2);
+                  });
+                }
+              };
+              {
+                if (!didWarnNoAwaitAct && typeof Promise !== "undefined") {
+                  Promise.resolve().then(function() {
+                  }).then(function() {
+                    if (!wasAwaited) {
+                      didWarnNoAwaitAct = true;
+                      error("You called act(async () => ...) without await. This could lead to unexpected testing behaviour, interleaving multiple act calls and mixing their scopes. You should - await act(async () => ...);");
+                    }
+                  });
+                }
+              }
+              return thenable;
+            } else {
+              var returnValue = result;
+              popActScope(prevActScopeDepth);
+              if (actScopeDepth === 0) {
+                var _queue = ReactCurrentActQueue.current;
+                if (_queue !== null) {
+                  flushActQueue(_queue);
+                  ReactCurrentActQueue.current = null;
+                }
+                var _thenable = {
+                  then: function(resolve, reject) {
+                    if (ReactCurrentActQueue.current === null) {
+                      ReactCurrentActQueue.current = [];
+                      recursivelyFlushAsyncActWork(returnValue, resolve, reject);
+                    } else {
+                      resolve(returnValue);
+                    }
+                  }
+                };
+                return _thenable;
+              } else {
+                var _thenable2 = {
+                  then: function(resolve, reject) {
+                    resolve(returnValue);
+                  }
+                };
+                return _thenable2;
+              }
+            }
+          }
+        }
+        function popActScope(prevActScopeDepth) {
+          {
+            if (prevActScopeDepth !== actScopeDepth - 1) {
+              error("You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one. ");
+            }
+            actScopeDepth = prevActScopeDepth;
+          }
+        }
+        function recursivelyFlushAsyncActWork(returnValue, resolve, reject) {
+          {
+            var queue = ReactCurrentActQueue.current;
+            if (queue !== null) {
+              try {
+                flushActQueue(queue);
+                enqueueTask(function() {
+                  if (queue.length === 0) {
+                    ReactCurrentActQueue.current = null;
+                    resolve(returnValue);
+                  } else {
+                    recursivelyFlushAsyncActWork(returnValue, resolve, reject);
+                  }
+                });
+              } catch (error2) {
+                reject(error2);
+              }
+            } else {
+              resolve(returnValue);
+            }
+          }
+        }
+        var isFlushing = false;
+        function flushActQueue(queue) {
+          {
+            if (!isFlushing) {
+              isFlushing = true;
+              var i = 0;
+              try {
+                for (; i < queue.length; i++) {
+                  var callback = queue[i];
+                  do {
+                    callback = callback(true);
+                  } while (callback !== null);
+                }
+                queue.length = 0;
+              } catch (error2) {
+                queue = queue.slice(i + 1);
+                throw error2;
+              } finally {
+                isFlushing = false;
+              }
+            }
+          }
+        }
+        var createElement$1 = createElementWithValidation;
+        var cloneElement$1 = cloneElementWithValidation;
+        var createFactory = createFactoryWithValidation;
+        var Children = {
+          map: mapChildren,
+          forEach: forEachChildren,
+          count: countChildren,
+          toArray,
+          only: onlyChild
+        };
+        exports.Children = Children;
+        exports.Component = Component;
+        exports.Fragment = REACT_FRAGMENT_TYPE;
+        exports.Profiler = REACT_PROFILER_TYPE;
+        exports.PureComponent = PureComponent;
+        exports.StrictMode = REACT_STRICT_MODE_TYPE;
+        exports.Suspense = REACT_SUSPENSE_TYPE;
+        exports.__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = ReactSharedInternals;
+        exports.act = act;
+        exports.cloneElement = cloneElement$1;
+        exports.createContext = createContext;
+        exports.createElement = createElement$1;
+        exports.createFactory = createFactory;
+        exports.createRef = createRef;
+        exports.forwardRef = forwardRef;
+        exports.isValidElement = isValidElement;
+        exports.lazy = lazy;
+        exports.memo = memo;
+        exports.startTransition = startTransition;
+        exports.unstable_act = act;
+        exports.useCallback = useCallback;
+        exports.useContext = useContext;
+        exports.useDebugValue = useDebugValue2;
+        exports.useDeferredValue = useDeferredValue;
+        exports.useEffect = useEffect;
+        exports.useId = useId;
+        exports.useImperativeHandle = useImperativeHandle;
+        exports.useInsertionEffect = useInsertionEffect;
+        exports.useLayoutEffect = useLayoutEffect;
+        exports.useMemo = useMemo;
+        exports.useReducer = useReducer;
+        exports.useRef = useRef;
+        exports.useState = useState;
+        exports.useSyncExternalStore = useSyncExternalStore;
+        exports.useTransition = useTransition;
+        exports.version = ReactVersion;
+        if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== "undefined" && typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop === "function") {
+          __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(new Error());
+        }
+      })();
+    }
+  }
+});
+
+// ../Neurarch/node_modules/react/index.js
+var require_react = __commonJS({
+  "../Neurarch/node_modules/react/index.js"(exports, module) {
+    "use strict";
+    if (process.env.NODE_ENV === "production") {
+      module.exports = require_react_production_min();
+    } else {
+      module.exports = require_react_development();
+    }
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js
+var require_use_sync_external_store_shim_production = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js"(exports) {
+    "use strict";
+    var React = require_react();
+    function is(x, y) {
+      return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
+    }
+    var objectIs = "function" === typeof Object.is ? Object.is : is;
+    var useState = React.useState;
+    var useEffect = React.useEffect;
+    var useLayoutEffect = React.useLayoutEffect;
+    var useDebugValue2 = React.useDebugValue;
+    function useSyncExternalStore$2(subscribe, getSnapshot) {
+      var value = getSnapshot(), _useState = useState({ inst: { value, getSnapshot } }), inst = _useState[0].inst, forceUpdate = _useState[1];
+      useLayoutEffect(
+        function() {
+          inst.value = value;
+          inst.getSnapshot = getSnapshot;
+          checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+        },
+        [subscribe, value, getSnapshot]
+      );
+      useEffect(
+        function() {
+          checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+          return subscribe(function() {
+            checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+          });
+        },
+        [subscribe]
+      );
+      useDebugValue2(value);
+      return value;
+    }
+    function checkIfSnapshotChanged(inst) {
+      var latestGetSnapshot = inst.getSnapshot;
+      inst = inst.value;
+      try {
+        var nextValue = latestGetSnapshot();
+        return !objectIs(inst, nextValue);
+      } catch (error) {
+        return true;
+      }
+    }
+    function useSyncExternalStore$1(subscribe, getSnapshot) {
+      return getSnapshot();
+    }
+    var shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+    exports.useSyncExternalStore = void 0 !== React.useSyncExternalStore ? React.useSyncExternalStore : shim;
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
+var require_use_sync_external_store_shim_development = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js"(exports) {
+    "use strict";
+    "production" !== process.env.NODE_ENV && (function() {
+      function is(x, y) {
+        return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
+      }
+      function useSyncExternalStore$2(subscribe, getSnapshot) {
+        didWarnOld18Alpha || void 0 === React.startTransition || (didWarnOld18Alpha = true, console.error(
+          "You are using an outdated, pre-release alpha of React 18 that does not support useSyncExternalStore. The use-sync-external-store shim will not work correctly. Upgrade to a newer pre-release."
+        ));
+        var value = getSnapshot();
+        if (!didWarnUncachedGetSnapshot) {
+          var cachedValue = getSnapshot();
+          objectIs(value, cachedValue) || (console.error(
+            "The result of getSnapshot should be cached to avoid an infinite loop"
+          ), didWarnUncachedGetSnapshot = true);
+        }
+        cachedValue = useState({
+          inst: { value, getSnapshot }
+        });
+        var inst = cachedValue[0].inst, forceUpdate = cachedValue[1];
+        useLayoutEffect(
+          function() {
+            inst.value = value;
+            inst.getSnapshot = getSnapshot;
+            checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+          },
+          [subscribe, value, getSnapshot]
+        );
+        useEffect(
+          function() {
+            checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+            return subscribe(function() {
+              checkIfSnapshotChanged(inst) && forceUpdate({ inst });
+            });
+          },
+          [subscribe]
+        );
+        useDebugValue2(value);
+        return value;
+      }
+      function checkIfSnapshotChanged(inst) {
+        var latestGetSnapshot = inst.getSnapshot;
+        inst = inst.value;
+        try {
+          var nextValue = latestGetSnapshot();
+          return !objectIs(inst, nextValue);
+        } catch (error) {
+          return true;
+        }
+      }
+      function useSyncExternalStore$1(subscribe, getSnapshot) {
+        return getSnapshot();
+      }
+      "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
+      var React = require_react(), objectIs = "function" === typeof Object.is ? Object.is : is, useState = React.useState, useEffect = React.useEffect, useLayoutEffect = React.useLayoutEffect, useDebugValue2 = React.useDebugValue, didWarnOld18Alpha = false, didWarnUncachedGetSnapshot = false, shim = "undefined" === typeof window || "undefined" === typeof window.document || "undefined" === typeof window.document.createElement ? useSyncExternalStore$1 : useSyncExternalStore$2;
+      exports.useSyncExternalStore = void 0 !== React.useSyncExternalStore ? React.useSyncExternalStore : shim;
+      "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
+    })();
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/shim/index.js
+var require_shim = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/shim/index.js"(exports, module) {
+    "use strict";
+    if (process.env.NODE_ENV === "production") {
+      module.exports = require_use_sync_external_store_shim_production();
+    } else {
+      module.exports = require_use_sync_external_store_shim_development();
+    }
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js
+var require_with_selector_production = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js"(exports) {
+    "use strict";
+    var React = require_react();
+    var shim = require_shim();
+    function is(x, y) {
+      return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
+    }
+    var objectIs = "function" === typeof Object.is ? Object.is : is;
+    var useSyncExternalStore = shim.useSyncExternalStore;
+    var useRef = React.useRef;
+    var useEffect = React.useEffect;
+    var useMemo = React.useMemo;
+    var useDebugValue2 = React.useDebugValue;
+    exports.useSyncExternalStoreWithSelector = function(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
+      var instRef = useRef(null);
+      if (null === instRef.current) {
+        var inst = { hasValue: false, value: null };
+        instRef.current = inst;
+      } else inst = instRef.current;
+      instRef = useMemo(
+        function() {
+          function memoizedSelector(nextSnapshot) {
+            if (!hasMemo) {
+              hasMemo = true;
+              memoizedSnapshot = nextSnapshot;
+              nextSnapshot = selector(nextSnapshot);
+              if (void 0 !== isEqual && inst.hasValue) {
+                var currentSelection = inst.value;
+                if (isEqual(currentSelection, nextSnapshot))
+                  return memoizedSelection = currentSelection;
+              }
+              return memoizedSelection = nextSnapshot;
+            }
+            currentSelection = memoizedSelection;
+            if (objectIs(memoizedSnapshot, nextSnapshot)) return currentSelection;
+            var nextSelection = selector(nextSnapshot);
+            if (void 0 !== isEqual && isEqual(currentSelection, nextSelection))
+              return memoizedSnapshot = nextSnapshot, currentSelection;
+            memoizedSnapshot = nextSnapshot;
+            return memoizedSelection = nextSelection;
+          }
+          var hasMemo = false, memoizedSnapshot, memoizedSelection, maybeGetServerSnapshot = void 0 === getServerSnapshot ? null : getServerSnapshot;
+          return [
+            function() {
+              return memoizedSelector(getSnapshot());
+            },
+            null === maybeGetServerSnapshot ? void 0 : function() {
+              return memoizedSelector(maybeGetServerSnapshot());
+            }
+          ];
+        },
+        [getSnapshot, getServerSnapshot, selector, isEqual]
+      );
+      var value = useSyncExternalStore(subscribe, instRef[0], instRef[1]);
+      useEffect(
+        function() {
+          inst.hasValue = true;
+          inst.value = value;
+        },
+        [value]
+      );
+      useDebugValue2(value);
+      return value;
+    };
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js
+var require_with_selector_development = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js"(exports) {
+    "use strict";
+    "production" !== process.env.NODE_ENV && (function() {
+      function is(x, y) {
+        return x === y && (0 !== x || 1 / x === 1 / y) || x !== x && y !== y;
+      }
+      "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(Error());
+      var React = require_react(), shim = require_shim(), objectIs = "function" === typeof Object.is ? Object.is : is, useSyncExternalStore = shim.useSyncExternalStore, useRef = React.useRef, useEffect = React.useEffect, useMemo = React.useMemo, useDebugValue2 = React.useDebugValue;
+      exports.useSyncExternalStoreWithSelector = function(subscribe, getSnapshot, getServerSnapshot, selector, isEqual) {
+        var instRef = useRef(null);
+        if (null === instRef.current) {
+          var inst = { hasValue: false, value: null };
+          instRef.current = inst;
+        } else inst = instRef.current;
+        instRef = useMemo(
+          function() {
+            function memoizedSelector(nextSnapshot) {
+              if (!hasMemo) {
+                hasMemo = true;
+                memoizedSnapshot = nextSnapshot;
+                nextSnapshot = selector(nextSnapshot);
+                if (void 0 !== isEqual && inst.hasValue) {
+                  var currentSelection = inst.value;
+                  if (isEqual(currentSelection, nextSnapshot))
+                    return memoizedSelection = currentSelection;
+                }
+                return memoizedSelection = nextSnapshot;
+              }
+              currentSelection = memoizedSelection;
+              if (objectIs(memoizedSnapshot, nextSnapshot))
+                return currentSelection;
+              var nextSelection = selector(nextSnapshot);
+              if (void 0 !== isEqual && isEqual(currentSelection, nextSelection))
+                return memoizedSnapshot = nextSnapshot, currentSelection;
+              memoizedSnapshot = nextSnapshot;
+              return memoizedSelection = nextSelection;
+            }
+            var hasMemo = false, memoizedSnapshot, memoizedSelection, maybeGetServerSnapshot = void 0 === getServerSnapshot ? null : getServerSnapshot;
+            return [
+              function() {
+                return memoizedSelector(getSnapshot());
+              },
+              null === maybeGetServerSnapshot ? void 0 : function() {
+                return memoizedSelector(maybeGetServerSnapshot());
+              }
+            ];
+          },
+          [getSnapshot, getServerSnapshot, selector, isEqual]
+        );
+        var value = useSyncExternalStore(subscribe, instRef[0], instRef[1]);
+        useEffect(
+          function() {
+            inst.hasValue = true;
+            inst.value = value;
+          },
+          [value]
+        );
+        useDebugValue2(value);
+        return value;
+      };
+      "undefined" !== typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ && "function" === typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop && __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(Error());
+    })();
+  }
+});
+
+// ../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js
+var require_with_selector = __commonJS({
+  "../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js"(exports, module) {
+    "use strict";
+    if (process.env.NODE_ENV === "production") {
+      module.exports = require_with_selector_production();
+    } else {
+      module.exports = require_with_selector_development();
+    }
+  }
+});
 
 // src/utils/graphIO.ts
 function rebuildNodeIO(components, connections) {
@@ -37,8 +2501,8 @@ function rebuildNodeIO(components, connections) {
 // src/components/MLComponents/componentRegistry.ts
 var convDim = (v, i, fallback) => {
   const raw = Array.isArray(v) ? v[i] ?? v[0] : v;
-  const n2 = Number(raw);
-  return Number.isFinite(n2) ? n2 : fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
 };
 var convOutLen = (len, params, i) => {
   const k = convDim(params.kernelSize, i, 3);
@@ -66,12 +2530,16 @@ var conv1dOutputShape = (inputShape, params) => {
 var pool2dOutputShape = (inputShape, params) => {
   if (inputShape.length >= 3) {
     const [c, h, w] = inputShape;
-    const { kernelSize, stride = kernelSize, padding = 0 } = params;
-    const newH = Math.floor((h + 2 * padding - kernelSize) / stride + 1);
-    const newW = Math.floor((w + 2 * padding - kernelSize) / stride + 1);
-    return [c, newH, newW];
+    const p = { ...params, stride: params.stride ?? params.kernelSize };
+    return [c, convOutLen(h, p, 0), convOutLen(w, p, 1)];
   }
   return inputShape;
+};
+var recurrentOutputShape = (inputShape, params, multiplier) => {
+  const hidden = (params.hiddenSize || 128) * multiplier;
+  if (params.returnSequences === false) return [hidden];
+  if (inputShape.length >= 3) return [inputShape[0], inputShape[1], hidden];
+  return [inputShape[0] || 1, hidden];
 };
 var componentRegistry = {
   // ========== Basic ==========
@@ -299,8 +2767,7 @@ var componentRegistry = {
     computeOutputShape: (inputShape, params) => {
       if (inputShape.length >= 2) {
         const [c, l] = inputShape;
-        const { kernelSize, stride = kernelSize } = params;
-        return [c, Math.floor((l - kernelSize) / stride + 1)];
+        return [c, convOutLen(l, { ...params, stride: params.stride ?? params.kernelSize }, 0)];
       }
       return inputShape;
     }
@@ -314,8 +2781,7 @@ var componentRegistry = {
     computeOutputShape: (inputShape, params) => {
       if (inputShape.length >= 2) {
         const [c, l] = inputShape;
-        const { kernelSize, stride = kernelSize } = params;
-        return [c, Math.floor((l - kernelSize) / stride + 1)];
+        return [c, convOutLen(l, { ...params, stride: params.stride ?? params.kernelSize }, 0)];
       }
       return inputShape;
     }
@@ -351,14 +2817,7 @@ var componentRegistry = {
     icon: "\u{1F504}",
     category: "nlp",
     defaultParams: { hiddenSize: 128, numLayers: 1, bidirectional: false },
-    computeOutputShape: (inputShape, params) => {
-      const hiddenSize = params.hiddenSize || 128;
-      const multiplier = params.bidirectional ? 2 : 1;
-      if (inputShape.length >= 3) {
-        return [inputShape[0], inputShape[1], hiddenSize * multiplier];
-      }
-      return [inputShape[0] || 1, hiddenSize * multiplier];
-    }
+    computeOutputShape: (inputShape, params) => recurrentOutputShape(inputShape, params, params.bidirectional ? 2 : 1)
   },
   gru: {
     type: "gru",
@@ -366,14 +2825,7 @@ var componentRegistry = {
     icon: "\u{1F500}",
     category: "nlp",
     defaultParams: { hiddenSize: 128, numLayers: 1, bidirectional: false },
-    computeOutputShape: (inputShape, params) => {
-      const hiddenSize = params.hiddenSize || 128;
-      const multiplier = params.bidirectional ? 2 : 1;
-      if (inputShape.length >= 3) {
-        return [inputShape[0], inputShape[1], hiddenSize * multiplier];
-      }
-      return [inputShape[0] || 1, hiddenSize * multiplier];
-    }
+    computeOutputShape: (inputShape, params) => recurrentOutputShape(inputShape, params, params.bidirectional ? 2 : 1)
   },
   rnn: {
     type: "rnn",
@@ -381,13 +2833,7 @@ var componentRegistry = {
     icon: "\u21A9\uFE0F",
     category: "nlp",
     defaultParams: { hiddenSize: 128, numLayers: 1 },
-    computeOutputShape: (inputShape, params) => {
-      const hiddenSize = params.hiddenSize || 128;
-      if (inputShape.length >= 3) {
-        return [inputShape[0], inputShape[1], hiddenSize];
-      }
-      return [inputShape[0] || 1, hiddenSize];
-    }
+    computeOutputShape: (inputShape, params) => recurrentOutputShape(inputShape, params, 1)
   },
   bidirectionalLSTM: {
     type: "bidirectionalLSTM",
@@ -395,13 +2841,7 @@ var componentRegistry = {
     icon: "\u2194\uFE0F",
     category: "nlp",
     defaultParams: { hiddenSize: 128, numLayers: 1 },
-    computeOutputShape: (inputShape, params) => {
-      const hiddenSize = params.hiddenSize || 128;
-      if (inputShape.length >= 3) {
-        return [inputShape[0], inputShape[1], hiddenSize * 2];
-      }
-      return [inputShape[0] || 1, hiddenSize * 2];
-    }
+    computeOutputShape: (inputShape, params) => recurrentOutputShape(inputShape, params, 2)
   },
   bidirectionalGRU: {
     type: "bidirectionalGRU",
@@ -1623,8 +4063,8 @@ var componentRegistry = {
         throw new Error(`gather: dim ${params.dim} out of range for rank ${inputShape.length}`);
       }
       const out = [...inputShape];
-      const n2 = Number(params.indexSize);
-      if (Number.isFinite(n2) && n2 > 0) out[idx] = n2;
+      const n = Number(params.indexSize);
+      if (Number.isFinite(n) && n > 0) out[idx] = n;
       return out;
     }
   },
@@ -2596,23 +5036,23 @@ function expandClassInstance(className, callArgsStr, ctx, callerEnv) {
 var MODULELIST_COMP_RE = /\[\s*(\w+)\s*\(([^)]*)\)\s+for\s+\w+\s+in\s+range\s*\(([^)]+)\)/;
 function expandModuleListComp(compMatch, listName, initSigLine, ctx) {
   const [, className, argsStr, nExpr] = compMatch;
-  let n2 = resolveNumExpr(nExpr, ctx?.env ?? {});
-  if (n2 === null) {
+  let n = resolveNumExpr(nExpr, ctx?.env ?? {});
+  if (n === null) {
     const defaultMatch = initSigLine.match(new RegExp(`\\b${nExpr.trim()}=(\\d+)`));
-    n2 = defaultMatch ? parseInt(defaultMatch[1], 10) : 6;
+    n = defaultMatch ? parseInt(defaultMatch[1], 10) : 6;
   }
-  n2 = Math.max(0, Math.floor(n2));
+  n = Math.max(0, Math.floor(n));
   const out = [];
   const mapped = mapCustomClassToComponent(className);
   if (mapped) {
-    for (let j = 0; j < n2; j++) {
+    for (let j = 0; j < n; j++) {
       out.push({ name: `${listName}_${j}`, type: mapped, params: {} });
     }
     return out;
   }
   if (ctx && canExpandClass(className, ctx)) {
     const inner = expandClassInstance(className, argsStr, ctx, ctx.env);
-    for (let j = 0; j < n2; j++) {
+    for (let j = 0; j < n; j++) {
       for (const il of inner) {
         out.push({ name: `${listName}_${j}.${il.name}`, type: il.type, params: il.params });
       }
@@ -3167,8 +5607,8 @@ function parseLayerDefinition(layerDef) {
   const adaptiveAvgMatch = layerDef.match(/nn\.AdaptiveAvgPool2d\s*\(([^)]*)\)/);
   if (adaptiveAvgMatch) {
     const inner = adaptiveAvgMatch[1].trim().replace(/^\(+/, "").replace(/\)+$/, "");
-    const nums = inner.split(",").map((t) => Number(t.trim())).filter((n2) => Number.isFinite(n2));
-    if (nums.length === 0 || nums.every((n2) => n2 === 1)) {
+    const nums = inner.split(",").map((t) => Number(t.trim())).filter((n) => Number.isFinite(n));
+    if (nums.length === 0 || nums.every((n) => n === 1)) {
       return { type: "globalAvgPool2d", params: {} };
     }
     params.outputSize = nums.length === 1 ? nums[0] : nums;
@@ -3200,9 +5640,9 @@ function parseArguments(argsStr) {
 }
 function parseNumberOrVariable(value) {
   if (!value) return void 0;
-  const num2 = Number(value);
-  if (!isNaN(num2)) {
-    return num2;
+  const num = Number(value);
+  if (!isNaN(num)) {
+    return num;
   }
   return value;
 }
@@ -3303,18 +5743,6 @@ function parseInputShape(lines) {
   return void 0;
 }
 
-// src/utils/modelFormat.ts
-var MODEL_FORMAT_VERSION = 1;
-function wrapModelFile(model) {
-  const file = {
-    $schema: "https://neurarch.com/schema/model.v1.json",
-    formatVersion: MODEL_FORMAT_VERSION,
-    generator: "neurarch",
-    model
-  };
-  return JSON.stringify(file, null, 2);
-}
-
 // src/utils/lintThresholds.ts
 var HIGH_DROPOUT_P = 0.65;
 var DEEP_NO_RESIDUAL_MIN_LAYERS = 8;
@@ -3327,19 +5755,6 @@ var LARGE_LINEAR_MAX_PARAMS = 1e9;
 var KV_BUDGET_CONTEXT_TOKENS = 8192;
 var KV_BUDGET_MAX_GB = 4;
 var SCALED_INIT_MIN_ATTENTION_LAYERS = 8;
-var LINT_THRESHOLDS = {
-  HIGH_DROPOUT_P,
-  DEEP_NO_RESIDUAL_MIN_LAYERS,
-  DEEP_NO_NORM_MIN_LAYERS,
-  VANISHING_MIN_LAYERS,
-  LARGE_ACTIVATION_MAX_ELEMENTS,
-  SWIGLU_RATIO_MIN,
-  SWIGLU_RATIO_MAX,
-  LARGE_LINEAR_MAX_PARAMS,
-  KV_BUDGET_CONTEXT_TOKENS,
-  KV_BUDGET_MAX_GB,
-  SCALED_INIT_MIN_ATTENTION_LAYERS
-};
 
 // src/utils/weightInitAdvisor.ts
 var ADVICE = {
@@ -3471,8 +5886,8 @@ function getInitAdvice(type) {
 }
 
 // src/utils/architectureAdvisor.ts
-var largestDivisorAtMost = (n2, max) => {
-  for (let d = Math.min(max, n2); d >= 1; d--) if (n2 % d === 0) return d;
+var largestDivisorAtMost = (n, max) => {
+  for (let d = Math.min(max, n); d >= 1; d--) if (n % d === 0) return d;
   return 1;
 };
 var ACTIVATION_TYPES = /* @__PURE__ */ new Set([
@@ -3515,10 +5930,15 @@ var ATTENTION_TYPES = /* @__PURE__ */ new Set([
   "mla"
 ]);
 var PE_TYPES = /* @__PURE__ */ new Set([
+  // A learned relative bias is how T5 (and every model that copied it) tells
+  // attention where tokens are. Leaving it out of this set made R14 warn that
+  // "attention is permutation-invariant" on models whose whole positional
+  // scheme was sitting on the canvas.
   "positionalEncoding",
   "learnedPositionalEmbedding",
   "rope",
-  "alibi"
+  "alibi",
+  "relativePositionBias"
 ]);
 var VANISHING_ACTIVATIONS = /* @__PURE__ */ new Set(["sigmoid", "tanh"]);
 var noInputNode = (model) => {
@@ -3831,16 +6251,19 @@ var largeActivation = (model) => {
   }];
 };
 var moeNoAuxLoss = (model) => {
-  return model.components.filter((c) => c.type === "moeLayer").map((c) => ({
-    id: `moe-aux-${c.id}`,
+  const moes = model.components.filter((c) => c.type === "moeLayer");
+  if (moes.length === 0) return [];
+  const many = moes.length > 1;
+  return [{
+    id: `moe-aux-${moes[0].id}`,
     ruleId: "moe-no-aux-loss",
     severity: "info",
     category: "pattern",
-    title: `MoE "${c.name}": add auxiliary load-balancing loss`,
-    message: `MoE layers require an auxiliary router z-loss + load-balance loss during training to prevent expert collapse. This is not visible in the architecture diagram but must be in the training loop.`,
-    affectedIds: [c.id],
-    suggestion: `Add a note on this layer. Typical aux_loss coefficient: 1e-2 (Mixtral/Switch Transformer).`
-  }));
+    title: many ? `${moes.length} MoE layers: add auxiliary load-balancing loss` : `MoE "${moes[0].name}": add auxiliary load-balancing loss`,
+    message: `MoE layers require an auxiliary router z-loss + load-balance loss during training to prevent expert collapse. This is not visible in the architecture diagram but must be in the training loop.${many ? ` Applies to all ${moes.length}: ${moes.map((c) => c.name).join(", ")}.` : ""}`,
+    affectedIds: moes.map((c) => c.id),
+    suggestion: `Add a note on ${many ? "these layers" : "this layer"}. Typical aux_loss coefficient: 1e-2 (Mixtral/Switch Transformer).`
+  }];
 };
 var gqaHeadMismatch = (model) => {
   return model.components.filter((c) => c.type === "groupedQueryAttention").filter((c) => {
@@ -4089,16 +6512,37 @@ var doubleNorm = (model) => {
 var duplicatePositionalEncoding = (model) => {
   const pes = model.components.filter((c) => PE_TYPES.has(c.type));
   if (pes.length < 2) return [];
-  return [{
-    id: "duplicate-positional-encoding",
-    ruleId: "duplicate-positional-encoding",
-    severity: "info",
-    category: "pattern",
-    title: `${pes.length} positional encodings`,
-    message: `${pes.length} positional-encoding layers found (${pes.map((c) => c.type).join(", ")}). Position is normally injected once. Stacking absolute + rotary, or two of the same, double-counts position and tends to hurt more than help.`,
-    affectedIds: pes.map((c) => c.id),
-    suggestion: "Keep a single positional scheme: sinusoidal OR learned OR RoPE / ALiBi."
-  }];
+  const outgoing = /* @__PURE__ */ new Map();
+  for (const conn of model.connections) {
+    const list = outgoing.get(conn.from);
+    if (list) list.push(conn.to);
+    else outgoing.set(conn.from, [conn.to]);
+  }
+  const peById = new Map(pes.map((c) => [c.id, c]));
+  for (const pe of pes) {
+    const seen = /* @__PURE__ */ new Set([pe.id]);
+    const stack = [...outgoing.get(pe.id) ?? []];
+    while (stack.length > 0) {
+      const id = stack.pop();
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const downstream = peById.get(id);
+      if (downstream) {
+        return [{
+          id: "duplicate-positional-encoding",
+          ruleId: "duplicate-positional-encoding",
+          severity: "info",
+          category: "pattern",
+          title: "Position injected twice on one stream",
+          message: `"${pe.name}" (${pe.type}) and "${downstream.name}" (${downstream.type}) both add position to the same tensor. Stacking absolute + rotary, or two of the same, double-counts position and tends to hurt more than help. Separate towers with one each (a vision and a text branch, an encoder and a decoder) are not this.`,
+          affectedIds: [pe.id, downstream.id],
+          suggestion: "Keep a single positional scheme on this path: sinusoidal OR learned OR RoPE / ALiBi."
+        }];
+      }
+      stack.push(...outgoing.get(id) ?? []);
+    }
+  }
+  return [];
 };
 var SPATIAL_POOL_TYPES = /* @__PURE__ */ new Set([
   "maxpool2d",
@@ -4492,962 +6936,8 @@ function runAdvisorRules(model, opts = {}) {
   return issues.filter((i) => !drop.has(i.id));
 }
 
-// src/utils/paramEstimator.ts
-function num(v, fallback = 0) {
-  const n2 = typeof v === "number" ? v : Number(v);
-  return isFinite(n2) && n2 >= 0 ? n2 : fallback;
-}
-function estimateLayerParams(type, params, inputShape) {
-  const p = params ?? {};
-  if (p.tied === true) return 0;
-  const inp = inputShape ?? [];
-  const lastDim = inp.length > 0 ? inp[inp.length - 1] : 0;
-  const ch = inp.length >= 2 ? inp[0] : 1;
-  switch (type) {
-    // ── Basic ────────────────────────────────────────────────────────────────
-    case "linear": {
-      const inF = num(p.inFeatures ?? lastDim);
-      const outF = num(p.outFeatures);
-      return inF > 0 && outF > 0 ? inF * outF + outF : 0;
-    }
-    case "flatten":
-      return 0;
-    // ── Convolution ──────────────────────────────────────────────────────────
-    case "conv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k * k + outC : 0;
-    }
-    case "conv1d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k + outC : 0;
-    }
-    case "conv3d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k * k * k + outC : 0;
-    }
-    case "depthwiseConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const k = num(p.kernelSize, 3);
-      const dm = num(p.depthMultiplier, 1);
-      return inC * dm * k * k + inC * dm;
-    }
-    case "separableConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels, inC);
-      const k = num(p.kernelSize, 3);
-      return inC * k * k + inC * outC + outC;
-    }
-    case "transposeConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k * k + outC : 0;
-    }
-    case "deformableConv2d":
-    case "dilatedConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k * k + outC : 0;
-    }
-    case "invResidualBlock": {
-      const inC = num(p.inChannels ?? ch, 32);
-      const outC = num(p.outChannels, inC);
-      const e = num(p.expandRatio, 6);
-      const k = num(p.kernelSize, 3);
-      const mid = inC * e;
-      return mid > 0 ? inC * mid + mid + mid * k * k + mid + mid * outC + outC : 0;
-    }
-    // ── Pooling (no learnable params) ────────────────────────────────────────
-    case "maxpool2d":
-    case "avgpool2d":
-    case "adaptiveAvgPool2d":
-    case "globalAvgPool2d":
-    case "upsample":
-      return 0;
-    // ── NLP ─────────────────────────────────────────────────────────────────
-    case "embedding":
-    case "embeddingBag": {
-      const V = num(p.vocabSize ?? p.numEmbeddings);
-      const D = num(p.embeddingDim ?? p.embedDim);
-      return V > 0 && D > 0 ? V * D : 0;
-    }
-    case "learnedPositionalEmbedding": {
-      const L = num(p.maxLen ?? p.maxPositions ?? p.numPositions);
-      const D = num(p.embedDim ?? p.embeddingDim);
-      return L > 0 && D > 0 ? L * D : 0;
-    }
-    case "segmentEmbedding": {
-      const S = num(p.numSegments ?? p.numTypes, 2);
-      const D = num(p.embeddingDim ?? p.embedDim);
-      return S > 0 && D > 0 ? S * D : 0;
-    }
-    case "lstm": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
-      const dirs = p.bidirectional === true ? 2 : 1;
-      const layer0 = dirs * 4 * (I * H + H * H + 2 * H);
-      const layerRest = L > 1 ? (L - 1) * dirs * 4 * (dirs * H * H + H * H + 2 * H) : 0;
-      return layer0 + layerRest;
-    }
-    case "gru": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
-      const dirs = p.bidirectional === true ? 2 : 1;
-      const layer0 = dirs * 3 * (I * H + H * H + 2 * H);
-      const layerRest = L > 1 ? (L - 1) * dirs * 3 * (dirs * H * H + H * H + 2 * H) : 0;
-      return layer0 + layerRest;
-    }
-    case "rnn": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      return I * H + H * H + 2 * H;
-    }
-    case "bidirectionalLSTM": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
-      const layer0 = 2 * 4 * (I * H + H * H + 2 * H);
-      const layerRest = L > 1 ? (L - 1) * 2 * 4 * (2 * H * H + H * H + 2 * H) : 0;
-      return layer0 + layerRest;
-    }
-    case "attention":
-    case "selfAttention":
-    case "multiHeadAttention": {
-      const d = num(p.hiddenDim ?? p.embedDim);
-      return d > 0 ? 4 * d * d + 4 * d : 0;
-    }
-    case "crossModalAttention":
-    case "crossAttention":
-    case "coAttention":
-    case "linearAttention":
-    case "localAttention": {
-      const d = num(p.embedDim ?? p.hiddenDim);
-      return d > 0 ? 4 * d * d + 4 * d : 0;
-    }
-    // ── LLM ─────────────────────────────────────────────────────────────────
-    case "feedForward": {
-      const d = num(p.hiddenDim ?? p.embedDim);
-      const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
-      return d > 0 && ff > 0 ? d * ff + ff + ff * d + d : 0;
-    }
-    case "transformerBlock": {
-      const d = num(p.embedDim ?? p.hiddenDim);
-      const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
-      if (d <= 0) return 0;
-      return 4 * d * d + 4 * d + d * ff + ff + ff * d + d + 4 * d;
-    }
-    case "positionalEncoding":
-    case "rope":
-      return 0;
-    // learned or fixed, no gradient params
-    // ── Normalization ────────────────────────────────────────────────────────
-    case "layerNorm":
-    case "batchNorm":
-    case "instanceNorm": {
-      const feat = p.normalizedShape ?? p.numFeatures ?? lastDim;
-      const f = num(Array.isArray(feat) ? feat[0] : feat);
-      return f > 0 ? 2 * f : 0;
-    }
-    case "groupNorm": {
-      const c = num(p.numChannels ?? ch);
-      return c > 0 ? 2 * c : 0;
-    }
-    // ── RL ───────────────────────────────────────────────────────────────────
-    case "policyNetwork":
-    case "valueNetwork": {
-      const H = num(p.hiddenSize, 256);
-      const inF = num(lastDim, H);
-      return inF * H + H + H * H + H;
-    }
-    case "dqnHead": {
-      const H = num(p.hiddenSize ?? lastDim, 512);
-      const A = num(p.numActions, 18);
-      return H * A + A;
-    }
-    case "actorHead": {
-      const H = num(lastDim, 256);
-      const A = num(p.numActions, 6);
-      return H * A + A;
-    }
-    case "criticHead": {
-      const H = num(lastDim, 256);
-      const O = num(p.outputDim, 1);
-      return H * O + O;
-    }
-    // ── Graph ────────────────────────────────────────────────────────────────
-    case "graphConv":
-    case "gcn": {
-      const inC = num(p.inChannels ?? p.inFeatures);
-      const outC = num(p.outChannels ?? p.outFeatures);
-      return inC > 0 && outC > 0 ? inC * outC + outC : 0;
-    }
-    case "graphAttention":
-    case "gat": {
-      const inC = num(p.inChannels ?? p.inFeatures ?? lastDim);
-      const outC = num(p.outChannels ?? p.outFeatures);
-      const heads = num(p.numHeads ?? p.heads, 1);
-      return inC > 0 && outC > 0 ? heads * (inC * outC + 2 * outC) : 0;
-    }
-    case "graphSAGE": {
-      const inC = num(p.inChannels ?? p.inFeatures);
-      const outC = num(p.outChannels ?? p.outFeatures);
-      return inC > 0 && outC > 0 ? inC * 2 * outC + outC : 0;
-    }
-    // ── Multimodal ───────────────────────────────────────────────────────────
-    case "fusion": {
-      const inD = num(lastDim);
-      const d = num(p.fusionDim, 256);
-      return d > 0 && inD > 0 ? inD * d + d : 0;
-    }
-    case "projection": {
-      const inD = num(p.inDim ?? lastDim);
-      const outD = num(p.outDim);
-      return inD > 0 && outD > 0 ? inD * outD + outD : 0;
-    }
-    // ── Tabular ──────────────────────────────────────────────────────────────
-    case "tabnet": {
-      const fd = num(p.featureDim, 64);
-      const dd = num(p.decisionDim, 64);
-      const inF = num(p.inputDim ?? lastDim, fd);
-      const w = fd + dd;
-      return w > 0 ? inF * w + w + 4 * w * w : 0;
-    }
-    case "featureInteraction":
-      return 0;
-    // ── Audio ────────────────────────────────────────────────────────────────
-    case "audioConv": {
-      const inC = num(p.inChannels ?? 1, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
-      return outC > 0 ? inC * outC * k + outC : 0;
-    }
-    case "melSpectrogram":
-    case "mfcc":
-    case "stft":
-      return 0;
-    // ── New attention types ──────────────────────────────────────────────────
-    case "windowAttention": {
-      const D = num(p.embedDim, 96);
-      return D > 0 ? 4 * D * D : 0;
-    }
-    case "groupedQueryAttention": {
-      const D = num(p.embedDim, 4096);
-      const H = num(p.numHeads, 32);
-      const Hkv = num(p.numKVHeads, H);
-      const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
-      const qDim = H * headDim;
-      const kvDim = Hkv * headDim;
-      return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
-    }
-    case "causalAttention": {
-      const D = num(p.embedDim, 512);
-      return D > 0 ? 4 * D * D : 0;
-    }
-    case "adaptiveMaxPool2d":
-      return 0;
-    // no learnable params
-    // ── New activations ──────────────────────────────────────────────────────
-    case "prelu": {
-      return num(p.numParameters, 1);
-    }
-    case "rmsNorm": {
-      const ns = num(p.normalizedShape ?? lastDim, 512);
-      return ns;
-    }
-    // ── Transformer extras ───────────────────────────────────────────────────
-    case "swiglu": {
-      const D = num(p.embedDim ?? p.inFeatures, 4096);
-      const I = num(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(D * 8 / 3));
-      return D > 0 && I > 0 ? 3 * D * I : 0;
-    }
-    case "moeLayer": {
-      const D = num(p.embedDim, 512);
-      const E = num(p.numExperts, 8);
-      const I = num(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
-      return D > 0 && I > 0 ? D * E + E * 3 * D * I : 0;
-    }
-    case "patchEmbed": {
-      const inC = num(p.inChans ?? p.inChannels, 3);
-      const D = num(p.embedDim, 768);
-      const P = num(p.patchSize, 16);
-      return inC * D * P * P + D;
-    }
-    case "seBlock": {
-      const C = num(p.channels, 64);
-      const r = num(p.reductionRatio ?? p.reduction, 16);
-      const mid = Math.max(1, Math.floor(C / r));
-      return C * mid + mid + mid * C + C;
-    }
-    case "layerScale":
-      return num(p.dim, 512);
-    case "alibi":
-    case "dropPath":
-      return 0;
-    // ── Frontier architectures (2024-2025) ────────────────────────────────────
-    case "mla": {
-      const D = num(p.embedDim, 512);
-      const kv = num(p.kvLatentDim, 128);
-      return D > 0 ? 2 * D * D + 2 * D * kv : 0;
-    }
-    case "mamba2": {
-      const D = num(p.dModel, 512);
-      const E = num(p.expand, 2);
-      const S = num(p.dState, 128);
-      const inner = D * E;
-      return D > 0 ? 2 * D * inner + inner * D + inner * S : 0;
-    }
-    case "differentialAttention":
-    case "retention": {
-      const D = num(p.embedDim ?? p.dModel, 512);
-      return D > 0 ? 4 * D * D : 0;
-    }
-    case "rgLru": {
-      const D = num(p.dModel, 512);
-      const E = num(p.expand, 1);
-      const inner = D * E;
-      return D > 0 ? 2 * D * inner + 2 * inner : 0;
-    }
-    case "hyena": {
-      const D = num(p.dModel, 512);
-      const fo = num(p.filterOrder, 64);
-      const order = num(p.order, 2);
-      return D > 0 ? 2 * D * D + order * (D * fo + fo) : 0;
-    }
-    case "rwkv":
-    case "xlstm": {
-      const D = num(p.dModel, 512);
-      return D > 0 ? 4 * D * D : 0;
-    }
-    case "mixtureOfDepths": {
-      const D = num(p.dModel, 512);
-      return D > 0 ? D : 0;
-    }
-    case "tttLayer":
-    case "titansMemory": {
-      const D = num(p.dModel, 512);
-      const depth = num(p.memoryDepth, 2);
-      return D > 0 ? depth * D * D : 0;
-    }
-    case "multiTokenPrediction": {
-      const D = num(p.dModel, 512);
-      const V = num(p.vocabSize, 32e3);
-      const k = num(p.numFutureTokens, 2);
-      return D > 0 && V > 0 ? k * D * V : 0;
-    }
-    case "kan": {
-      const inF = num(p.inFeatures, 128);
-      const outF = num(p.outFeatures, 128);
-      const grid = num(p.gridSize, 5);
-      const order = num(p.splineOrder, 3);
-      return inF > 0 && outF > 0 ? inF * outF * (grid + order + 1) : 0;
-    }
-    case "geglu": {
-      const D = num(p.dim, 512);
-      const I = num(p.hiddenDim, D > 0 ? D * 4 : 0);
-      return D > 0 && I > 0 ? 3 * D * I : 0;
-    }
-    case "grn": {
-      const C = num(p.channels, 256);
-      return C > 0 ? 2 * C : 0;
-    }
-    case "qkNorm": {
-      const d = num(p.dim, 64);
-      return d > 0 ? 2 * d : 0;
-    }
-    // ── Frontier architectures (new batch) ────────────────────────────────────
-    case "deltaNet":
-    case "gatedDeltaNet":
-    case "gatedLinearAttention": {
-      const d = num(p.dModel, 512);
-      return d > 0 ? 4 * d * d : 0;
-    }
-    case "nativeSparseAttention": {
-      const d = num(p.embedDim, 512);
-      return d > 0 ? 4 * d * d : 0;
-    }
-    case "sharedExpertMoE": {
-      const d = num(p.embedDim, 4096);
-      const e = num(p.numExperts, 64);
-      const s = num(p.numSharedExperts, 2);
-      const I = num(p.expertDim, 1408);
-      return d > 0 && I > 0 ? d * e + (e + s) * 3 * d * I : 0;
-    }
-    case "ditBlock": {
-      const d = num(p.hiddenDim, 1152);
-      const cond = num(p.condDim, 1152);
-      return d > 0 ? 4 * d * d + 8 * d * d + 6 * cond * d : 0;
-    }
-    case "vectorQuantizer": {
-      const cb = num(p.codebookSize, 8192);
-      const d = num(p.embedDim, 256);
-      return cb > 0 && d > 0 ? cb * d : 0;
-    }
-    case "residualVQ": {
-      const q = num(p.numQuantizers, 8);
-      const cb = num(p.codebookSize, 1024);
-      const d = num(p.embedDim, 256);
-      return q > 0 && cb > 0 && d > 0 ? q * cb * d : 0;
-    }
-    case "perceiverLatent": {
-      const nL = num(p.numLatents, 64);
-      const lD = num(p.latentDim, 768);
-      return lD > 0 ? nL * lD + 4 * lD * lD : 0;
-    }
-    case "convNeXtBlock": {
-      const dim = num(p.dim, 96);
-      const k = num(p.kernelSize, 7);
-      const ex = num(p.expandRatio, 4);
-      return dim > 0 ? dim * k * k + dim + 2 * dim * (dim * ex) : 0;
-    }
-    case "s4Layer": {
-      const d = num(p.dModel, 512);
-      const s = num(p.dState, 64);
-      return d > 0 ? d * s * 2 + d * 2 : 0;
-    }
-    case "dyt": {
-      const dim = num(p.dim, 512);
-      return dim > 0 ? 2 * dim + 1 : 0;
-    }
-    case "film": {
-      const f = num(p.numFeatures, 256);
-      return f > 0 ? 2 * f : 0;
-    }
-    case "crossNetworkDCN": {
-      const nL = num(p.numLayers, 3);
-      const d = num(p.inputDim, 256);
-      return d > 0 ? nL * (d * d + d) : 0;
-    }
-    case "ftTransformerBlock": {
-      const d = num(p.dModel, 192);
-      const ff = num(p.ffMult, 4);
-      return d > 0 ? 4 * d * d + 2 * d * (d * ff) : 0;
-    }
-    case "deformableAttention": {
-      const d = num(p.embedDim, 256);
-      const h = num(p.numHeads, 8);
-      const pts = num(p.numPoints, 4);
-      const lv = num(p.numLevels, 4);
-      return d > 0 ? 2 * d * d + d * (h * lv * pts * 2) + d * (h * lv * pts) : 0;
-    }
-    case "attentionPool": {
-      const dim = num(p.dim, 512);
-      const seeds = num(p.numSeeds, 1);
-      return dim > 0 ? seeds * dim + 4 * dim * dim : 0;
-    }
-    case "revIN": {
-      if (p.affine === false) return 0;
-      const f = num(p.numFeatures, 7);
-      return f > 0 ? 2 * f : 0;
-    }
-    case "seriesDecomp":
-      return 0;
-    case "setAbstraction": {
-      const mlp = Array.isArray(p.mlp) ? p.mlp.map((x) => num(x, 0)) : [64, 64, 128];
-      let inC = 3 + 3;
-      let total = 0;
-      for (const outC of mlp) {
-        total += inC * outC + outC;
-        inC = outC;
-      }
-      return total;
-    }
-    case "sparseConv3d": {
-      const inC = num(p.inChannels, 32);
-      const outC = num(p.outChannels, 64);
-      const k = num(p.kernelSize, 3);
-      return inC > 0 && outC > 0 ? inC * outC * k * k * k + outC : 0;
-    }
-    case "nerfPositionalEncoding":
-      return 0;
-    case "dividedSpaceTimeAttention": {
-      const d = num(p.embedDim, 768);
-      return d > 0 ? 2 * (4 * d * d) : 0;
-    }
-    case "tubeletEmbed": {
-      const D = num(p.embedDim, 768);
-      const t = Array.isArray(p.tubeletSize) ? p.tubeletSize.map((x) => num(x, 1)) : [2, 16, 16];
-      const inC = num(p.inChans ?? p.inChannels, 3);
-      const kvol = (t[0] || 1) * (t[1] || 1) * (t[2] || 1);
-      return D > 0 ? inC * D * kvol + D : 0;
-    }
-    // ── Non-LLM coverage (audio / SSM / vision / diffusion) ──────────────────
-    case "conformerBlock": {
-      const d = num(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
-      const k = num(p.kernelSize, 31);
-      if (d <= 0) return 0;
-      const ff = p.ffDim != null ? num(p.ffDim, d * 4) : d * num(p.ffMult, 4);
-      const ffn = 2 * (2 * d * ff);
-      const mha = 4 * d * d;
-      const conv = 2 * d * d + d * k + d * d;
-      return ffn + mha + conv + 6 * d;
-    }
-    case "mamba": {
-      const d = num(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
-      const e = num(p.expand, 2);
-      const dState = num(p.dState, 16);
-      const dConv = num(p.dConv, 4);
-      if (d <= 0) return 0;
-      const di = d * e;
-      return d * (2 * di) + di * dConv + di * (2 * dState) + di * dState + di * d;
-    }
-    case "relativePositionBias": {
-      const h = num(p.numHeads, 8);
-      const b = num(p.numBuckets, 32);
-      return h * b;
-    }
-    case "fpn": {
-      const outC = num(p.outChannels, 256);
-      const ins = Array.isArray(p.inChannels) ? p.inChannels.map((x) => num(x)) : [num(p.inChannels, outC)];
-      if (outC <= 0) return 0;
-      let total = 0;
-      for (const inC of ins) total += inC * outC + outC;
-      total += ins.length * (outC * outC * 9 + outC);
-      return total;
-    }
-    case "timeEmbedding": {
-      const d = num(p.dim ?? p.embedDim ?? p.hiddenDim, 256);
-      return d > 0 ? 2 * d * d + 2 * d : 0;
-    }
-    case "lmHead": {
-      const V = num(p.vocabSize ?? p.numEmbeddings);
-      const d = num(p.inFeatures ?? p.hiddenSize ?? p.embedDim ?? lastDim);
-      const bias = p.bias === true ? V : 0;
-      return V > 0 && d > 0 ? d * V + bias : 0;
-    }
-    case "adaIN": {
-      const f = num(p.numFeatures ?? p.embedDim ?? lastDim);
-      return f > 0 ? 2 * f : 0;
-    }
-    // ── No learnable params ──────────────────────────────────────────────────
-    default:
-      return 0;
-  }
-}
-
-// src/utils/flopsEstimator.ts
-function n(v, fallback = 0) {
-  const x = typeof v === "number" ? v : Number(v);
-  return isFinite(x) && x > 0 ? x : fallback;
-}
-function spatialElements(shape) {
-  if (shape.length < 3) return 1;
-  return shape.slice(2).reduce((a, b) => a * b, 1);
-}
-function estimateLayerFlops(type, params, inputShape, outputShape) {
-  const p = params;
-  switch (type) {
-    // ── Linear / Dense ──────────────────────────────────────────────────────
-    case "linear": {
-      const inF = n(p.inFeatures ?? inputShape[inputShape.length - 1]);
-      const outF = n(p.outFeatures ?? outputShape[outputShape.length - 1]);
-      const batch = outputShape.slice(0, -1).reduce((a, b) => a * b, 1) || 1;
-      return inF * outF * batch;
-    }
-    // ── Convolutions ─────────────────────────────────────────────────────────
-    case "conv2d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const Cout = n(p.outChannels ?? outputShape[0], 1);
-      const kH = n(p.kernelSize, 3);
-      const kW = typeof p.kernelSize === "object" ? n(p.kernelSize[1], kH) : kH;
-      const groups = n(p.groups, 1);
-      const Hout = outputShape[1] ?? 1;
-      const Wout = outputShape[2] ?? 1;
-      return Cin / groups * Cout * kH * kW * Hout * Wout;
-    }
-    case "conv1d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const Cout = n(p.outChannels ?? outputShape[0], 1);
-      const kL = n(p.kernelSize, 3);
-      const Lout = outputShape[1] ?? 1;
-      return Cin * Cout * kL * Lout;
-    }
-    case "conv3d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const Cout = n(p.outChannels ?? outputShape[0], 1);
-      const k = n(p.kernelSize, 3);
-      const spat = spatialElements(outputShape);
-      return Cin * Cout * k * k * k * spat;
-    }
-    case "depthwiseConv2d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const dm = n(p.depthMultiplier, 1);
-      const k = n(p.kernelSize, 3);
-      const spat = spatialElements(outputShape);
-      return Cin * dm * k * k * spat;
-    }
-    case "separableConv2d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const Cout = n(p.outChannels ?? outputShape[0], Cin);
-      const k = n(p.kernelSize, 3);
-      const spat = spatialElements(outputShape);
-      const depthwise = Cin * k * k * spat;
-      const pointwise = Cin * Cout * spat;
-      return depthwise + pointwise;
-    }
-    case "transposeConv2d": {
-      const Cin = n(p.inChannels ?? inputShape[0], 1);
-      const Cout = n(p.outChannels ?? outputShape[0], 1);
-      const k = n(p.kernelSize, 3);
-      const spat = spatialElements(outputShape);
-      return Cin * Cout * k * k * spat;
-    }
-    // ── Attention ─────────────────────────────────────────────────────────────
-    case "multiHeadAttention":
-    case "attention":
-    case "selfAttention":
-    case "crossModalAttention":
-    case "causalAttention": {
-      const D = n(p.embedDim ?? p.hiddenDim ?? inputShape[inputShape.length - 1]);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      const qkv = 3 * T * D * D;
-      const attn = T * T * D;
-      const out = T * D * D;
-      return qkv + attn + out;
-    }
-    case "windowAttention": {
-      const D = n(p.embedDim, 96);
-      const W = n(p.windowSize, 7);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : W * W;
-      const numWindows = Math.max(1, Math.round(T / (W * W)));
-      const wsq = W * W;
-      return numWindows * (3 * wsq * D * D + wsq * wsq * D + wsq * D * D);
-    }
-    case "groupedQueryAttention": {
-      const D = n(p.embedDim, 4096);
-      const H = n(p.numHeads, 32);
-      const Hkv = n(p.numKVHeads, H);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      const headDim = n(p.headDim, H > 0 ? Math.floor(D / H) : 128);
-      const qDim = H * headDim;
-      const kvDim = Hkv * headDim;
-      const q_proj = T * D * qDim;
-      const kv_proj = 2 * T * D * kvDim;
-      const attn_w = T * T * qDim;
-      const o_proj = T * qDim * D;
-      return q_proj + kv_proj + attn_w + o_proj;
-    }
-    // ── Recurrent ─────────────────────────────────────────────────────────────
-    case "lstm": {
-      const H = n(p.hiddenSize, 128);
-      const I = n(p.inputSize ?? inputShape[inputShape.length - 1], H);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      const L = n(p.numLayers, 1);
-      const layer0 = 4 * T * (I * H + H * H);
-      const layerRest = L > 1 ? (L - 1) * 4 * T * 2 * H * H : 0;
-      return layer0 + layerRest;
-    }
-    case "gru": {
-      const H = n(p.hiddenSize, 128);
-      const I = n(p.inputSize ?? inputShape[inputShape.length - 1], H);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      const L = n(p.numLayers, 1);
-      const layer0 = 3 * T * (I * H + H * H);
-      const layerRest = L > 1 ? (L - 1) * 3 * T * 2 * H * H : 0;
-      return layer0 + layerRest;
-    }
-    case "rnn": {
-      const H = n(p.hiddenSize, 128);
-      const I = n(p.inputSize ?? inputShape[inputShape.length - 1], H);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return T * (I * H + H * H);
-    }
-    case "bidirectionalLSTM": {
-      const H = n(p.hiddenSize, 128);
-      const I = n(p.inputSize ?? inputShape[inputShape.length - 1], H);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return 2 * 4 * T * (I * H + H * H);
-    }
-    // ── Transformer block ─────────────────────────────────────────────────────
-    case "transformerBlock": {
-      const D = n(p.embedDim ?? p.hiddenDim);
-      const ff = n(p.ffDim, D > 0 ? D * 4 : 0);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      const mha = 4 * T * D * D + T * T * D;
-      const ffn = 2 * T * D * ff;
-      return mha + ffn;
-    }
-    // ── Feed-forward (MLP block) ──────────────────────────────────────────────
-    case "feedForward": {
-      const D = n(p.embedDim ?? p.hiddenDim);
-      const ff = n(p.ffDim, D > 0 ? D * 4 : 0);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 && ff > 0 ? 2 * T * D * ff : 0;
-    }
-    // ── Normalization (lightweight but non-zero) ──────────────────────────────
-    case "batchNorm":
-    case "layerNorm":
-    case "rmsNorm":
-    case "instanceNorm":
-    case "groupNorm": {
-      const elems = outputShape.reduce((a, b) => a * b, 1);
-      return Math.round(elems * 2);
-    }
-    // ── Pooling ───────────────────────────────────────────────────────────────
-    case "maxpool2d":
-    case "avgpool2d": {
-      const k = n(p.kernelSize, 2);
-      const spat = spatialElements(outputShape);
-      const C = outputShape[0] ?? 1;
-      return C * k * k * spat;
-    }
-    case "adaptiveAvgPool2d":
-    case "globalAvgPool2d": {
-      const Cin = inputShape[0] ?? 1;
-      const inSpat = spatialElements(inputShape);
-      return Cin * inSpat;
-    }
-    // ── Activations (element-wise, ~1 MAC each) ───────────────────────────────
-    case "relu":
-    case "leakyRelu":
-    case "sigmoid":
-    case "tanh":
-    case "softmax": {
-      return outputShape.reduce((a, b) => a * b, 1);
-    }
-    case "gelu":
-    case "swish":
-    case "silu": {
-      return outputShape.reduce((a, b) => a * b, 1) * 4;
-    }
-    // ── Embedding lookup (0 MACs — just a gather) ────────────────────────────
-    case "embedding":
-    case "embeddingBag":
-    case "positionalEncoding":
-    case "rope":
-      return 0;
-    // ── Transformer extras ────────────────────────────────────────────────────
-    case "swiglu": {
-      const D = n(p.embedDim ?? p.inFeatures, 4096);
-      const I = n(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(D * 8 / 3));
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return T > 0 && D > 0 && I > 0 ? T * (2 * D * I + I + I * D) : 0;
-    }
-    case "moeLayer": {
-      const D = n(p.embedDim, 512);
-      const E = n(p.numExperts, 8);
-      const K = n(p.topK, 2);
-      const I = n(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return T > 0 && D > 0 && I > 0 ? T * D * E + K * T * (2 * D * I + I + I * D) : 0;
-    }
-    case "patchEmbed": {
-      const P = n(p.patchSize, 16);
-      const D = n(p.embedDim, 768);
-      const inC = n(p.inChans ?? p.inChannels, 3);
-      const H = inputShape[1] ?? 224;
-      const W = inputShape[2] ?? 224;
-      const nPat = Math.floor(H / P) * Math.floor(W / P);
-      return inC * D * P * P * nPat;
-    }
-    case "seBlock": {
-      const C = n(p.channels, 64);
-      const r = n(p.reductionRatio ?? p.reduction, 16);
-      const mid = Math.max(1, Math.floor(C / r));
-      const spat = spatialElements(inputShape);
-      return C * spat + C * mid + mid * C;
-    }
-    case "alibi":
-    case "dropPath":
-    case "layerScale":
-      return 0;
-    // ── Frontier architectures (2024-2025) ────────────────────────────────────
-    case "mla":
-    case "differentialAttention":
-    case "retention": {
-      const D = n(p.embedDim ?? p.dModel, 512);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      return 4 * T * D * D + T * T * D;
-    }
-    case "mamba2":
-    case "rwkv":
-    case "xlstm":
-    case "rgLru":
-    case "hyena":
-    case "tttLayer":
-    case "titansMemory": {
-      const D = n(p.dModel ?? p.embedDim, 512);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? 4 * T * D * D : 0;
-    }
-    case "mixtureOfDepths": {
-      const D = n(p.dModel, 512);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? T * D : 0;
-    }
-    case "multiTokenPrediction": {
-      const D = n(p.dModel, 512);
-      const V = n(p.vocabSize, 32e3);
-      const k = n(p.numFutureTokens, 2);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 && V > 0 ? k * T * D * V : 0;
-    }
-    case "kan": {
-      const inF = n(p.inFeatures, 128);
-      const outF = n(p.outFeatures, 128);
-      const grid = n(p.gridSize, 5);
-      const order = n(p.splineOrder, 3);
-      const batch = outputShape.slice(0, -1).reduce((a, b) => a * b, 1) || 1;
-      return inF * outF * (grid + order + 1) * batch;
-    }
-    case "geglu": {
-      const D = n(p.dim, 512);
-      const I = n(p.hiddenDim, D > 0 ? D * 4 : 0);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 && I > 0 ? T * (2 * D * I + I + I * D) : 0;
-    }
-    case "grn":
-    case "qkNorm": {
-      const elems = outputShape.reduce((a, b) => a * b, 1);
-      return Math.round(elems * 2);
-    }
-    // ── Frontier architectures (new batch) ────────────────────────────────────
-    case "deltaNet":
-    case "gatedDeltaNet":
-    case "gatedLinearAttention":
-    case "s4Layer": {
-      const D = n(p.dModel ?? p.embedDim, 512);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? 4 * T * D * D : 0;
-    }
-    case "nativeSparseAttention": {
-      const D = n(p.embedDim, 512);
-      const blk = n(p.blockSize, 64);
-      const top = n(p.topBlocks, 16);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? 4 * T * D * D + T * (top * blk) * D : 0;
-    }
-    case "ditBlock": {
-      const D = n(p.hiddenDim, 1152);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      return 4 * T * D * D + T * T * D + 2 * T * D * (D * 4);
-    }
-    case "sharedExpertMoE": {
-      const D = n(p.embedDim, 4096);
-      const s = n(p.numSharedExperts, 2);
-      const K = n(p.topK, 6);
-      const I = n(p.expertDim, 1408);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 && I > 0 ? T * D * n(p.numExperts, 64) + (K + s) * T * (2 * D * I + I + I * D) : 0;
-    }
-    case "vectorQuantizer": {
-      const cb = n(p.codebookSize, 8192);
-      const D = n(p.embedDim, 256);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return cb > 0 && D > 0 ? T * cb * D : 0;
-    }
-    case "residualVQ": {
-      const q = n(p.numQuantizers, 8);
-      const cb = n(p.codebookSize, 1024);
-      const D = n(p.embedDim, 256);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return q > 0 && cb > 0 && D > 0 ? T * q * cb * D : 0;
-    }
-    case "perceiverLatent": {
-      const nL = n(p.numLatents, 64);
-      const lD = n(p.latentDim, 768);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return lD > 0 ? nL * T * lD + 4 * nL * lD * lD : 0;
-    }
-    case "convNeXtBlock": {
-      const dim = n(p.dim, 96);
-      const k = n(p.kernelSize, 7);
-      const ex = n(p.expandRatio, 4);
-      const spat = spatialElements(outputShape);
-      return dim > 0 ? dim * k * k * spat + 2 * dim * (dim * ex) * spat : 0;
-    }
-    case "dyt":
-    case "film": {
-      return outputShape.reduce((a, b) => a * b, 1);
-    }
-    case "crossNetworkDCN": {
-      const nL = n(p.numLayers, 3);
-      const D = n(p.inputDim, 256);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? T * nL * D * D : 0;
-    }
-    case "ftTransformerBlock": {
-      const D = n(p.dModel, 192);
-      const ff = n(p.ffMult, 4);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      if (D === 0) return 0;
-      return 4 * T * D * D + T * T * D + 2 * T * D * (D * ff);
-    }
-    case "deformableAttention": {
-      const D = n(p.embedDim, 256);
-      const h = n(p.numHeads, 8);
-      const pts = n(p.numPoints, 4);
-      const lv = n(p.numLevels, 4);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? 2 * T * D * D + T * (h * lv * pts) * D : 0;
-    }
-    case "attentionPool": {
-      const D = n(p.dim, 512);
-      const seeds = n(p.numSeeds, 1);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? seeds * T * D + 4 * seeds * D * D : 0;
-    }
-    case "revIN":
-      return inputShape.reduce((a, b) => a * b, 1) * 2;
-    case "seriesDecomp":
-      return inputShape.reduce((a, b) => a * b, 1) * n(p.kernelSize, 25);
-    case "setAbstraction": {
-      const mlp = Array.isArray(p.mlp) ? p.mlp.map((x) => n(x, 0)) : [64, 64, 128];
-      const numPoints = n(p.numPoints, 512);
-      const numSamples = n(p.numSamples, 32);
-      let inC = 3 + 3;
-      let total = 0;
-      for (const outC of mlp) {
-        total += inC * outC;
-        inC = outC;
-      }
-      return numPoints * numSamples * total;
-    }
-    case "sparseConv3d": {
-      const inC = n(p.inChannels, 32);
-      const outC = n(p.outChannels, 64);
-      const k = n(p.kernelSize, 3);
-      const spat = spatialElements(outputShape);
-      return inC > 0 && outC > 0 ? inC * outC * k * k * k * spat : 0;
-    }
-    case "nerfPositionalEncoding":
-      return inputShape.reduce((a, b) => a * b, 1) * n(p.numFrequencies, 10) * 2;
-    case "dividedSpaceTimeAttention": {
-      const D = n(p.embedDim, 768);
-      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
-      return D > 0 ? 2 * (4 * T * D * D + T * T * D) : 0;
-    }
-    case "tubeletEmbed": {
-      const D = n(p.embedDim, 768);
-      const t = Array.isArray(p.tubeletSize) ? p.tubeletSize.map((x) => n(x, 1)) : [2, 16, 16];
-      const inC = n(p.inChans ?? p.inChannels, 3);
-      const kvol = (t[0] || 1) * (t[1] || 1) * (t[2] || 1);
-      const numTubelets = outputShape.length >= 1 ? outputShape[outputShape.length - 2] ?? 196 : 196;
-      return D > 0 ? numTubelets * inC * D * kvol : 0;
-    }
-    // ── Dropout / Flatten / IO (0 MACs) ──────────────────────────────────────
-    case "dropout":
-    case "flatten":
-    case "input":
-    case "output":
-      return 0;
-    default:
-      return 0;
-  }
-}
+// src/utils/lintEngine.ts
+init_paramEstimator();
 
 // src/utils/hardwareSpecs.ts
 var GPU_HARDWARE = [
@@ -5475,15 +6965,6 @@ var GPU_HARDWARE = [
   { id: "tpu-v6e", label: "TPU v6e (32 GB)", tier: "tpu", memoryGB: 32, bf16TFLOPS: 918, fp32TFLOPS: 918, memBandwidthGBs: 1640, nvlinkGBs: 360, nodeEgressGBs: 0 }
 ];
 var BY_ID = new Map(GPU_HARDWARE.map((g) => [g.id, g]));
-function kvCachePerTokenBytes(spec) {
-  const L = Math.max(0, spec.numLayers);
-  if (spec.mlaLatentDim && spec.mlaLatentDim > 0) {
-    return (spec.mlaLatentDim + (spec.mlaRopeDim ?? 0)) * spec.bytesPerValue * L;
-  }
-  const kvHeads = spec.kvHeads ?? 0;
-  const headDim = spec.headDim ?? 0;
-  return 2 * kvHeads * headDim * spec.bytesPerValue * L;
-}
 
 // src/utils/costEstimator.ts
 var GPU_SPECS = GPU_HARDWARE.filter((g) => g.tier !== "apple" && g.tier !== "tpu").map((g) => ({
@@ -5494,61 +6975,6 @@ var GPU_SPECS = GPU_HARDWARE.filter((g) => g.tier !== "apple" && g.tier !== "tpu
   peakFP32TFLOPS: g.fp32TFLOPS,
   memBandwidthGBs: g.memBandwidthGBs
 }));
-function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
-  const p = c.params || {};
-  const n2 = (v, fb = 0) => {
-    const x = typeof v === "number" ? v : Number(v);
-    return isFinite(x) && x > 0 ? x : fb;
-  };
-  const fullAttention = (dim, heads) => kvCachePerTokenBytes({
-    numLayers: 1,
-    bytesPerValue,
-    kvHeads: heads,
-    headDim: heads > 0 ? dim / heads : dim
-  });
-  switch (c.type) {
-    case "multiHeadAttention":
-    case "selfAttention":
-    case "causalAttention":
-    case "transformerBlock":
-    case "attention":
-    case "crossAttention":
-    case "differentialAttention":
-    case "nativeSparseAttention": {
-      const dim = n2(p.embedDim ?? p.hiddenDim, 768);
-      const heads = n2(p.numHeads, 1);
-      return fullAttention(dim, heads);
-    }
-    case "localAttention":
-    case "windowAttention": {
-      const dim = n2(p.embedDim ?? p.hiddenDim, 768);
-      const heads = n2(p.numHeads, 1);
-      const window = n2(p.windowSize, c.type === "localAttention" ? 256 : 7);
-      const full = fullAttention(dim, heads);
-      if (seqLen && seqLen > window) return full * (window / seqLen);
-      return full;
-    }
-    case "linearAttention":
-      return 0;
-    case "groupedQueryAttention": {
-      const dim = n2(p.embedDim, 768);
-      const heads = n2(p.numHeads, 8);
-      const kvHeads = n2(p.numKVHeads, heads);
-      const headDim = n2(p.headDim, heads > 0 ? dim / heads : 64);
-      return kvCachePerTokenBytes({ numLayers: 1, bytesPerValue, kvHeads, headDim });
-    }
-    case "mla": {
-      const latent = n2(p.kvLatentDim, 128);
-      const ropeDim = n2(p.ropeHeadDim, 0);
-      return kvCachePerTokenBytes({ numLayers: 1, bytesPerValue, mlaLatentDim: latent, mlaRopeDim: ropeDim });
-    }
-    default:
-      return 0;
-  }
-}
-function kvBytesPerTokenForModel(model, bytesPerValue = 2, seqLen) {
-  return model.components.reduce((s, c) => s + kvCachePerTokenFor(c, bytesPerValue, seqLen), 0);
-}
 
 // src/utils/shapeInference.ts
 var ELEMENTWISE_MERGE = /* @__PURE__ */ new Set(["add", "multiply", "mean"]);
@@ -5581,8 +7007,8 @@ var HEAD_DIM_LAYERS = /* @__PURE__ */ new Set([
   "ditBlock",
   "mla"
 ]);
-function isFiniteDim(n2) {
-  return typeof n2 === "number" && Number.isFinite(n2);
+function isFiniteDim(n) {
+  return typeof n === "number" && Number.isFinite(n);
 }
 function shapeIsInvalid(s) {
   if (!s || s.length === 0) return false;
@@ -5911,6 +7337,13 @@ function dedupe(findings) {
   return out;
 }
 function lintModelGraph(model) {
+  if (!model || !Array.isArray(model.components)) return [];
+  const usable = model.components.filter(
+    (c) => !!c && typeof c === "object"
+  );
+  if (usable.length !== model.components.length) {
+    model = { ...model, components: usable };
+  }
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const findings = [];
   for (const issue of runAdvisorRules(model)) {
@@ -5937,95 +7370,7 @@ function lintModelGraph(model) {
   return dedupe(findings);
 }
 
-// src/utils/structuralIndex.ts
-function fnv1a(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
-function computeDepth(model) {
-  const ids = model.components.map((c) => c.id);
-  if (ids.length === 0) return 0;
-  const adj = /* @__PURE__ */ new Map();
-  const indeg = /* @__PURE__ */ new Map();
-  for (const id of ids) {
-    adj.set(id, []);
-    indeg.set(id, 0);
-  }
-  for (const e of model.connections) {
-    if (!adj.has(e.from) || !indeg.has(e.to)) continue;
-    if (e.from === e.to) continue;
-    adj.get(e.from).push(e.to);
-    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
-  }
-  const dist = new Map(ids.map((id) => [id, 0]));
-  const queue = ids.filter((id) => (indeg.get(id) ?? 0) === 0);
-  let processed = 0;
-  let best = 0;
-  while (queue.length > 0) {
-    const u = queue.shift();
-    processed++;
-    for (const v of adj.get(u) ?? []) {
-      const cand = (dist.get(u) ?? 0) + 1;
-      if (cand > (dist.get(v) ?? 0)) {
-        dist.set(v, cand);
-        best = Math.max(best, cand);
-      }
-      indeg.set(v, (indeg.get(v) ?? 0) - 1);
-      if ((indeg.get(v) ?? 0) === 0) queue.push(v);
-    }
-  }
-  return processed === ids.length ? best : 0;
-}
-function typeHistogramOf(model) {
-  const counts = /* @__PURE__ */ new Map();
-  for (const c of model.components) {
-    counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
-  }
-  const histogram = [...counts.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([t, n2]) => `${t}:${n2}`).join("|");
-  return { histogram, counts };
-}
-function architectureFingerprint(model) {
-  const { histogram, counts } = typeHistogramOf(model);
-  const signature = `${histogram}#e${model.connections.length}`;
-  return {
-    hash: fnv1a(signature),
-    layerCount: model.components.length,
-    connectionCount: model.connections.length,
-    depth: computeDepth(model),
-    typeHistogram: histogram,
-    distinctTypes: counts.size
-  };
-}
-
 // src/utils/lintEngine.ts
-function lintPyTorchSource(code) {
-  let model = null;
-  try {
-    const parsed = parsePyTorchCode(code);
-    if (parsed && parsed.components.length > 0) {
-      model = {
-        id: "ci-lint",
-        name: "ci-lint",
-        components: parsed.components,
-        connections: parsed.connections
-      };
-    }
-  } catch {
-    model = null;
-  }
-  if (!model) return { parsed: false, componentCount: 0, findings: [] };
-  const realLayers = model.components.filter((c) => c.type !== "input" && c.type !== "output");
-  if (realLayers.length === 0) return { parsed: false, componentCount: 0, findings: [] };
-  return {
-    parsed: true,
-    componentCount: model.components.length,
-    findings: lintModelGraph(model)
-  };
-}
 function graphFromPyTorchSource(code, name = "model") {
   try {
     const parsed = parsePyTorchCode(code);
@@ -6046,9 +7391,9 @@ function stabilizeIds(model) {
   const remap = /* @__PURE__ */ new Map();
   const perType = /* @__PURE__ */ new Map();
   for (const c of model.components) {
-    const n2 = (perType.get(c.type) ?? 0) + 1;
-    perType.set(c.type, n2);
-    remap.set(c.id, `${c.type}-${n2}`);
+    const n = (perType.get(c.type) ?? 0) + 1;
+    perType.set(c.type, n);
+    remap.set(c.id, `${c.type}-${n}`);
   }
   const to = (id) => remap.get(id) ?? id;
   return {
@@ -6067,39 +7412,4258 @@ function stabilizeIds(model) {
     }))
   };
 }
-function toModelFile(model) {
-  return wrapModelFile(model);
-}
-function physicsFromPyTorchSource(code) {
-  const none = { parsed: false, components: 0, params: 0, flopsMAC: 0, kvBytesPerToken: 0 };
-  let model = null;
+
+// src/utils/customLayerStore.ts
+var STORAGE_KEY = "neurarch-custom-layers";
+function load() {
   try {
-    const parsed = parsePyTorchCode(code);
-    if (parsed && parsed.components.length > 0) {
-      model = { id: "ci-phys", name: "ci-phys", components: parsed.components, connections: parsed.connections };
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+function getCustomLayerById(id) {
+  return load().find((l) => l.id === id);
+}
+
+// src/utils/codeGenerator.ts
+function pyDim(v, fallback) {
+  if (Array.isArray(v)) return `(${v.map((n) => typeof n === "number" ? n : Number(n) || 0).join(", ")})`;
+  if (v === void 0 || v === null || v === "") return String(fallback);
+  return String(v);
+}
+function computeOutputShape(comp, inputShape, _model) {
+  if (!inputShape || !Array.isArray(inputShape)) return null;
+  const def = componentRegistry[comp.type];
+  if (!def || !def.computeOutputShape) return null;
+  try {
+    const outputShape = def.computeOutputShape(inputShape, comp.params);
+    return Array.isArray(outputShape) ? outputShape : null;
+  } catch (e) {
+    return null;
+  }
+}
+function getInputShape(comp, model, compMap, connToFrom) {
+  if (comp.type === "input") {
+    const shape = comp.params.shape;
+    return Array.isArray(shape) ? shape : null;
+  }
+  const srcId = comp.inputs[0] ?? connToFrom.get(comp.id);
+  if (!srcId) return null;
+  const srcComp = compMap.get(srcId);
+  if (!srcComp) return null;
+  return getOutputShape(srcComp, model, compMap, connToFrom);
+}
+function getOutputShape(comp, model, compMap, connToFrom) {
+  const inputShape = getInputShape(comp, model, compMap, connToFrom);
+  if (!inputShape) return null;
+  return computeOutputShape(comp, inputShape, model);
+}
+var SHARED_EXPERT_MOE_CLASS = `class SharedExpertMoE(nn.Module):
+    """Shared-expert MoE: top-k routed experts plus always-on shared experts."""
+    def __init__(self, embed_dim, num_experts, num_shared, expert_dim, top_k):
+        super().__init__()
+        def expert():
+            return nn.ModuleDict({
+                'gate_proj': nn.Linear(embed_dim, expert_dim, bias=False),
+                'up_proj':   nn.Linear(embed_dim, expert_dim, bias=False),
+                'down_proj': nn.Linear(expert_dim, embed_dim, bias=False),
+            })
+        self.router  = nn.Linear(embed_dim, num_experts, bias=False)
+        self.experts = nn.ModuleList([expert() for _ in range(num_experts)])
+        self.shared  = nn.ModuleList([expert() for _ in range(num_shared)])
+        self.top_k   = top_k
+
+    @staticmethod
+    def _ffn(e, x):
+        return e['down_proj'](F.silu(e['gate_proj'](x)) * e['up_proj'](x))
+
+    def forward(self, x):
+        scores = self.router(x).softmax(dim=-1)
+        top_w, top_i = scores.topk(self.top_k, dim=-1)
+        out = x.new_zeros(x.shape) + sum(self._ffn(s, x) for s in self.shared)
+        flat_x, flat_o = x.reshape(-1, x.size(-1)), out.reshape(-1, x.size(-1))
+        flat_i, flat_w = top_i.reshape(-1, self.top_k), top_w.reshape(-1, self.top_k)
+        for e_idx in flat_i.unique():
+            hit  = flat_i == e_idx
+            rows = hit.any(dim=-1)
+            w    = (flat_w * hit).sum(dim=-1)[rows].unsqueeze(-1)
+            flat_o[rows] += w * self._ffn(self.experts[int(e_idx)], flat_x[rows])
+        return flat_o.view_as(x)
+
+`;
+var MOE_FORWARD_METHOD = `
+    @staticmethod
+    def _moe_forward(moe, x, top_k=2):
+        """Top-k routed MoE forward over a {'router', 'experts'} ModuleDict."""
+        scores = moe['router'](x).softmax(dim=-1)
+        top_w, top_i = scores.topk(top_k, dim=-1)
+        top_w = top_w / top_w.sum(dim=-1, keepdim=True)
+        flat_x = x.reshape(-1, x.size(-1))
+        flat_i = top_i.reshape(-1, top_k)
+        flat_w = top_w.reshape(-1, top_k)
+        out = torch.zeros_like(flat_x)
+        for e_idx in flat_i.unique():
+            hit = flat_i == e_idx
+            rows = hit.any(dim=-1)
+            w = (flat_w * hit).sum(dim=-1)[rows].unsqueeze(-1)
+            out[rows] += w * moe['experts'][int(e_idx)](flat_x[rows])
+        return out.view_as(x)
+`;
+var INTENTIONAL_PASSTHROUGH = /* @__PURE__ */ new Set(["positionalEncoding", "rope", "residual", "skipConnection"]);
+function isUnsupportedPassthrough(comp) {
+  if (comp.type === "input" || comp.type === "output" || comp.type === "stickyNote") return false;
+  if (INTENTIONAL_PASSTHROUGH.has(comp.type)) return false;
+  return generateForwardCode(comp, "probe", { id: "", name: "", components: [], connections: [], groups: [] }, /* @__PURE__ */ new Map(), /* @__PURE__ */ new Map()) === null;
+}
+function groupClassName(name) {
+  return name.split(/[\s\-_]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("").replace(/[^a-zA-Z0-9_]/g, "").replace(/^([0-9])/, "_$1") || "Group";
+}
+function generateGroupSubmodule(group, model, compMap, connToFrom) {
+  const memberSet = new Set(group.componentIds);
+  const members = model.components.filter((c) => memberSet.has(c.id));
+  const className = groupClassName(group.name);
+  const memberTopo = topologicalSort(members, {
+    components: members,
+    connections: model.connections.filter((c) => memberSet.has(c.from) && memberSet.has(c.to)),
+    id: "",
+    name: "",
+    groups: []
+  });
+  let code = `class ${className}(nn.Module):
+`;
+  code += `    """${group.name}: auto-generated submodule"""
+`;
+  code += `    def __init__(self):
+`;
+  code += `        super().__init__()
+`;
+  const layerCounter = {};
+  const memberLayerNames = {};
+  for (const comp of memberTopo) {
+    if (comp.type === "input" || comp.type === "output" || comp.type === "stickyNote") continue;
+    const baseName = comp.type;
+    const count = (layerCounter[baseName] || 0) + 1;
+    layerCounter[baseName] = count;
+    const layerName = `${baseName}_${count}`;
+    memberLayerNames[comp.id] = layerName;
+    const layerCode = generateLayerCode(comp, model, compMap, connToFrom);
+    if (layerCode) code += `        self.${layerName} = ${layerCode}
+`;
+  }
+  if (memberTopo.some((c) => c.type === "moeLayer")) {
+    code += MOE_FORWARD_METHOD;
+  }
+  code += "\n    def forward(self, x):\n";
+  const memberVars = /* @__PURE__ */ new Map();
+  for (const comp of memberTopo) {
+    if (comp.type === "stickyNote") continue;
+    if (comp.type === "input") {
+      memberVars.set(comp.id, "x");
+      continue;
+    }
+    if (comp.type === "output") {
+      const last = comp.inputs[0] ? memberVars.get(comp.inputs[0]) ?? "x" : "x";
+      code += `        return ${last}
+`;
+      continue;
+    }
+    const layerName = memberLayerNames[comp.id];
+    const fwd = generateForwardCode(comp, layerName, model, memberVars, connToFrom);
+    if (fwd) {
+      const varName = `${comp.type.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "")}_${comp.id.slice(-4)}`;
+      memberVars.set(comp.id, varName);
+      code += `        ${varName} = ${fwd}
+`;
+    } else {
+      const prevId = comp.inputs[0] ?? connToFrom.get(comp.id);
+      const passVar = prevId ? memberVars.get(prevId) ?? "x" : "x";
+      memberVars.set(comp.id, passVar);
+      if (isUnsupportedPassthrough(comp)) {
+        code += `        # TODO: layer '${comp.name}' (${comp.type}) is not yet supported by the exporter; passing through unchanged
+`;
+      }
+    }
+  }
+  if (!memberTopo.some((c) => c.type === "output")) {
+    const lastVar = Array.from(memberVars.values()).pop() ?? "x";
+    code += `        return ${lastVar}
+`;
+  }
+  code += "\n";
+  return { classCode: code, className };
+}
+function generatePyTorchCode(model) {
+  const components = model.components;
+  if (components.length === 0) {
+    return "# No components in model";
+  }
+  const compMap = new Map(components.map((c) => [c.id, c]));
+  const connToFrom = new Map(model.connections.map((c) => [c.to, c.from]));
+  const eligibleGroups = (model.groups ?? []).filter((g) => {
+    const nonIO = g.componentIds.filter((id) => {
+      const c = compMap.get(id);
+      return c && c.type !== "input" && c.type !== "output";
+    });
+    return nonIO.length >= 2;
+  });
+  const topoForGroups = topologicalSort(components, model);
+  const groupInfos = [];
+  const compToGroupInfo = /* @__PURE__ */ new Map();
+  for (const group of eligibleGroups) {
+    const memberSet = new Set(group.componentIds);
+    const clsName = groupClassName(group.name);
+    const attrName = group.name.toLowerCase().replace(/[\s\-]+/g, "_").replace(/[^a-z0-9_]/g, "").replace(/^([0-9])/, "_$1") || "group";
+    let entryId = "";
+    let exitId = "";
+    for (const comp of topoForGroups) {
+      if (!memberSet.has(comp.id)) continue;
+      if (!entryId) entryId = comp.id;
+      exitId = comp.id;
+    }
+    if (!entryId || !exitId) continue;
+    const { classCode } = generateGroupSubmodule(group, model, compMap, connToFrom);
+    const info = { group, className: clsName, attrName, memberSet, entryId, exitId, classCode };
+    groupInfos.push(info);
+    for (const id of group.componentIds) compToGroupInfo.set(id, info);
+  }
+  const hasAudio = components.some((c) => ["melSpectrogram", "mfcc", "stft", "audioConv"].includes(c.type));
+  let code = "# Architecture designed with Neurarch: https://neurarch.com\n";
+  code += "# PyTorch: compatible with Python 3.8+ and torch>=1.12\n";
+  code += "# Colab: pip install torch torchvision  (usually pre-installed)\n";
+  if (hasAudio) code += "# Audio: pip install torchaudio\n";
+  const unsupported = components.filter(isUnsupportedPassthrough);
+  if (unsupported.length > 0) {
+    code += `#
+# WARNING: ${unsupported.length} layer(s) below are not yet supported by the PyTorch
+`;
+    code += "# exporter and pass their input through UNCHANGED in forward():\n";
+    for (const c of unsupported) {
+      code += `#   - ${c.name} (${c.type})
+`;
+    }
+  }
+  code += "\n";
+  code += "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\nfrom typing import Tuple\n";
+  if (hasAudio) code += "import torchaudio\n";
+  code += "\n";
+  const hp = model.hyperparams ?? {};
+  if (Object.keys(hp).length > 0) {
+    code += "# \u2500\u2500 Hyperparameters \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
+    for (const [name, def] of Object.entries(hp)) {
+      const val = def.type === "str" ? `"${def.value}"` : String(def.value);
+      const comment = def.description ? `  # ${def.description}` : "";
+      code += `${name} = ${val}${comment}
+`;
+    }
+    code += "\n";
+  }
+  const customModuleComponents = model.components.filter((c) => c.type === "customModule");
+  if (customModuleComponents.length > 0) {
+    const emittedIds = /* @__PURE__ */ new Set();
+    code += "# \u2500\u2500 Custom Layer Definitions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n";
+    for (const comp of customModuleComponents) {
+      const layerId = comp.params._customLayerId;
+      if (!layerId || emittedIds.has(layerId)) continue;
+      emittedIds.add(layerId);
+      const def = getCustomLayerById(layerId);
+      if (def?.code) code += def.code + "\n\n";
+    }
+  }
+  if (model.components.some((c) => c.type === "sharedExpertMoE")) {
+    code += SHARED_EXPERT_MOE_CLASS;
+  }
+  for (const info of groupInfos) {
+    code += info.classCode;
+  }
+  const className = (model.name || "Model").replace(/\s+/g, "").replace(/-/g, "_").replace(/[^a-zA-Z0-9_]/g, "").replace(/^([0-9])/, "_$1") || "Model";
+  code += `class ${className}(nn.Module):
+`;
+  code += "    def __init__(self):\n";
+  code += "        super().__init__()\n\n";
+  const layerCounter = {};
+  const componentToLayerName = {};
+  for (const comp of components) {
+    if (comp.type === "input" || comp.type === "output" || comp.type === "stickyNote") continue;
+    if (compToGroupInfo.has(comp.id)) continue;
+    const baseName = comp.type;
+    const count = (layerCounter[baseName] || 0) + 1;
+    layerCounter[baseName] = count;
+    const layerName = `${baseName}_${count}`;
+    componentToLayerName[comp.id] = layerName;
+    const layerCode = generateLayerCode(comp, model, compMap, connToFrom);
+    if (layerCode) {
+      code += `        self.${layerName} = ${layerCode}
+`;
+      if (comp.augmentations?.includes("freeze")) {
+        code += `        self.${layerName}.requires_grad_(False)  # frozen
+`;
+      }
+      if (comp.augmentations?.includes("quantize_int8")) {
+        code += `        # TODO: quantize self.${layerName} \u2192 torch.quantization.quantize_dynamic(self.${layerName}, dtype=torch.qint8)
+`;
+      }
+    }
+  }
+  const addedGroupAttrs = /* @__PURE__ */ new Set();
+  for (const info of groupInfos) {
+    if (!addedGroupAttrs.has(info.attrName)) {
+      code += `        self.${info.attrName} = ${info.className}()  # ${info.group.name}
+`;
+      addedGroupAttrs.add(info.attrName);
+    }
+  }
+  if (components.some((c) => c.type === "moeLayer" && !compToGroupInfo.has(c.id))) {
+    code += MOE_FORWARD_METHOD;
+  }
+  const inputComponents = components.filter((c) => c.type === "input");
+  const hasMultipleInputs = inputComponents.length >= 2;
+  if (hasMultipleInputs) {
+    code += "\n    def forward(self, src, tgt=None):\n";
+  } else {
+    code += "\n    def forward(self, x):\n";
+  }
+  const sortedComponents = topoForGroups;
+  const componentVars = /* @__PURE__ */ new Map();
+  if (hasMultipleInputs) {
+    if (inputComponents[0]) componentVars.set(inputComponents[0].id, "src");
+    if (inputComponents[1]) componentVars.set(inputComponents[1].id, "tgt");
+  } else {
+    const inputComponent = inputComponents[0];
+    if (inputComponent) componentVars.set(inputComponent.id, "x");
+  }
+  let hasReturn = false;
+  for (const comp of sortedComponents) {
+    if (comp.type === "stickyNote") continue;
+    if (comp.type === "input") {
+      code += `        # ${comp.name || "Input"} shape: ${JSON.stringify(comp.outputShape || comp.params?.shape || [])}
+`;
+      continue;
+    }
+    if (comp.type === "output") {
+      const lastVar = componentVars.get(comp.inputs[0] || "") || "x";
+      code += `        # Output
+`;
+      code += `        return ${lastVar}
+`;
+      hasReturn = true;
+      continue;
+    }
+    const groupInfo = compToGroupInfo.get(comp.id);
+    if (groupInfo) {
+      if (comp.id === groupInfo.entryId) {
+        const prevId = comp.inputs[0] ?? connToFrom.get(comp.id);
+        const inputVar = prevId ? componentVars.get(prevId) ?? "x" : "x";
+        const varName = `${groupInfo.attrName}_out`;
+        code += `        ${varName} = self.${groupInfo.attrName}(${inputVar})  # ${groupInfo.group.name}
+`;
+        for (const mid of groupInfo.group.componentIds) componentVars.set(mid, varName);
+      }
+      continue;
+    }
+    const layerName = componentToLayerName[comp.id];
+    const forwardCode = generateForwardCode(comp, layerName, model, componentVars, connToFrom);
+    if (forwardCode) {
+      const baseName = comp.type.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "");
+      const idSuffix = comp.id.slice(-6).replace(/[^a-z0-9]/gi, "_");
+      const varName = `${baseName}_${idSuffix}`;
+      componentVars.set(comp.id, varName);
+      if (comp.augmentations?.includes("gradient_checkpoint")) {
+        code += `        ${varName} = torch.utils.checkpoint.checkpoint(self.${layerName}, ${forwardCode.match(/\(([^)]+)\)/)?.[1] ?? "x"})  # gradient checkpoint
+`;
+      } else if (comp.augmentations?.includes("amp")) {
+        code += `        with torch.autocast(device_type='cuda'):  # amp
+`;
+        code += `            ${varName} = ${forwardCode}
+`;
+      } else {
+        code += `        ${varName} = ${forwardCode}
+`;
+      }
+    } else {
+      const prevId = comp.inputs[0] ?? connToFrom.get(comp.id);
+      const passthroughVar = prevId ? componentVars.get(prevId) ?? "x" : "x";
+      componentVars.set(comp.id, passthroughVar);
+      if (comp.type === "positionalEncoding") {
+        const prevComp = prevId ? compMap.get(prevId) : null;
+        if (prevComp?.type === "conv2d") {
+          code += `        ${passthroughVar} = ${passthroughVar}.flatten(2).transpose(1, 2)  # [B, num_patches, embed_dim]
+`;
+          code += `        # positionalEncoding: add learned or sinusoidal PE here
+`;
+        } else {
+          code += `        # positionalEncoding: add positional encoding externally (e.g. sinusoidal or learned PE)
+`;
+        }
+      } else if (comp.type === "rope") {
+        code += `        # rope: RoPE applied inside attention (no separate layer needed)
+`;
+      } else if (comp.type === "residual" || comp.type === "skipConnection") {
+        code += `        # Residual connection: wire shortcut manually if needed
+`;
+      } else if (isUnsupportedPassthrough(comp)) {
+        code += `        # TODO: layer '${comp.name}' (${comp.type}) is not yet supported by the exporter; passing through unchanged
+`;
+      }
+    }
+  }
+  if (!hasReturn) {
+    const outputComponent = sortedComponents.find((c) => c.type === "output");
+    if (outputComponent && outputComponent.inputs.length > 0) {
+      const outputVar = componentVars.get(outputComponent.inputs[0]) || "x";
+      code += `        return ${outputVar}
+`;
+    } else {
+      const lastVar = Array.from(componentVars.values()).pop() || "x";
+      code += `        return ${lastVar}
+`;
+    }
+  }
+  const hasEmbedding = sortedComponents.some((c) => c.type === "embedding");
+  const hasConv2d = sortedComponents.some((c) => c.type === "conv2d");
+  const makeExampleShape = (comp) => {
+    const raw = comp?.params?.shape ?? comp?.outputShape;
+    if (raw && raw.length > 0) return raw[0] === 1 ? raw : [1, ...raw];
+    if (hasEmbedding) return [1, 128];
+    if (!hasConv2d) return [1, 64];
+    return [1, 3, 224, 224];
+  };
+  code += `
+
+if __name__ == '__main__':
+`;
+  code += `    model = ${className}()
+`;
+  code += `    model.eval()
+
+`;
+  if (hasMultipleInputs) {
+    const srcShape = makeExampleShape(inputComponents[0]);
+    const tgtShape = makeExampleShape(inputComponents[1]);
+    code += `    src = torch.randint(0, ${inputComponents[0].params?.shape?.[0] ?? 37e3}, (${srcShape.join(", ")}))  # (batch, src_seq_len)
+`;
+    code += `    tgt = torch.randint(0, ${inputComponents[1].params?.shape?.[0] ?? 37e3}, (${tgtShape.join(", ")}))  # (batch, tgt_seq_len)
+`;
+    code += `    with torch.no_grad():
+`;
+    code += `        output = model(src, tgt)
+
+`;
+    code += `    print(f'Src shape    : {tuple(src.shape)}')
+`;
+    code += `    print(f'Tgt shape    : {tuple(tgt.shape)}')
+`;
+    code += `    print(f'Output shape : {tuple(output.shape)}')
+`;
+  } else {
+    const inputComp = inputComponents[0];
+    const exampleShape = makeExampleShape(inputComp);
+    const shapeStr = exampleShape.join(", ");
+    let dimLabels;
+    if (exampleShape.length === 2) {
+      dimLabels = ["batch", "features"];
+    } else if (exampleShape.length === 3) {
+      dimLabels = exampleShape[1] < 64 ? ["batch", "seq_len", "embed_dim"] : ["batch", "channels", "length"];
+    } else if (exampleShape.length === 4) {
+      dimLabels = ["batch", "channels", "height", "width"];
+    } else {
+      dimLabels = exampleShape.map((_, i) => `dim_${i}`);
+    }
+    const shapeComment = `# (${dimLabels.join(", ")})`;
+    const firstNonIO = sortedComponents.find((c) => c.type !== "input" && c.type !== "output");
+    const isTokenModel = firstNonIO?.type === "embedding" || exampleShape.length <= 2;
+    const vocabSize = firstNonIO?.type === "embedding" ? firstNonIO.params?.vocabSize || 5e4 : 5e4;
+    if (isTokenModel) {
+      code += `    x = torch.randint(0, ${vocabSize}, (${shapeStr}))  ${shapeComment}
+`;
+    } else {
+      code += `    x = torch.randn(${shapeStr})  ${shapeComment}
+`;
+    }
+    code += `    with torch.no_grad():
+`;
+    code += `        output = model(x)
+
+`;
+    code += `    print(f'Input  shape : {tuple(x.shape)}')
+`;
+    code += `    print(f'Output shape : {tuple(output.shape)}')
+`;
+  }
+  code += `    total = sum(p.numel() for p in model.parameters())
+`;
+  code += `    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+`;
+  code += `    print(f'Parameters   : {total:,} total, {trainable:,} trainable')
+`;
+  return code;
+}
+function resolveSequenceInputSize(comp, inputShape, compMap) {
+  if (inputShape && Array.isArray(inputShape)) {
+    if (inputShape.length === 3) return inputShape[2];
+    if (inputShape.length === 2) return inputShape[1];
+  }
+  const visited = /* @__PURE__ */ new Set();
+  const findEmbed = (id) => {
+    if (visited.has(id)) return null;
+    visited.add(id);
+    const c = compMap.get(id);
+    if (!c) return null;
+    if (c.type === "embedding") return c.params.embedDim || c.params.embeddingDim || 128;
+    for (const inId of c.inputs) {
+      const r = findEmbed(inId);
+      if (r !== null) return r;
+    }
+    return null;
+  };
+  for (const inId of comp.inputs) {
+    const embedDim = findEmbed(inId);
+    if (embedDim !== null) return embedDim;
+  }
+  return "input_size";
+}
+function resolveParam(value, hp) {
+  if (typeof value === "string" && value.startsWith("$")) {
+    const varName = value.slice(1);
+    return varName in hp ? varName : value;
+  }
+  return value;
+}
+function generateLayerCode(comp, model, compMap, connToFrom) {
+  const { type } = comp;
+  const hp = model.hyperparams ?? {};
+  const params = Object.fromEntries(
+    Object.entries(comp.params).map(([k, v]) => [k, resolveParam(v, hp)])
+  );
+  const inputShape = getInputShape(comp, model, compMap, connToFrom);
+  switch (type) {
+    case "linear": {
+      let inFeatures = "in_features";
+      if (inputShape && Array.isArray(inputShape)) {
+        if (inputShape.length === 1) {
+          inFeatures = inputShape[0];
+        } else {
+          const upstreamComp = comp.inputs[0] ? compMap.get(comp.inputs[0]) : null;
+          const upstreamType = upstreamComp?.type || "";
+          if ([
+            "lstm",
+            "gru",
+            "rnn",
+            "bidirectionalLSTM",
+            "multiHeadAttention",
+            "transformerBlock",
+            "feedForward",
+            "layerNorm"
+          ].includes(upstreamType)) {
+            inFeatures = inputShape[inputShape.length - 1];
+          } else {
+            inFeatures = inputShape.reduce((a, b) => a * b, 1);
+          }
+        }
+      }
+      if (inFeatures === "in_features") {
+        const PASSTHROUGH = /* @__PURE__ */ new Set([
+          "dropout",
+          "relu",
+          "gelu",
+          "sigmoid",
+          "tanh",
+          "swish",
+          "leakyRelu",
+          "softmax",
+          "layerNorm",
+          "positionalEncoding",
+          "rope"
+        ]);
+        let upId = comp.inputs[0];
+        while (upId) {
+          const upComp = compMap.get(upId);
+          if (!upComp) break;
+          if (["lstm", "gru", "rnn", "bidirectionalLSTM"].includes(upComp.type)) {
+            const h = upComp.params.hiddenSize || 128;
+            const mult = upComp.type === "bidirectionalLSTM" || upComp.params.bidirectional ? 2 : 1;
+            inFeatures = h * mult;
+            break;
+          }
+          if (!PASSTHROUGH.has(upComp.type)) break;
+          upId = upComp.inputs[0];
+        }
+      }
+      if (params.inFeatures !== void 0) {
+        inFeatures = params.inFeatures;
+      }
+      return `nn.Linear(${inFeatures}, ${params.outFeatures})`;
+    }
+    case "conv2d":
+      let inChannels = "in_channels";
+      if (inputShape && Array.isArray(inputShape)) {
+        if (inputShape.length === 4) {
+          inChannels = inputShape[1];
+        } else if (inputShape.length === 3) {
+          inChannels = inputShape[0];
+        } else if (inputShape.length === 2) {
+          inChannels = inputShape[0];
+        }
+      }
+      if (params.inChannels !== void 0) {
+        inChannels = params.inChannels;
+      }
+      return `nn.Conv2d(${inChannels}, ${params.outChannels ?? 32}, kernel_size=${pyDim(params.kernelSize, 3)}, stride=${pyDim(params.stride, 1)}, padding=${pyDim(params.padding, 0)})`;
+    case "conv1d": {
+      let inChannels1d = "in_channels";
+      if (inputShape && Array.isArray(inputShape) && inputShape.length >= 2) {
+        inChannels1d = inputShape[inputShape.length - 2];
+      }
+      if (params.inChannels !== void 0) {
+        inChannels1d = params.inChannels;
+      }
+      return `nn.Conv1d(${inChannels1d}, ${params.outChannels ?? 32}, kernel_size=${pyDim(params.kernelSize, 3)}, stride=${pyDim(params.stride, 1)}, padding=${pyDim(params.padding, 0)})`;
+    }
+    case "conv3d": {
+      const c3dIn = params.inChannels ?? (inputShape?.[1] ?? "in_channels");
+      return `nn.Conv3d(${c3dIn}, ${params.outChannels || 32}, kernel_size=${pyDim(params.kernelSize, 3)}, stride=${pyDim(params.stride, 1)}, padding=${pyDim(params.padding, 0)})`;
+    }
+    case "depthwiseConv2d": {
+      const dwIn = params.inChannels ?? (inputShape?.[0] ?? "in_channels");
+      const dm = params.depthMultiplier || 1;
+      return `nn.Conv2d(${dwIn}, ${dwIn}*${dm}, kernel_size=${pyDim(params.kernelSize, 3)}, groups=${dwIn}, bias=True)`;
+    }
+    case "separableConv2d": {
+      const scIn = params.inChannels ?? (inputShape?.[0] ?? "in_channels");
+      const scOut = params.outChannels || scIn;
+      const scK = pyDim(params.kernelSize, 3);
+      return `nn.Sequential(
+            nn.Conv2d(${scIn}, ${scIn}, kernel_size=${scK}, groups=${scIn}, bias=False),
+            nn.Conv2d(${scIn}, ${scOut}, kernel_size=1)
+        )`;
+    }
+    case "transposeConv2d": {
+      const tcIn = params.inChannels ?? (inputShape?.[0] ?? "in_channels");
+      return `nn.ConvTranspose2d(${tcIn}, ${params.outChannels || 32}, kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride, 2)}, padding=${pyDim(params.padding, 0)})`;
+    }
+    case "maxpool2d":
+      return `nn.MaxPool2d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride || params.kernelSize, 2)}, padding=${pyDim(params.padding, 0)})`;
+    case "avgpool2d":
+      return `nn.AvgPool2d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride || params.kernelSize, 2)}, padding=${pyDim(params.padding, 0)})`;
+    case "dropout":
+      return `nn.Dropout(p=${params.p || 0.5})`;
+    case "batchNorm": {
+      let numFeatures = "num_features";
+      let bnClass = "BatchNorm2d";
+      if (inputShape && Array.isArray(inputShape)) {
+        if (inputShape.length === 3) {
+          numFeatures = inputShape[0];
+          bnClass = "BatchNorm2d";
+        } else if (inputShape.length === 4) {
+          numFeatures = inputShape[1];
+          bnClass = "BatchNorm2d";
+        } else if (inputShape.length === 2) {
+          numFeatures = inputShape[0];
+          bnClass = "BatchNorm1d";
+        } else if (inputShape.length === 1) {
+          numFeatures = inputShape[0];
+          bnClass = "BatchNorm1d";
+        }
+      } else if (params.numFeatures !== void 0) {
+        numFeatures = params.numFeatures;
+        bnClass = "BatchNorm2d";
+      }
+      return `nn.${bnClass}(${numFeatures})`;
+    }
+    case "flatten":
+      return null;
+    // Flatten is functional
+    case "embedding":
+      return `nn.Embedding(${params.numEmbeddings || params.vocabSize || 1e4}, ${params.embeddingDim || params.embedDim || 128})`;
+    case "embeddingBag":
+      return `nn.EmbeddingBag(${params.numEmbeddings || 1e4}, ${params.embeddingDim || 64}, mode='mean')`;
+    case "layerNorm":
+      let normFeatures = "normalized_shape";
+      if (inputShape && Array.isArray(inputShape) && inputShape.length > 0) {
+        normFeatures = inputShape[inputShape.length - 1];
+      } else if (params.normalizedShape) {
+        normFeatures = Array.isArray(params.normalizedShape) ? params.normalizedShape[0] : params.normalizedShape;
+      }
+      return `nn.LayerNorm(${normFeatures})`;
+    case "multiHeadAttention":
+      const embedDim = params.hiddenDim || params.embedDim || 512;
+      const numHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${embedDim}, num_heads=${numHeads}, batch_first=True)`;
+    case "feedForward":
+      const hiddenDim = params.hiddenDim || params.embedDim || 512;
+      const ffDim = params.ffDim || 2048;
+      return `nn.Sequential(
+            nn.Linear(${hiddenDim}, ${ffDim}),
+            nn.ReLU(),
+            nn.Linear(${ffDim}, ${hiddenDim})
+        )`;
+    case "lstm": {
+      let lstmInputSize = resolveSequenceInputSize(comp, inputShape, compMap);
+      if (params.inputSize !== void 0) lstmInputSize = params.inputSize;
+      const lstmLayers = params.numLayers || 1;
+      const lstmBidir = params.bidirectional ? ", bidirectional=True" : "";
+      return `nn.LSTM(${lstmInputSize}, ${params.hiddenSize || 128}, num_layers=${lstmLayers}, batch_first=True${lstmBidir})`;
+    }
+    case "gru": {
+      let gruInputSize = resolveSequenceInputSize(comp, inputShape, compMap);
+      if (params.inputSize !== void 0) gruInputSize = params.inputSize;
+      const gruLayers = params.numLayers || 1;
+      const gruBidir = params.bidirectional ? ", bidirectional=True" : "";
+      return `nn.GRU(${gruInputSize}, ${params.hiddenSize || 128}, num_layers=${gruLayers}, batch_first=True${gruBidir})`;
+    }
+    case "rnn": {
+      let rnnInputSize = resolveSequenceInputSize(comp, inputShape, compMap);
+      if (params.inputSize !== void 0) rnnInputSize = params.inputSize;
+      return `nn.RNN(${rnnInputSize}, ${params.hiddenSize || 128}, num_layers=${params.numLayers || 1}, batch_first=True)`;
+    }
+    case "bidirectionalLSTM": {
+      let biLstmInput = resolveSequenceInputSize(comp, inputShape, compMap);
+      if (params.inputSize !== void 0) biLstmInput = params.inputSize;
+      return `nn.LSTM(${biLstmInput}, ${params.hiddenSize || 128}, num_layers=${params.numLayers || 1}, batch_first=True, bidirectional=True)`;
+    }
+    case "gelu":
+      return `nn.GELU()`;
+    case "swish":
+      return `nn.SiLU()`;
+    case "leakyRelu":
+      return `nn.LeakyReLU(negative_slope=${params.negativeSlope || 0.01})`;
+    case "elu":
+      return `nn.ELU(alpha=${params.alpha || 1})`;
+    case "prelu":
+      return `nn.PReLU(num_parameters=${params.numParameters || 1})`;
+    case "softmax":
+      return `nn.Softmax(dim=-1)`;
+    case "globalAvgPool2d":
+      return `nn.AdaptiveAvgPool2d(1)`;
+    case "adaptiveAvgPool2d":
+    case "adaptiveMaxPool2d": {
+      const rawOut = params.outputSize ?? 1;
+      const outStr = Array.isArray(rawOut) ? `(${rawOut.join(", ")})` : rawOut;
+      const cls = type === "adaptiveMaxPool2d" ? "AdaptiveMaxPool2d" : "AdaptiveAvgPool2d";
+      return `nn.${cls}(${outStr})`;
+    }
+    case "windowAttention": {
+      const waDim = params.embedDim || 96;
+      const waHeads = params.numHeads || 3;
+      return `nn.MultiheadAttention(embed_dim=${waDim}, num_heads=${waHeads}, batch_first=True)  # Window attention (simplified)`;
+    }
+    case "localAttention": {
+      const laDim = params.embedDim || 512;
+      const laHeads = params.numHeads || 8;
+      const laWin = params.windowSize || 256;
+      return `nn.MultiheadAttention(embed_dim=${laDim}, num_heads=${laHeads}, batch_first=True)  # Sliding window ${laWin} (simplified as full MHA; add a band mask for the real window)`;
+    }
+    case "linearAttention": {
+      const linDim = params.embedDim || 512;
+      const linHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${linDim}, num_heads=${linHeads}, batch_first=True)  # Linear attention (simplified as MHA; swap in a kernel-feature map for O(n))`;
+    }
+    case "learnedPositionalEmbedding": {
+      const lpMax = params.maxLen || 512;
+      const lpDim = params.embedDim || 768;
+      return `nn.Embedding(${lpMax}, ${lpDim})  # learned absolute positional embedding`;
+    }
+    case "mamba": {
+      const mmD = params.dModel || 256;
+      const mmState = params.dState || 16;
+      const mmConv = params.dConv || 4;
+      const mmExp = params.expand || 2;
+      return `nn.Identity()  # Mamba(d_model=${mmD}, d_state=${mmState}, d_conv=${mmConv}, expand=${mmExp}), pip install mamba-ssm and swap in`;
+    }
+    case "causalAttention": {
+      const caDim = params.embedDim || 512;
+      const caHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${caDim}, num_heads=${caHeads}, batch_first=True)`;
+    }
+    case "groupedQueryAttention": {
+      const D = params.embedDim || 4096;
+      const H = params.numHeads || 32;
+      const Hkv = params.numKVHeads || 8;
+      const hD = Math.floor(D / H);
+      return `nn.ModuleDict({
+            'q_proj': nn.Linear(${D}, ${D},        bias=False),   # ${H} heads \xD7 ${hD}
+            'k_proj': nn.Linear(${D}, ${Hkv * hD}, bias=False),   # ${Hkv} KV heads \xD7 ${hD}
+            'v_proj': nn.Linear(${D}, ${Hkv * hD}, bias=False),
+            'o_proj': nn.Linear(${D}, ${D},        bias=False),
+        })  # GQA: ${H}Q / ${Hkv}KV heads (requires F.scaled_dot_product_attention)`;
+    }
+    case "mla": {
+      const D = params.embedDim || 4096;
+      const H = params.numHeads || 32;
+      const kvL = params.kvLatentDim || 512;
+      const hD = Math.floor(D / H);
+      return `nn.ModuleDict({
+            'q_proj':  nn.Linear(${D}, ${D},   bias=False),   # ${H} heads \xD7 ${hD}
+            'kv_down': nn.Linear(${D}, ${kvL}, bias=False),   # compress K/V into the cached latent
+            'k_up':    nn.Linear(${kvL}, ${D}, bias=False),   # reconstruct per-head K from the latent
+            'v_up':    nn.Linear(${kvL}, ${D}, bias=False),   # reconstruct per-head V from the latent
+            'o_proj':  nn.Linear(${D}, ${D},   bias=False),
+        })  # MLA: at inference, cache the ${kvL}-dim latent instead of per-head K/V (simplified: decoupled-RoPE key path omitted)`;
+    }
+    case "sharedExpertMoE": {
+      const D = params.embedDim || 4096;
+      const E = params.numExperts || 64;
+      const S = params.numSharedExperts || 2;
+      const I = params.expertDim || 1408;
+      const K = params.topK || 6;
+      return `SharedExpertMoE(embed_dim=${D}, num_experts=${E}, num_shared=${S}, expert_dim=${I}, top_k=${K})`;
+    }
+    case "maxpool1d":
+      return `nn.MaxPool1d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride || params.kernelSize, 2)})`;
+    case "avgpool1d":
+      return `nn.AvgPool1d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride || params.kernelSize, 2)})`;
+    case "pixelShuffle":
+      return `nn.PixelShuffle(${params.upscaleFactor || 2})`;
+    case "rmsNorm": {
+      const rmsShape = params.normalizedShape || inputShape?.[inputShape.length - 1] || 512;
+      return `nn.RMSNorm(${rmsShape})`;
+    }
+    case "swiglu": {
+      const D = params.embedDim ?? params.inFeatures ?? 4096;
+      const I = params.intermediateSize ?? params.hiddenFeatures ?? params.ffDim ?? Math.round(D * 8 / 3);
+      return `nn.ModuleDict({
+            'gate_proj': nn.Linear(${D}, ${I}, bias=False),
+            'up_proj':   nn.Linear(${D}, ${I}, bias=False),
+            'down_proj': nn.Linear(${I}, ${D}, bias=False),
+        })  # SwiGLU FFN (LLaMA-style)`;
+    }
+    case "moeLayer": {
+      const D = params.embedDim ?? 512;
+      const E = params.numExperts ?? 8;
+      const K = params.topK ?? 2;
+      const I = params.expertDim ?? params.ffDim ?? Math.round(D * 8 / 3);
+      return `nn.ModuleDict({
+            'router': nn.Linear(${D}, ${E}, bias=False),
+            'experts': nn.ModuleList([
+                nn.Sequential(
+                    nn.Linear(${D}, ${I}, bias=False), nn.SiLU(),
+                    nn.Linear(${I}, ${D}, bias=False),
+                ) for _ in range(${E})
+            ]),
+        })  # MoE top-${K}`;
+    }
+    case "patchEmbed": {
+      const P = params.patchSize ?? 16;
+      const D = params.embedDim ?? 768;
+      const inC = params.inChans ?? params.inChannels ?? 3;
+      return `nn.Conv2d(${inC}, ${D}, kernel_size=${P}, stride=${P})  # Patch embedding (ViT-style)`;
+    }
+    case "seBlock": {
+      const C = params.channels ?? (inputShape?.[0] ?? 64);
+      const r = params.reductionRatio ?? params.reduction ?? 16;
+      const mid = Math.max(1, Math.floor(C / r));
+      return `nn.Sequential(
+            nn.AdaptiveAvgPool2d(1), nn.Flatten(),
+            nn.Linear(${C}, ${mid}), nn.ReLU(),
+            nn.Linear(${mid}, ${C}), nn.Sigmoid(),
+        )  # SE Block`;
+    }
+    case "layerScale":
+      return null;
+    // nn.Parameter, not a module — handled in forward pass
+    case "alibi":
+    case "dropPath":
+      return null;
+    // Applied externally / stochastic depth via timm
+    case "reshape":
+      return null;
+    // handled in forward pass
+    case "upsample":
+      return `nn.Upsample(scale_factor=${params.scaleFactor || 2}, mode='${params.mode || "nearest"}')`;
+    case "instanceNorm": {
+      let inChannels2 = "num_features";
+      let inClass = "InstanceNorm2d";
+      if (inputShape && Array.isArray(inputShape)) {
+        if (inputShape.length === 4) {
+          inChannels2 = inputShape[1];
+        } else if (inputShape.length === 3) {
+          inChannels2 = inputShape[0];
+        } else if (inputShape.length === 2) {
+          inChannels2 = inputShape[0];
+          inClass = "InstanceNorm1d";
+        }
+      }
+      if (params.numFeatures !== void 0) inChannels2 = params.numFeatures;
+      return `nn.${inClass}(${inChannels2})`;
+    }
+    case "groupNorm": {
+      let gnChannels = "num_channels";
+      if (inputShape && Array.isArray(inputShape)) {
+        if (inputShape.length === 4) gnChannels = inputShape[1];
+        else if (inputShape.length === 3 || inputShape.length === 2) gnChannels = inputShape[0];
+      }
+      if (params.numChannels !== void 0) gnChannels = params.numChannels;
+      return `nn.GroupNorm(${params.numGroups || 32}, ${gnChannels})`;
+    }
+    case "transformerBlock": {
+      const tbDim = params.hiddenDim || params.embedDim || 512;
+      const tbHeads = params.numHeads || 8;
+      const tbFf = params.ffDim || tbDim * 4;
+      const isDecoder = comp.inputs.length >= 2;
+      if (isDecoder) {
+        return `nn.TransformerDecoderLayer(d_model=${tbDim}, nhead=${tbHeads}, dim_feedforward=${tbFf}, batch_first=True)`;
+      }
+      return `nn.TransformerEncoderLayer(d_model=${tbDim}, nhead=${tbHeads}, dim_feedforward=${tbFf}, batch_first=True)`;
+    }
+    case "selfAttention":
+    case "attention": {
+      const attnDim = params.embedDim || 128;
+      const attnHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${attnDim}, num_heads=${attnHeads}, batch_first=True)`;
+    }
+    case "crossAttention": {
+      const xaDim = params.embedDim || 512;
+      const xaHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${xaDim}, num_heads=${xaHeads}, batch_first=True)`;
+    }
+    case "crossModalAttention": {
+      const cmaDim = params.embedDim || 256;
+      const cmaHeads = params.numHeads || 8;
+      return `nn.MultiheadAttention(embed_dim=${cmaDim}, num_heads=${cmaHeads}, batch_first=True)`;
+    }
+    case "positionalEncoding":
+    case "residual":
+    case "skipConnection":
+    case "rope":
+      return null;
+    // Architecture patterns — not standard nn.Module layers
+    case "add":
+    case "multiply":
+    case "concatenate":
+      return null;
+    // These are functional operations
+    // ── RL heads ─────────────────────────────────────────────────────────────────
+    case "dqnHead": {
+      const dqnH = params.hiddenSize ?? (inputShape?.[inputShape.length - 1] ?? 512);
+      const dqnA = params.numActions || 18;
+      return `nn.Linear(${dqnH}, ${dqnA})`;
+    }
+    case "actorHead": {
+      const actH = inputShape?.[inputShape.length - 1] ?? 256;
+      return `nn.Linear(${actH}, ${params.numActions || 6})`;
+    }
+    case "criticHead": {
+      const crtH = inputShape?.[inputShape.length - 1] ?? 256;
+      return `nn.Linear(${crtH}, ${params.outputDim || 1})`;
+    }
+    case "policyNetwork": {
+      const polIn = inputShape?.[inputShape.length - 1] ?? "obs_dim";
+      const polH = params.hiddenSize || 256;
+      return `nn.Sequential(
+            nn.Linear(${polIn}, ${polH}),
+            nn.ReLU(),
+            nn.Linear(${polH}, ${params.numActions || 6})
+        )`;
+    }
+    case "valueNetwork": {
+      const valIn = inputShape?.[inputShape.length - 1] ?? "obs_dim";
+      const valH = params.hiddenSize || 256;
+      return `nn.Sequential(
+            nn.Linear(${valIn}, ${valH}),
+            nn.ReLU(),
+            nn.Linear(${valH}, 1)
+        )`;
+    }
+    // ── Graph ─────────────────────────────────────────────────────────────────────
+    case "graphConv":
+    case "gcn":
+      return null;
+    // Requires torch_geometric: GCNConv — not standard nn.Module
+    case "graphAttention":
+    case "gat":
+      return null;
+    // Requires torch_geometric: GATConv
+    case "graphSAGE":
+      return null;
+    // Requires torch_geometric: SAGEConv
+    // ── Tabular ───────────────────────────────────────────────────────────────────
+    case "tabnet": {
+      const tnIn = params.inputDim ?? (inputShape?.[inputShape.length - 1] ?? "input_dim");
+      const tnOut = params.outputDim || 64;
+      return `nn.Sequential(
+            nn.Linear(${tnIn}, ${tnOut}),
+            nn.GELU()
+        )  # Simplified: use pytorch-tabnet for full TabNet`;
+    }
+    case "featureInteraction":
+      return null;
+    // Custom FM/DCN interaction — no standard nn.Module
+    // ── Multimodal ────────────────────────────────────────────────────────────────
+    case "fusion": {
+      const fusIn = params.fusionDim ?? (inputShape?.[inputShape.length - 1] ?? "in_dim");
+      const fusOut = params.outputDim || 256;
+      return `nn.Linear(${fusIn}, ${fusOut})`;
+    }
+    case "projection": {
+      const prjIn = params.inDim ?? (inputShape?.[inputShape.length - 1] ?? "in_dim");
+      return `nn.Linear(${prjIn}, ${params.outDim || 512})`;
+    }
+    // ── Audio ────────────────────────────────────────────────────────────────────
+    case "audioConv": {
+      const acInC = params.inChannels || 1;
+      const acOutC = params.outChannels || 32;
+      const acK = pyDim(params.kernelSize, 3);
+      return `nn.Conv1d(${acInC}, ${acOutC}, kernel_size=${acK}, stride=${params.stride || 1}, padding=${params.padding || 0})`;
+    }
+    case "melSpectrogram":
+      return null;
+    // torchaudio.transforms.MelSpectrogram — not an nn.Module inline
+    case "mfcc":
+      return null;
+    // torchaudio.transforms.MFCC
+    case "stft":
+      return null;
+    // torch.stft — functional
+    // Element-wise activations emitted functionally in the forward pass
+    // (F.relu / torch.sigmoid / torch.tanh) — there is no nn.Module to declare
+    // in __init__, so returning null here is correct, not a gap. Listed
+    // explicitly so they don't trip the "No layer code" warning below.
+    case "relu":
+    case "sigmoid":
+    case "tanh":
+      return null;
+    default:
+      console.warn(`[codeGenerator] No layer code for component type: "${comp.type}". Generated code may be incomplete.`);
+      return null;
+  }
+}
+function generateForwardCode(comp, layerName, _model, componentVars, connToFrom) {
+  const { type, inputs } = comp;
+  const getInputVars = () => {
+    if (inputs.length === 0) {
+      const fromId = connToFrom.get(comp.id);
+      if (fromId) return [componentVars.get(fromId) ?? "x"];
+      return ["x"];
+    }
+    return inputs.map((inputId) => componentVars.get(inputId) || "x").filter(Boolean);
+  };
+  const inputVars = getInputVars();
+  const primaryVar = inputVars[0] || "x";
+  switch (type) {
+    case "linear":
+    case "conv2d":
+    case "conv1d":
+    case "conv3d":
+    case "depthwiseConv2d":
+    case "separableConv2d":
+    case "transposeConv2d":
+    case "maxpool2d":
+    case "avgpool2d":
+    case "maxpool1d":
+    case "avgpool1d":
+    case "dropout":
+    case "batchNorm":
+    case "pixelShuffle":
+    case "rmsNorm":
+      return `self.${layerName}(${primaryVar})`;
+    case "relu":
+      return `F.relu(${primaryVar})`;
+    case "elu":
+      return `F.elu(${primaryVar})`;
+    case "prelu":
+      return `self.${layerName}(${primaryVar})`;
+    case "sigmoid":
+      return `torch.sigmoid(${primaryVar})`;
+    case "tanh":
+      return `torch.tanh(${primaryVar})`;
+    case "flatten":
+      return `torch.flatten(${primaryVar}, 1)`;
+    case "reshape": {
+      const rshape = comp.params.shape || [512];
+      const shapeStr = Array.isArray(rshape) ? rshape.join(", ") : rshape;
+      return `${primaryVar}.reshape(${primaryVar}.size(0), ${shapeStr})`;
+    }
+    case "embedding":
+    case "embeddingBag":
+    case "layerNorm":
+    case "gelu":
+    case "swish":
+    case "leakyRelu":
+    case "softmax":
+    case "upsample":
+    case "instanceNorm":
+    case "groupNorm":
+      return `self.${layerName}(${primaryVar})`;
+    case "globalAvgPool2d":
+      return `self.${layerName}(${primaryVar}).flatten(1)`;
+    case "adaptiveAvgPool2d":
+    case "adaptiveMaxPool2d": {
+      const outSize = comp.params?.outputSize ?? 1;
+      const needsFlatten = outSize === 1 || Array.isArray(outSize) && outSize.every((s) => s === 1);
+      return `self.${layerName}(${primaryVar})${needsFlatten ? ".flatten(1)" : ""}`;
+    }
+    case "windowAttention":
+    case "causalAttention":
+    case "localAttention":
+    case "linearAttention":
+      return `self.${layerName}(${primaryVar}, ${primaryVar}, ${primaryVar})[0]`;
+    case "mamba":
+      return `self.${layerName}(${primaryVar})`;
+    case "learnedPositionalEmbedding":
+      return `${primaryVar} + self.${layerName}(torch.arange(${primaryVar}.size(1), device=${primaryVar}.device))`;
+    case "groupedQueryAttention": {
+      const gH = comp.params.numHeads || 32;
+      const gHkv = comp.params.numKVHeads || 8;
+      const gD = comp.params.embedDim || 4096;
+      const ghD = Math.floor(gD / gH);
+      const rep = Math.floor(gH / gHkv);
+      const lm = `self.${layerName}`;
+      return `${lm}['o_proj'](F.scaled_dot_product_attention(
+            ${lm}['q_proj'](${primaryVar}).view(${primaryVar}.size(0),-1,${gH},${ghD}).transpose(1,2),
+            ${lm}['k_proj'](${primaryVar}).view(${primaryVar}.size(0),-1,${gHkv},${ghD}).transpose(1,2).repeat_interleave(${rep},dim=1),
+            ${lm}['v_proj'](${primaryVar}).view(${primaryVar}.size(0),-1,${gHkv},${ghD}).transpose(1,2).repeat_interleave(${rep},dim=1),
+            is_causal=True,
+        ).transpose(1,2).reshape(${primaryVar}.size(0),-1,${gD}))`;
+    }
+    case "mla": {
+      const mD = comp.params.embedDim || 4096;
+      const mH = comp.params.numHeads || 32;
+      const mhD = Math.floor(mD / mH);
+      const lm = `self.${layerName}`;
+      return `${lm}['o_proj'](F.scaled_dot_product_attention(
+            ${lm}['q_proj'](${primaryVar}).view(${primaryVar}.size(0),-1,${mH},${mhD}).transpose(1,2),
+            ${lm}['k_up'](${lm}['kv_down'](${primaryVar})).view(${primaryVar}.size(0),-1,${mH},${mhD}).transpose(1,2),
+            ${lm}['v_up'](${lm}['kv_down'](${primaryVar})).view(${primaryVar}.size(0),-1,${mH},${mhD}).transpose(1,2),
+            is_causal=True,
+        ).transpose(1,2).reshape(${primaryVar}.size(0),-1,${mD}))  # cache kv_down(x), not K/V`;
+    }
+    case "sharedExpertMoE":
+      return `self.${layerName}(${primaryVar})`;
+    case "swiglu":
+      return `self.${layerName}['down_proj'](F.silu(self.${layerName}['gate_proj'](${primaryVar})) * self.${layerName}['up_proj'](${primaryVar}))`;
+    case "patchEmbed":
+      return `self.${layerName}(${primaryVar}).flatten(2).transpose(1, 2)  # [B, num_patches, embed_dim]`;
+    case "seBlock":
+      return `${primaryVar} * self.${layerName}(${primaryVar}).view(${primaryVar}.size(0), -1, 1, 1)`;
+    case "moeLayer":
+      return `self._moe_forward(self.${layerName}, ${primaryVar}, top_k=${comp.params?.topK ?? 2})`;
+    case "alibi":
+    case "dropPath":
+    case "layerScale":
+      return `${primaryVar}  # ${comp.type} applied externally`;
+    case "lstm":
+    case "gru":
+    case "rnn":
+    case "bidirectionalLSTM":
+      return comp.params?.returnSequences === false ? `self.${layerName}(${primaryVar})[0][:, -1, :]` : `self.${layerName}(${primaryVar})[0]`;
+    case "multiHeadAttention":
+      return `self.${layerName}(${primaryVar}, ${primaryVar}, ${primaryVar})[0]`;
+    case "transformerBlock":
+      if (inputVars.length >= 2) {
+        return `self.${layerName}(${inputVars[0]}, ${inputVars[1]})`;
+      }
+      return `self.${layerName}(${primaryVar})`;
+    case "selfAttention":
+    case "attention":
+    case "crossModalAttention":
+      return `self.${layerName}(${primaryVar}, ${primaryVar}, ${primaryVar})[0]`;
+    case "crossAttention": {
+      const kvVar = inputVars.length >= 2 ? inputVars[1] : primaryVar;
+      return `self.${layerName}(${primaryVar}, ${kvVar}, ${kvVar})[0]`;
+    }
+    case "feedForward":
+      return `self.${layerName}(${primaryVar})`;
+    case "add":
+      if (inputVars.length === 1) {
+        return `${primaryVar}`;
+      } else if (inputVars.length === 2) {
+        return `${inputVars[0]} + ${inputVars[1]}`;
+      } else {
+        return inputVars.join(" + ");
+      }
+    case "multiply":
+      if (inputVars.length === 1) {
+        return `${primaryVar}`;
+      } else if (inputVars.length === 2) {
+        return `${inputVars[0]} * ${inputVars[1]}`;
+      } else {
+        return inputVars.join(" * ");
+      }
+    case "concatenate":
+      if (inputVars.length === 1) {
+        return `${primaryVar}`;
+      } else {
+        const dim = comp.params?.dim !== void 0 ? comp.params.dim : -1;
+        return `torch.cat([${inputVars.join(", ")}], dim=${dim})`;
+      }
+    case "dqnHead":
+    case "actorHead":
+    case "criticHead":
+    case "policyNetwork":
+    case "valueNetwork":
+    case "fusion":
+    case "projection":
+    case "tabnet":
+    case "audioConv":
+      return `self.${layerName}(${primaryVar})`;
+    case "graphConv":
+    case "gcn":
+    case "graphAttention":
+    case "gat":
+    case "graphSAGE":
+      return `self.${layerName}(${primaryVar}, edge_index)  # pass edge_index from graph data`;
+    case "featureInteraction":
+      return `${primaryVar}  # feature interaction: implement FM/DCN manually`;
+    case "melSpectrogram":
+      return `torchaudio.transforms.MelSpectrogram(sample_rate=${comp.params.sampleRate || 16e3}, n_mels=${comp.params.nMels || 80})(${primaryVar})`;
+    case "mfcc":
+      return `torchaudio.transforms.MFCC(sample_rate=${comp.params.sampleRate || 16e3}, n_mfcc=${comp.params.nMfcc || 40})(${primaryVar})`;
+    case "stft":
+      return `torch.stft(${primaryVar}, n_fft=${comp.params.nFft || 512}, return_complex=True).abs()`;
+    default:
+      return null;
+  }
+}
+function topologicalSort(components, _model) {
+  const componentMap = new Map(components.map((c) => [c.id, c]));
+  const visited = /* @__PURE__ */ new Set();
+  const result = [];
+  function visit(id) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const comp = componentMap.get(id);
+    if (!comp) return;
+    for (const inputId of comp.inputs) {
+      visit(inputId);
+    }
+    result.push(comp);
+  }
+  const inputComponents = components.filter((c) => c.type === "input" || c.inputs.length === 0);
+  for (const input of inputComponents) {
+    visit(input.id);
+  }
+  for (const comp of components) {
+    if (!visited.has(comp.id)) {
+      visit(comp.id);
+    }
+  }
+  return result;
+}
+
+// ../Neurarch/node_modules/zustand/esm/vanilla.mjs
+var createStoreImpl = (createState) => {
+  let state;
+  const listeners = /* @__PURE__ */ new Set();
+  const setState = (partial, replace) => {
+    const nextState = typeof partial === "function" ? partial(state) : partial;
+    if (!Object.is(nextState, state)) {
+      const previousState = state;
+      state = (replace != null ? replace : typeof nextState !== "object" || nextState === null) ? nextState : Object.assign({}, state, nextState);
+      listeners.forEach((listener) => listener(state, previousState));
+    }
+  };
+  const getState = () => state;
+  const getInitialState = () => initialState;
+  const subscribe = (listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+  const destroy = () => {
+    if ((import.meta.env ? import.meta.env.MODE : void 0) !== "production") {
+      console.warn(
+        "[DEPRECATED] The `destroy` method will be unsupported in a future version. Instead use unsubscribe function returned by subscribe. Everything will be garbage-collected if store is garbage-collected."
+      );
+    }
+    listeners.clear();
+  };
+  const api = { setState, getState, getInitialState, subscribe, destroy };
+  const initialState = state = createState(setState, getState, api);
+  return api;
+};
+var createStore = (createState) => createState ? createStoreImpl(createState) : createStoreImpl;
+
+// ../Neurarch/node_modules/zustand/esm/index.mjs
+var import_react = __toESM(require_react(), 1);
+var import_with_selector = __toESM(require_with_selector(), 1);
+var { useDebugValue } = import_react.default;
+var { useSyncExternalStoreWithSelector } = import_with_selector.default;
+var didWarnAboutEqualityFn = false;
+var identity = (arg) => arg;
+function useStore(api, selector = identity, equalityFn) {
+  if ((import.meta.env ? import.meta.env.MODE : void 0) !== "production" && equalityFn && !didWarnAboutEqualityFn) {
+    console.warn(
+      "[DEPRECATED] Use `createWithEqualityFn` instead of `create` or use `useStoreWithEqualityFn` instead of `useStore`. They can be imported from 'zustand/traditional'. https://github.com/pmndrs/zustand/discussions/1937"
+    );
+    didWarnAboutEqualityFn = true;
+  }
+  const slice = useSyncExternalStoreWithSelector(
+    api.subscribe,
+    api.getState,
+    api.getServerState || api.getInitialState,
+    selector,
+    equalityFn
+  );
+  useDebugValue(slice);
+  return slice;
+}
+var createImpl = (createState) => {
+  if ((import.meta.env ? import.meta.env.MODE : void 0) !== "production" && typeof createState !== "function") {
+    console.warn(
+      "[DEPRECATED] Passing a vanilla store will be unsupported in a future version. Instead use `import { useStore } from 'zustand'`."
+    );
+  }
+  const api = typeof createState === "function" ? createStore(createState) : createState;
+  const useBoundStore = (selector, equalityFn) => useStore(api, selector, equalityFn);
+  Object.assign(useBoundStore, api);
+  return useBoundStore;
+};
+var create = (createState) => createState ? createImpl(createState) : createImpl;
+
+// src/utils/providerStore.ts
+var PROVIDER_DEFS = {
+  gemini: {
+    id: "gemini",
+    label: "Gemini",
+    icon: "\u2726",
+    keyPlaceholder: "AIza...",
+    keyLabel: "Google AI Studio key",
+    keyHint: "Get free key at aistudio.google.com",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com",
+    openaiCompat: false,
+    // 2.5-flash is the default. We had 2.0-flash before (15 RPM vs 5 RPM
+    // looked attractive), but Google removed 2.0-flash from the free tier
+    // for many accounts in 2025 — it returns 429 with `limit: 0` for those
+    // users and BYOK can never recover. 2.5-flash is the conservative
+    // choice: actually free for everyone today.
+    defaultModel: "gemini-2.5-flash",
+    models: [
+      { id: "gemini-2.5-flash", label: "2.5 Flash (recommended)", contextK: 1e3, tier: "fast" },
+      { id: "gemini-2.5-flash-lite", label: "2.5 Flash Lite", contextK: 1e3, tier: "fast" },
+      { id: "gemini-2.0-flash", label: "2.0 Flash (paid only)", contextK: 1e3, tier: "pro" },
+      { id: "gemini-1.5-flash", label: "1.5 Flash", contextK: 1e3, tier: "free" }
+    ]
+  },
+  claude: {
+    id: "claude",
+    label: "Claude",
+    icon: "\u25C6",
+    keyPlaceholder: "sk-ant-api...",
+    keyLabel: "Anthropic API key",
+    keyHint: "Get key at console.anthropic.com",
+    defaultBaseUrl: "https://api.anthropic.com",
+    openaiCompat: false,
+    defaultModel: "claude-opus-4-8",
+    models: [
+      { id: "claude-opus-4-8", label: "Opus 4.8", contextK: 1e3, tier: "ultra" },
+      { id: "claude-opus-4-6", label: "Opus 4.6", contextK: 1e3, tier: "ultra" },
+      { id: "claude-sonnet-4-6", label: "Sonnet 4.6", contextK: 1e3, tier: "pro" },
+      { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", contextK: 200, tier: "fast" }
+    ]
+  },
+  openai: {
+    id: "openai",
+    label: "OpenAI",
+    icon: "\u2B21",
+    keyPlaceholder: "sk-...",
+    keyLabel: "OpenAI API key",
+    keyHint: "Get key at platform.openai.com",
+    defaultBaseUrl: "https://api.openai.com/v1",
+    openaiCompat: true,
+    defaultModel: "gpt-4o",
+    models: [
+      { id: "gpt-4o", label: "GPT-4o", contextK: 128, tier: "pro" },
+      { id: "gpt-4o-mini", label: "GPT-4o Mini", contextK: 128, tier: "fast" },
+      { id: "o3-mini", label: "o3-mini", contextK: 200, tier: "ultra" }
+    ]
+  },
+  groq: {
+    id: "groq",
+    label: "Groq",
+    icon: "\u26A1",
+    keyPlaceholder: "gsk_...",
+    keyLabel: "Groq API key",
+    keyHint: "Free key at console.groq.com: very fast inference",
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+    openaiCompat: true,
+    // Catalog refreshed against api.groq.com/openai/v1/models 2026-08-21: the
+    // whole 2024 lineup (llama-3.3/3.1, mixtral, gemma2) has been retired and
+    // returns model_not_found; every call with the old default failed.
+    defaultModel: "openai/gpt-oss-120b",
+    models: [
+      { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", contextK: 128, tier: "pro" },
+      { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B", contextK: 128, tier: "fast" },
+      { id: "qwen/qwen3.6-27b", label: "Qwen 3.6 27B", contextK: 128, tier: "fast" }
+    ]
+  },
+  // OpenRouter — one key unlocks a fleet of free + cheap open models. The
+  // backend proxy serves these from our shared OPENROUTER_API_KEY pool (no
+  // per-user key needed when signed in); BYOK users can paste their own.
+  // `:free` models share a global rate limit, so they're best as the free
+  // tier / fallback. For a true never-throttle experience under load, fund a
+  // small OpenRouter balance and switch the default to the paid DeepSeek line.
+  openrouter: {
+    id: "openrouter",
+    label: "OpenRouter",
+    icon: "\u{1F6E4}\uFE0F",
+    keyPlaceholder: "sk-or-...",
+    keyLabel: "OpenRouter API key",
+    keyHint: "Free key at openrouter.ai/keys, one key, many free open models",
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+    openaiCompat: true,
+    // DeepSeek V3 is the reliable default (real provider capacity, no per-minute
+    // throttling like the ":free" models). Proxy overrides the served model by
+    // plan anyway; this default matters for BYOK users + the dropdown.
+    defaultModel: "deepseek/deepseek-chat",
+    // IDs verified live on openrouter.ai/api/v1/models (2026-06-02). NOTE:
+    // DeepSeek / Qwen-2.5 have no ":free" variant on OpenRouter — only list
+    // free ids that actually exist or requests 404. (The proxy overrides the
+    // served model by plan anyway; this list is mostly for BYOK users.)
+    models: [
+      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", contextK: 128, tier: "free" },
+      { id: "qwen/qwen3-next-80b-a3b-instruct:free", label: "Qwen3 Next 80B (free)", contextK: 32, tier: "free" },
+      { id: "meta-llama/llama-3.2-3b-instruct:free", label: "Llama 3.2 3B (free, fast)", contextK: 128, tier: "free" },
+      { id: "deepseek/deepseek-chat", label: "DeepSeek V3 (cheap, paid)", contextK: 64, tier: "pro" }
+    ]
+  },
+  // xAI / Grok — OpenAI-compatible chat completions at api.x.ai. BYOK-only
+  // (like OpenAI / Ollama): the user pastes their own xAI key and the browser
+  // talks to api.x.ai directly, so there is no server key or proxy quota to
+  // manage. embedDim-style routing aside, Grok speaks the same /v1/chat shape
+  // as Groq, so the generic openai-compat dispatch handles it with no special
+  // case in agentClient.
+  xai: {
+    id: "xai",
+    label: "Grok (xAI)",
+    icon: "\u2715",
+    keyPlaceholder: "xai-...",
+    keyLabel: "xAI API key",
+    keyHint: "Get key at console.x.ai: BYOK, talks to api.x.ai directly",
+    defaultBaseUrl: "https://api.x.ai/v1",
+    openaiCompat: true,
+    defaultModel: "grok-4",
+    models: [
+      { id: "grok-4", label: "Grok 4", contextK: 256, tier: "ultra" },
+      { id: "grok-3", label: "Grok 3", contextK: 131, tier: "pro" },
+      { id: "grok-3-mini", label: "Grok 3 Mini", contextK: 131, tier: "fast" }
+    ]
+  },
+  ollama: {
+    id: "ollama",
+    label: "Ollama",
+    icon: "\u{1F999}",
+    keyPlaceholder: "ollama (no key needed)",
+    keyLabel: "Local model: no key required",
+    keyHint: "Runs locally at localhost:11434, install at ollama.com",
+    defaultBaseUrl: "http://localhost:11434/v1",
+    openaiCompat: true,
+    defaultModel: "llama3.2",
+    models: [
+      { id: "llama3.2", label: "LLaMA 3.2", contextK: 128, tier: "pro" },
+      { id: "llama3.1", label: "LLaMA 3.1", contextK: 128, tier: "pro" },
+      { id: "mistral", label: "Mistral 7B", contextK: 32, tier: "fast" },
+      { id: "qwen2.5-coder", label: "Qwen 2.5 Coder", contextK: 128, tier: "pro" },
+      { id: "deepseek-r1", label: "DeepSeek R1", contextK: 64, tier: "ultra" }
+    ]
+  },
+  // Custom / self-hosted — any server that speaks the OpenAI /v1/chat/completions
+  // shape: LM Studio, vLLM, LiteLLM, LocalAI, text-generation-webui, an internal
+  // gateway, etc. The whole point is on-prem: teams that cannot send a proprietary
+  // architecture to a third-party cloud API point the agent at their own endpoint.
+  // Base URL and model are free-text; the key is optional (blank for keyless local
+  // servers, sent as a Bearer token otherwise). BYOK-direct, never proxied.
+  custom: {
+    id: "custom",
+    label: "Custom / Local",
+    icon: "\u{1F50C}",
+    keyPlaceholder: "optional: blank for keyless local servers",
+    keyLabel: "API key (optional)",
+    keyHint: "Any OpenAI-compatible server: LM Studio (:1234), vLLM (:8000), LiteLLM, LocalAI. Set the base URL and model below.",
+    defaultBaseUrl: "http://localhost:1234/v1",
+    openaiCompat: true,
+    defaultModel: "",
+    models: []
+  }
+};
+var LS = {
+  get: (k) => {
+    try {
+      return localStorage.getItem(k) ?? "";
+    } catch {
+      return "";
+    }
+  },
+  set: (k, v) => {
+    try {
+      localStorage.setItem(k, v);
+    } catch {
+    }
+  }
+};
+function migrate(k) {
+  const ls = LS.get(k);
+  if (ls) return ls;
+  try {
+    const ss = sessionStorage.getItem(k);
+    if (ss) {
+      LS.set(k, ss);
+      sessionStorage.removeItem(k);
+      return ss;
     }
   } catch {
-    return none;
   }
-  if (!model) return none;
-  const real = model.components.filter((c) => c.type !== "input" && c.type !== "output");
-  if (real.length === 0) return none;
-  return {
-    parsed: true,
-    components: model.components.length,
-    params: real.reduce((a, c) => a + estimateLayerParams(c.type, c.params ?? {}, []), 0),
-    flopsMAC: real.reduce((a, c) => a + estimateLayerFlops(c.type, c.params ?? {}, [], []), 0),
-    kvBytesPerToken: kvBytesPerTokenForModel(model, 2)
+  return "";
+}
+function keyForProvider(id) {
+  return migrate(`llm-key-${id}`);
+}
+function setKeyForProvider(id, key) {
+  LS.set(`llm-key-${id}`, key);
+}
+function modelForProvider(id) {
+  const stored = migrate(`llm-model-${id}`);
+  if (id === "gemini" && stored === "gemini-2.0-flash") {
+    LS.set(`llm-model-${id}`, PROVIDER_DEFS[id].defaultModel);
+    return PROVIDER_DEFS[id].defaultModel;
+  }
+  return stored || PROVIDER_DEFS[id].defaultModel;
+}
+function setModelForProvider(id, model) {
+  LS.set(`llm-model-${id}`, model);
+}
+function baseUrlForProvider(id) {
+  return migrate(`llm-baseurl-${id}`) || PROVIDER_DEFS[id].defaultBaseUrl;
+}
+function setBaseUrlForProvider(id, url) {
+  LS.set(`llm-baseurl-${id}`, url);
+}
+var HF_TOKEN_KEY = "hf-token";
+function hfToken() {
+  return migrate(HF_TOKEN_KEY);
+}
+function setHFTokenLS(t) {
+  LS.set(HF_TOKEN_KEY, t);
+}
+var KAGGLE_USERNAME_KEY = "kaggle-username";
+var KAGGLE_KEY_KEY = "kaggle-key";
+function kaggleCreds() {
+  return { username: LS.get(KAGGLE_USERNAME_KEY) ?? "", key: LS.get(KAGGLE_KEY_KEY) ?? "" };
+}
+function setKaggleCredsLS(username, key) {
+  LS.set(KAGGLE_USERNAME_KEY, username.trim());
+  LS.set(KAGGLE_KEY_KEY, key.trim());
+}
+var AUTO_TIER_KEY = "llm-auto-tier";
+var AUTO_TIER_SEEN_KEY = "llm-auto-tier-seen";
+var HAS_PRIOR_LLM_USAGE_KEY = "llm-provider";
+function autoTierEnabled() {
+  const v = migrate(AUTO_TIER_KEY);
+  if (v === "1") return true;
+  if (v === "0") return false;
+  const isReturning = !!migrate(HAS_PRIOR_LLM_USAGE_KEY);
+  const defaultOn = !isReturning;
+  LS.set(AUTO_TIER_KEY, defaultOn ? "1" : "0");
+  LS.set(AUTO_TIER_SEEN_KEY, "1");
+  return defaultOn;
+}
+function setAutoTier(on) {
+  LS.set(AUTO_TIER_KEY, on ? "1" : "0");
+  LS.set(AUTO_TIER_SEEN_KEY, "1");
+}
+var PLAN_VERIFIER_KEY = "agent-plan-verifier";
+function planVerifierEnabled() {
+  return LS.get(PLAN_VERIFIER_KEY) === "1";
+}
+function setPlanVerifier(on) {
+  LS.set(PLAN_VERIFIER_KEY, on ? "1" : "0");
+}
+var ARCH_COHERENCE_VERIFIER_KEY = "arch-coherence-verifier";
+function archCoherenceVerifierEnabled() {
+  return LS.get(ARCH_COHERENCE_VERIFIER_KEY) === "1";
+}
+function setArchCoherenceVerifier(on) {
+  LS.set(ARCH_COHERENCE_VERIFIER_KEY, on ? "1" : "0");
+}
+var CONVERGENCE_LOOP_KEY = "agent-convergence-loop";
+function convergenceLoopEnabled() {
+  return LS.get(CONVERGENCE_LOOP_KEY) === "1";
+}
+function setConvergenceLoop(on) {
+  LS.set(CONVERGENCE_LOOP_KEY, on ? "1" : "0");
+}
+var CONVERGENCE_TARGET_KEY = "agent-convergence-target";
+function convergenceTargetGrade() {
+  const v = LS.get(CONVERGENCE_TARGET_KEY);
+  return v === "B" || v === "C" ? v : "A";
+}
+function setConvergenceTargetGrade(g) {
+  LS.set(CONVERGENCE_TARGET_KEY, g);
+}
+var STRUCTURAL_REPAIR_KEY = "agent-structural-repair";
+function structuralRepairEnabled() {
+  return LS.get(STRUCTURAL_REPAIR_KEY) !== "0";
+}
+function setStructuralRepair(on) {
+  LS.set(STRUCTURAL_REPAIR_KEY, on ? "1" : "0");
+}
+var GROUNDING_RETRIEVAL_KEY = "agent-grounding-retrieval";
+function groundingRetrievalEnabled() {
+  return LS.get(GROUNDING_RETRIEVAL_KEY) !== "0";
+}
+function setGroundingRetrieval(on) {
+  LS.set(GROUNDING_RETRIEVAL_KEY, on ? "1" : "0");
+}
+var PARAM_EXPLOSION_KEY = "agent-param-explosion-threshold";
+function paramExplosionThreshold() {
+  const v = migrate(PARAM_EXPLOSION_KEY);
+  const n = v ? parseFloat(v) : NaN;
+  return Number.isFinite(n) && n >= 2 && n <= 50 ? n : 5;
+}
+function setParamExplosionThreshold(n) {
+  const clamped = Math.max(2, Math.min(50, n));
+  LS.set(PARAM_EXPLOSION_KEY, String(clamped));
+}
+var COLOR_BY_TYPE_KEY = "canvas-color-by-type";
+function colorByTypeEnabled() {
+  return LS.get(COLOR_BY_TYPE_KEY) === "1";
+}
+function setColorByType(on) {
+  LS.set(COLOR_BY_TYPE_KEY, on ? "1" : "0");
+}
+var NODE_DENSITY_COMPACT_KEY = "canvas-node-density-compact";
+function nodeDensityCompact() {
+  return LS.get(NODE_DENSITY_COMPACT_KEY) === "1";
+}
+function setNodeDensityCompact(on) {
+  LS.set(NODE_DENSITY_COMPACT_KEY, on ? "1" : "0");
+}
+var LOD_KEY = "canvas-lod";
+function lodEnabled() {
+  const v = LS.get(LOD_KEY);
+  return !v ? true : v === "1";
+}
+function setLod(on) {
+  LS.set(LOD_KEY, on ? "1" : "0");
+}
+var PAPER_MODE_KEY = "canvas-paper-mode";
+function paperModeEnabled() {
+  const v = LS.get(PAPER_MODE_KEY);
+  return !v ? true : v === "1";
+}
+function setPaperMode(on) {
+  LS.set(PAPER_MODE_KEY, on ? "1" : "0");
+}
+var FIGURE_ATTRIBUTION_KEY = "figure-attribution";
+function figureAttributionEnabled() {
+  const v = LS.get(FIGURE_ATTRIBUTION_KEY);
+  return !v ? true : v === "1";
+}
+function setFigureAttribution(on) {
+  LS.set(FIGURE_ATTRIBUTION_KEY, on ? "1" : "0");
+}
+var SHAPE_AWARE_KEY = "canvas-shape-aware-sizing";
+function shapeAwareSizingEnabled() {
+  return LS.get(SHAPE_AWARE_KEY) === "1";
+}
+function setShapeAwareSizing(on) {
+  LS.set(SHAPE_AWARE_KEY, on ? "1" : "0");
+}
+var AUTO_FOLD_KEY = "canvas-auto-fold-repeats";
+function autoFoldEnabled() {
+  return LS.get(AUTO_FOLD_KEY) === "1";
+}
+function setAutoFold(on) {
+  LS.set(AUTO_FOLD_KEY, on ? "1" : "0");
+}
+var PROVIDER_OR_MIGRATION_KEY = "llm-provider-or-migrated";
+function resolveInitialProvider() {
+  const stored = migrate("llm-provider");
+  try {
+    if (!LS.get(PROVIDER_OR_MIGRATION_KEY)) {
+      LS.set(PROVIDER_OR_MIGRATION_KEY, "1");
+      if (stored === "gemini" && !migrate("llm-key-gemini")) {
+        LS.set("llm-provider", "openrouter");
+        return "openrouter";
+      }
+    }
+  } catch {
+  }
+  return stored || "openrouter";
+}
+var useProviderStore = create((set, get) => ({
+  // Default to OpenRouter for new users — free open models served from our
+  // shared OPENROUTER_API_KEY pool give the most generous "keep asking" free
+  // experience (15/day vs Gemini's 3/day), with key rotation + model fallback
+  // for resilience under load. Gemini/Claude stay available in the picker.
+  // Returning users keep their explicit choice; see resolveInitialProvider for
+  // the one-time Gemini→OpenRouter nudge.
+  activeProvider: resolveInitialProvider(),
+  setActiveProvider: (id) => {
+    LS.set("llm-provider", id);
+    set({ activeProvider: id });
+  },
+  getKey: (id) => keyForProvider(id ?? get().activeProvider),
+  setKey: (id, key) => {
+    setKeyForProvider(id, key);
+    set({});
+  },
+  getModel: (id) => modelForProvider(id ?? get().activeProvider),
+  setModel: (id, model) => {
+    setModelForProvider(id, model);
+    set({});
+  },
+  getBaseUrl: (id) => baseUrlForProvider(id ?? get().activeProvider),
+  setBaseUrl: (id, url) => {
+    setBaseUrlForProvider(id, url);
+    set({});
+  },
+  getHFToken: () => hfToken(),
+  setHFToken: (token) => {
+    setHFTokenLS(token.trim());
+    set({});
+  },
+  getKaggleCreds: () => kaggleCreds(),
+  setKaggleCreds: (username, key) => {
+    setKaggleCredsLS(username, key);
+    set({});
+  },
+  activeKey: () => keyForProvider(get().activeProvider),
+  activeModel: () => modelForProvider(get().activeProvider),
+  activeDef: () => PROVIDER_DEFS[get().activeProvider],
+  autoTierEnabled: () => autoTierEnabled(),
+  setAutoTier: (on) => {
+    setAutoTier(on);
+    set({});
+  },
+  paramExplosionThreshold: () => paramExplosionThreshold(),
+  setParamExplosionThreshold: (n) => {
+    setParamExplosionThreshold(n);
+    set({});
+  },
+  planVerifierEnabled: () => planVerifierEnabled(),
+  setPlanVerifier: (on) => {
+    setPlanVerifier(on);
+    set({});
+  },
+  archCoherenceVerifierEnabled: () => archCoherenceVerifierEnabled(),
+  setArchCoherenceVerifier: (on) => {
+    setArchCoherenceVerifier(on);
+    set({});
+  },
+  structuralRepairEnabled: () => structuralRepairEnabled(),
+  setStructuralRepair: (on) => {
+    setStructuralRepair(on);
+    set({});
+  },
+  convergenceLoopEnabled: () => convergenceLoopEnabled(),
+  setConvergenceLoop: (on) => {
+    setConvergenceLoop(on);
+    set({});
+  },
+  convergenceTargetGrade: () => convergenceTargetGrade(),
+  setConvergenceTargetGrade: (g) => {
+    setConvergenceTargetGrade(g);
+    set({});
+  },
+  groundingRetrievalEnabled: () => groundingRetrievalEnabled(),
+  setGroundingRetrieval: (on) => {
+    setGroundingRetrieval(on);
+    set({});
+  },
+  colorByTypeEnabled: () => colorByTypeEnabled(),
+  setColorByType: (on) => {
+    setColorByType(on);
+    set({});
+  },
+  nodeDensityCompact: () => nodeDensityCompact(),
+  setNodeDensityCompact: (on) => {
+    setNodeDensityCompact(on);
+    set({});
+  },
+  lodEnabled: () => lodEnabled(),
+  setLod: (on) => {
+    setLod(on);
+    set({});
+  },
+  paperModeEnabled: () => paperModeEnabled(),
+  setPaperMode: (on) => {
+    setPaperMode(on);
+    set({});
+  },
+  figureAttributionEnabled: () => figureAttributionEnabled(),
+  setFigureAttribution: (on) => {
+    setFigureAttribution(on);
+    set({});
+  },
+  shapeAwareSizingEnabled: () => shapeAwareSizingEnabled(),
+  setShapeAwareSizing: (on) => {
+    setShapeAwareSizing(on);
+    set({});
+  },
+  autoFoldEnabled: () => autoFoldEnabled(),
+  setAutoFold: (on) => {
+    setAutoFold(on);
+    set({});
+  }
+}));
+
+// src/utils/hfModelLoader.ts
+function hfAuthHeaders() {
+  if (typeof process !== "undefined" && process.env?.HF_TOKEN) {
+    return { Authorization: `Bearer ${process.env.HF_TOKEN.trim()}` };
+  }
+  try {
+    const token = useProviderStore.getState().getHFToken().trim();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+async function fetchHFRealParamCount(modelId, headers) {
+  try {
+    const r = await fetch(`https://huggingface.co/api/models/${modelId}`, { headers });
+    if (!r.ok) return void 0;
+    const info = await r.json();
+    const total = info?.safetensors?.total;
+    return typeof total === "number" && total > 0 ? total : void 0;
+  } catch {
+    return void 0;
+  }
+}
+var ARCH_DEFAULTS = {
+  // LLM families
+  mistral: { hidden_size: 4096, num_hidden_layers: 32, num_attention_heads: 32, intermediate_size: 14336, vocab_size: 32e3, max_position_embeddings: 32768 },
+  mixtral: { hidden_size: 4096, num_hidden_layers: 32, num_attention_heads: 32, intermediate_size: 14336, vocab_size: 32e3, max_position_embeddings: 32768 },
+  falcon: { hidden_size: 4544, num_hidden_layers: 32, num_attention_heads: 71, intermediate_size: 18176, vocab_size: 65024, max_position_embeddings: 2048 },
+  phi: { hidden_size: 2048, num_hidden_layers: 24, num_attention_heads: 32, intermediate_size: 8192, vocab_size: 51200, max_position_embeddings: 2048 },
+  phi3: { hidden_size: 3072, num_hidden_layers: 32, num_attention_heads: 32, intermediate_size: 8192, vocab_size: 32064, max_position_embeddings: 4096 },
+  qwen2: { hidden_size: 4096, num_hidden_layers: 32, num_attention_heads: 32, intermediate_size: 11008, vocab_size: 151936, max_position_embeddings: 32768 },
+  gemma: { hidden_size: 3072, num_hidden_layers: 28, num_attention_heads: 16, intermediate_size: 24576, vocab_size: 256e3, max_position_embeddings: 8192 },
+  gemma2: { hidden_size: 3584, num_hidden_layers: 46, num_attention_heads: 16, intermediate_size: 14336, vocab_size: 256e3, max_position_embeddings: 8192 },
+  deepseek: { hidden_size: 4096, num_hidden_layers: 32, num_attention_heads: 32, intermediate_size: 11008, vocab_size: 102400, max_position_embeddings: 4096 },
+  cohere: { hidden_size: 8192, num_hidden_layers: 40, num_attention_heads: 64, intermediate_size: 22528, vocab_size: 256e3, max_position_embeddings: 8192 },
+  // Audio / seq2seq
+  whisper: {
+    hidden_size: 512,
+    num_hidden_layers: 6,
+    num_attention_heads: 8,
+    intermediate_size: 2048,
+    vocab_size: 51865,
+    d_model: 512,
+    encoder_layers: 6,
+    decoder_layers: 6,
+    encoder_attention_heads: 8,
+    decoder_attention_heads: 8,
+    encoder_ffn_dim: 2048,
+    decoder_ffn_dim: 2048
+  },
+  wav2vec2: { hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12, intermediate_size: 3072, vocab_size: 32 },
+  // CV families
+  swin: { hidden_size: 96, num_hidden_layers: 12, num_attention_heads: 3 },
+  convnext: { hidden_size: 96, num_hidden_layers: 12, num_attention_heads: 1 },
+  deit: { hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12 },
+  beit: { hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12 }
+};
+function normalizeAndAugmentConfig(config, modelId) {
+  const mIdLower = modelId.toLowerCase();
+  const className = config._class_name;
+  if (className && typeof className === "string") {
+    if (!config.model_type) config.model_type = className.toLowerCase();
+    if (!config.architectures || config.architectures.length === 0) config.architectures = [className];
+    if (/unet|transformer2dmodel|transformer3dmodel|dit|denois|vae|autoencoder/i.test(className)) {
+      config._diffusion = true;
+    }
+  }
+  {
+    const NESTED_TEXT_KEYS = [
+      "text_config",
+      "llm_config",
+      "language_config",
+      "language_model_config",
+      "decoder_config"
+    ];
+    for (const k of NESTED_TEXT_KEYS) {
+      const sub = config[k];
+      if (sub && typeof sub === "object" && (sub.hidden_size || sub.d_model || sub.n_embd || sub.num_hidden_layers || sub.num_layers)) {
+        for (const [sk, sv] of Object.entries(sub)) {
+          if (config[sk] === void 0 || config[sk] === null) {
+            config[sk] = sv;
+          }
+        }
+        if (sub.model_type) config._textModelType = sub.model_type;
+        break;
+      }
+    }
+  }
+  if (!config.hidden_size) {
+    if (config.d_model) config.hidden_size = config.d_model;
+    else if (config.n_embd) config.hidden_size = config.n_embd;
+    else if (config.model_dim) config.hidden_size = config.model_dim;
+  }
+  if (!config.num_hidden_layers) {
+    if (config.n_layer) config.num_hidden_layers = config.n_layer;
+    else if (config.num_layers) config.num_hidden_layers = config.num_layers;
+    else if (config.encoder_layers) config.num_hidden_layers = config.encoder_layers;
+    else if (config.num_blocks) config.num_hidden_layers = config.num_blocks;
+  }
+  if (!config.num_attention_heads) {
+    if (config.n_head) config.num_attention_heads = config.n_head;
+    else if (config.encoder_attention_heads) config.num_attention_heads = config.encoder_attention_heads;
+    else if (config.num_heads) config.num_attention_heads = config.num_heads;
+  }
+  if (!config.intermediate_size) {
+    if (config.n_inner) config.intermediate_size = config.n_inner;
+    else if (config.encoder_ffn_dim) config.intermediate_size = config.encoder_ffn_dim;
+    else if (config.d_ff) config.intermediate_size = config.d_ff;
+    else if (config.ffn_dim) config.intermediate_size = config.ffn_dim;
+  }
+  if (!config.hidden_size) {
+    const mTypeLower = (config.model_type || "").toLowerCase();
+    for (const [key, defs] of Object.entries(ARCH_DEFAULTS)) {
+      if (mTypeLower.includes(key) || mIdLower.includes(key)) {
+        for (const [k, v] of Object.entries(defs)) {
+          if (config[k] === void 0 || config[k] === null) {
+            config[k] = v;
+          }
+        }
+        if (!config.hidden_size && config.d_model) config.hidden_size = config.d_model;
+        break;
+      }
+    }
+  }
+  return config;
+}
+async function fetchDiffusersConfig(modelId) {
+  try {
+    const miResp = await fetch(`https://huggingface.co/${modelId}/resolve/main/model_index.json`);
+    if (!miResp.ok) return null;
+    const mi = await miResp.json();
+    if (!mi.transformer && !mi.unet) return null;
+    const denoiser = mi.transformer ? "transformer" : "unet";
+    const subResp = await fetch(`https://huggingface.co/${modelId}/resolve/main/${denoiser}/config.json`);
+    if (!subResp.ok) return null;
+    const raw = await subResp.json();
+    const num = (...keys) => {
+      for (const k of keys) if (typeof raw[k] === "number") return raw[k];
+      return void 0;
+    };
+    const className = raw._class_name || (Array.isArray(mi[denoiser]) ? mi[denoiser][1] : void 0) || (denoiser === "unet" ? "UNet2DConditionModel" : "Transformer2DModel");
+    const heads = num("num_attention_heads");
+    const headDim = num("attention_head_dim");
+    const hidden = (heads && headDim ? heads * headDim : void 0) ?? num("inner_dim", "cross_attention_dim", "hidden_size", "caption_channels", "joint_attention_dim") ?? 1152;
+    const layers = denoiser === "transformer" ? num("num_layers", "num_hidden_layers", "depth") ?? 12 : void 0;
+    const config = normalizeAndAugmentConfig({
+      model_type: denoiser === "unet" ? "unet" : "dit",
+      architectures: [className],
+      hidden_size: hidden,
+      num_hidden_layers: layers,
+      num_attention_heads: heads,
+      // Use the model's real FFN width when it ships one (Wan: ffn_dim 8960,
+      // not hidden×4 = 6144 — the hardcoded ×4 undercounted the MLP by ~260M
+      // across 30 layers). Falls back to ×4 only when no width is declared.
+      intermediate_size: num("ffn_dim", "intermediate_size", "d_ff", "mlp_dim", "mlp_ratio") ?? hidden * 4
+    }, modelId);
+    const c = config;
+    c._diffusion = true;
+    c._denoiser = denoiser;
+    c._diffuser_class = className;
+    c.in_channels = num("in_channels") ?? 4;
+    c.sample_size = num("sample_size") ?? 64;
+    c.patch_size = num("patch_size") ?? 2;
+    c.cross_attention_dim = num("cross_attention_dim", "caption_channels", "joint_attention_dim", "text_dim", "text_embed_dim");
+    if (Array.isArray(raw.block_out_channels)) c.block_out_channels = raw.block_out_channels;
+    if (typeof raw.layers_per_block === "number") c.layers_per_block = raw.layers_per_block;
+    const classLower = className.toLowerCase();
+    if (/sd3|stablediffusion3|sd35|\bflux\b|mmdit/.test(classLower) || typeof raw.joint_attention_dim === "number") {
+      c._mmdit = true;
+    }
+    const singleLayers = num("num_single_layers");
+    if (singleLayers != null) c._num_single_layers = singleLayers;
+    if (mi.vae) {
+      try {
+        const vr = await fetch(`https://huggingface.co/${modelId}/resolve/main/vae/config.json`);
+        if (vr.ok) {
+          const vraw = await vr.json();
+          c._vae = {
+            in_channels: typeof vraw.in_channels === "number" ? vraw.in_channels : 3,
+            latent_channels: typeof vraw.latent_channels === "number" ? vraw.latent_channels : c.in_channels ?? 4,
+            block_out_channels: Array.isArray(vraw.block_out_channels) ? vraw.block_out_channels : [128, 256, 512, 512],
+            layers_per_block: typeof vraw.layers_per_block === "number" ? vraw.layers_per_block : 2
+          };
+        }
+      } catch {
+      }
+    }
+    return config;
+  } catch {
+    return null;
+  }
+}
+async function fetchHFModelConfig(modelId) {
+  try {
+    const authHeaders = hfAuthHeaders();
+    const configResponse = await fetch(
+      `https://huggingface.co/${modelId}/resolve/main/config.json`,
+      { headers: authHeaders }
+    );
+    if (configResponse.ok) {
+      const raw = await configResponse.json();
+      const config2 = normalizeAndAugmentConfig(raw, modelId);
+      config2._configSource = "config";
+      config2._realParamCount = await fetchHFRealParamCount(modelId, authHeaders);
+      return config2;
+    }
+    const diffusion = await fetchDiffusersConfig(modelId);
+    if (diffusion) {
+      diffusion._configSource = diffusion._configSource ?? "diffusers";
+      return diffusion;
+    }
+    const apiResponse = await fetch(`https://huggingface.co/api/models/${modelId}`, { headers: authHeaders });
+    const modelInfo = apiResponse.ok ? await apiResponse.json() : {};
+    const modelIdLower = modelId.toLowerCase();
+    const pipelineTag = modelInfo.pipeline_tag ?? "";
+    let inferredType = modelInfo.config?.model_type ?? "";
+    if (!inferredType || !ARCH_DEFAULTS[inferredType]) {
+      for (const key of Object.keys(ARCH_DEFAULTS)) {
+        if ((inferredType || pipelineTag || modelIdLower).toLowerCase().includes(key) || modelIdLower.includes(key)) {
+          inferredType = key;
+          break;
+        }
+      }
+    }
+    const defaults = ARCH_DEFAULTS[inferredType] ?? {};
+    const config = normalizeAndAugmentConfig({
+      model_type: inferredType || pipelineTag || "unknown",
+      architectures: modelInfo.config?.architectures ?? [],
+      vocab_size: modelInfo.config?.vocab_size,
+      ...defaults
+    }, modelId);
+    if (!config.hidden_size) {
+      throw new Error(`Cannot determine architecture for "${modelId}", config.json not accessible and no known defaults`);
+    }
+    config._configSource = "fallback";
+    const realTotal = modelInfo?.safetensors?.total;
+    if (typeof realTotal === "number" && realTotal > 0) {
+      config._realParamCount = realTotal;
+    }
+    return config;
+  } catch (error) {
+    console.error(`Error fetching HF model config for ${modelId}:`, error);
+    return null;
+  }
+}
+function buildDiffusionDenoiser(a) {
+  const { config, components, connections, generateId, generateConnId, xPos, verticalSpacing: vs } = a;
+  const cfg = config;
+  let y = a.yPos;
+  const node = (type, name, params, pos) => {
+    const id = generateId();
+    components.push({ id, type, name, position: pos, params, inputs: [], outputs: [] });
+    return id;
   };
+  const link = (from, to, fromPort = "bottom", toPort = "top") => connections.push({ id: generateConnId(), from, to, fromPort, toPort });
+  const hidden = config.hidden_size || 1152;
+  const heads = config.num_attention_heads || Math.max(1, Math.round(hidden / 64));
+  const ffDim = config.intermediate_size || hidden * 4;
+  const inCh = cfg.in_channels ?? 4;
+  const patch = cfg.patch_size ?? 2;
+  const ctxDim = cfg.cross_attention_dim ?? cfg.caption_channels ?? 768;
+  const hasCrossAttn = (cfg.cross_attention_dim ?? cfg.caption_channels) != null;
+  const isMMDiT = !!cfg._mmdit;
+  const numSingleLayers = typeof cfg._num_single_layers === "number" ? cfg._num_single_layers : 0;
+  const TIME_EMBED_DIM = 256;
+  const tIn = node("input", "Timestep", { shape: [TIME_EMBED_DIM] }, { x: xPos + 280, y });
+  const tEmb = node("linear", "TimeEmbed", { inFeatures: TIME_EMBED_DIM, outFeatures: hidden }, { x: xPos + 280, y: y + vs });
+  link(tIn, tEmb);
+  const cIn = node("input", "TextContext", { shape: [1, 77, ctxDim] }, { x: xPos - 280, y });
+  const cProj = node("linear", "ContextProj", { inFeatures: ctxDim, outFeatures: hidden }, { x: xPos - 280, y: y + vs });
+  link(cIn, cProj);
+  y += vs * 2;
+  let last = a.lastId;
+  if (a.isUNet) {
+    const blockCh = cfg.block_out_channels?.length ? cfg.block_out_channels : [320, 640, 1280, 1280];
+    const layersPerBlock = cfg.layers_per_block || 2;
+    const headsFor = (ch) => {
+      for (const hd of [64, 32, 16, 8]) if (ch % hd === 0) return ch / hd;
+      return 1;
+    };
+    const addCond = (attnId) => {
+      link(cProj, attnId, "bottom", "right");
+      link(tEmb, attnId, "bottom", "left");
+    };
+    let cur2 = node("conv2d", "ConvIn", { outChannels: blockCh[0], kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+    link(last, cur2);
+    last = cur2;
+    y += vs;
+    const skips = [];
+    for (let s = 0; s < blockCh.length; s++) {
+      for (let l = 0; l < layersPerBlock; l++) {
+        cur2 = node("conv2d", `Down${s + 1}_Conv${l + 1}`, { outChannels: blockCh[s], kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+        cur2 = node("swish", `Down${s + 1}_Act${l + 1}`, {}, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+      }
+      if (s >= 1) {
+        cur2 = node("multiHeadAttention", `Down${s + 1}_Attn`, { numHeads: headsFor(blockCh[s]), hiddenDim: blockCh[s] }, { x: xPos - 100, y });
+        link(last, cur2);
+        addCond(cur2);
+        last = cur2;
+        y += vs;
+      }
+      skips.push(last);
+      if (s < blockCh.length - 1) {
+        cur2 = node("maxpool2d", `Down${s + 1}_Downsample`, { kernelSize: 2, stride: 2, padding: 0 }, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+      }
+    }
+    const deep = blockCh[blockCh.length - 1];
+    cur2 = node("conv2d", "Mid_Conv1", { outChannels: deep, kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+    link(last, cur2);
+    last = cur2;
+    y += vs;
+    cur2 = node("multiHeadAttention", "Mid_Attn", { numHeads: headsFor(deep), hiddenDim: deep }, { x: xPos - 100, y });
+    link(last, cur2);
+    addCond(cur2);
+    last = cur2;
+    y += vs;
+    cur2 = node("conv2d", "Mid_Conv2", { outChannels: deep, kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+    link(last, cur2);
+    last = cur2;
+    y += vs;
+    for (let s = blockCh.length - 1; s >= 0; s--) {
+      if (s < blockCh.length - 1) {
+        cur2 = node("upsample", `Up${s + 1}_Upsample`, { scaleFactor: 2 }, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+      }
+      cur2 = node("concatenate", `Up${s + 1}_SkipConcat`, { dim: 0 }, { x: xPos, y });
+      link(last, cur2, "bottom", "left");
+      link(skips[s], cur2, "bottom", "right");
+      last = cur2;
+      y += vs;
+      for (let l = 0; l < layersPerBlock; l++) {
+        cur2 = node("conv2d", `Up${s + 1}_Conv${l + 1}`, { outChannels: blockCh[s], kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+        cur2 = node("swish", `Up${s + 1}_Act${l + 1}`, {}, { x: xPos, y });
+        link(last, cur2);
+        last = cur2;
+        y += vs;
+      }
+    }
+    cur2 = node("conv2d", "ConvOut", { outChannels: inCh, kernelSize: 3, stride: 1, padding: 1 }, { x: xPos, y });
+    link(last, cur2);
+    last = cur2;
+    y += vs;
+    return { lastId: last, yPos: y };
+  }
+  const numLayers = config.num_hidden_layers || 12;
+  let cur = node("conv2d", "PatchEmbed", { outChannels: hidden, kernelSize: patch, stride: patch, padding: 0 }, { x: xPos, y });
+  link(last, cur);
+  last = cur;
+  y += vs;
+  let textLast = cProj;
+  for (let i = 0; i < numLayers; i++) {
+    const attn = node("multiHeadAttention", `SelfAttn_${i + 1}`, { numHeads: heads, hiddenDim: hidden }, { x: xPos - 100, y });
+    link(last, attn);
+    if (i === 0) link(tEmb, attn, "bottom", "left");
+    if (i === 0 && !hasCrossAttn) link(cProj, attn, "bottom", "right");
+    const add1 = node("add", `Add_${i + 1}_1`, {}, { x: xPos, y: y + 50 });
+    link(last, add1, "bottom", "left");
+    link(attn, add1, "bottom", "right");
+    let blockOut = node("layerNorm", `LayerNorm_${i + 1}_1`, { normalizedShape: hidden }, { x: xPos, y: y + 100 });
+    link(add1, blockOut);
+    if (hasCrossAttn) {
+      const xattn = node("multiHeadAttention", `CrossAttn_${i + 1}`, { numHeads: heads, hiddenDim: hidden }, { x: xPos - 100, y: y + 150 });
+      link(blockOut, xattn);
+      link(cProj, xattn, "bottom", "right");
+      const addx = node("add", `Add_${i + 1}_x`, {}, { x: xPos, y: y + 200 });
+      link(blockOut, addx, "bottom", "left");
+      link(xattn, addx, "bottom", "right");
+      blockOut = node("layerNorm", `LayerNorm_${i + 1}_x`, { normalizedShape: hidden }, { x: xPos, y: y + 250 });
+      link(addx, blockOut);
+    }
+    const ff = node("feedForward", `FFN_${i + 1}`, { hiddenDim: hidden, ffDim }, { x: xPos, y: y + 300 });
+    link(blockOut, ff);
+    const add2 = node("add", `Add_${i + 1}_2`, {}, { x: xPos, y: y + 350 });
+    link(blockOut, add2, "bottom", "left");
+    link(ff, add2, "bottom", "right");
+    const n2 = node("layerNorm", `LayerNorm_${i + 1}_2`, { normalizedShape: hidden }, { x: xPos, y: y + 400 });
+    link(add2, n2);
+    if (isMMDiT) {
+      const tb = node("transformerBlock", `TextStream_${i + 1}`, { embedDim: hidden, ffDim }, { x: xPos + 240, y: y + 150 });
+      link(textLast, tb);
+      link(tb, attn);
+      textLast = tb;
+      const mod = node("linear", `AdaLN_${i + 1}`, { inFeatures: hidden, outFeatures: hidden * 12 }, { x: xPos + 240, y: y + 260 });
+      link(tEmb, mod);
+      link(mod, attn);
+    }
+    last = n2;
+    y += vs * 4;
+  }
+  for (let i = 0; i < numSingleLayers; i++) {
+    const sb = node("transformerBlock", `SingleBlock_${i + 1}`, { embedDim: hidden, ffDim }, { x: xPos, y });
+    link(last, sb);
+    last = sb;
+    y += vs;
+  }
+  cur = node("layerNorm", "FinalNorm", { normalizedShape: hidden }, { x: xPos, y });
+  link(last, cur);
+  last = cur;
+  y += vs;
+  cur = node("conv2d", "Unpatchify", { outChannels: inCh, kernelSize: 1, stride: 1, padding: 0 }, { x: xPos, y });
+  link(last, cur);
+  last = cur;
+  y += vs;
+  return { lastId: last, yPos: y };
+}
+function buildModalityTower(a) {
+  const { kind, mcfg, textHidden, components, connections, generateId, generateConnId, xPos } = a;
+  let y = a.yStart;
+  const SP = 130;
+  const connect = (from, to) => connections.push({ id: generateConnId(), from, to, fromPort: "bottom", toPort: "top" });
+  const towerDim = mcfg.hidden_size || mcfg.mm_embed_dim || mcfg.audio_embed_dim || mcfg.d_model || textHidden;
+  const cap = kind === "vision" ? "Vision" : "Audio";
+  const inId = generateId();
+  const inShape = kind === "vision" ? [mcfg.num_channels || 3, mcfg.image_size || 224, mcfg.image_size || 224] : [1, mcfg.num_mel_bins || mcfg.input_features || 128, 1];
+  components.push({
+    id: inId,
+    type: "input",
+    name: `${cap} input`,
+    position: { x: xPos, y },
+    params: { shape: inShape },
+    inputShape: inShape,
+    inputs: [],
+    outputs: []
+  });
+  y += SP;
+  const imgSize = mcfg.image_size || 224;
+  const patchSize = mcfg.patch_size || 16;
+  let cur = inId;
+  if (kind === "vision") {
+    const peId = generateId();
+    components.push({
+      id: peId,
+      type: "patchEmbed",
+      name: "PatchEmbed",
+      // The registry now derives the patch count from the real upstream feature
+      // map and only falls back to `imgSize`, but keep imgSize set: it is what
+      // the exporter writes into the generated PyTorch.
+      position: { x: xPos, y },
+      params: { imgSize, patchSize, embedDim: towerDim, inChans: mcfg.num_channels || 3 },
+      inputs: [],
+      outputs: []
+    });
+    connect(cur, peId);
+    cur = peId;
+    y += SP;
+    const patches = Math.max(1, Math.floor(imgSize / Math.max(1, patchSize)) ** 2) + 1;
+    const vpId = generateId();
+    components.push({
+      id: vpId,
+      type: "learnedPositionalEmbedding",
+      name: "Patch_Position_Embedding",
+      position: { x: xPos, y },
+      params: { maxLen: patches, embedDim: towerDim },
+      inputs: [],
+      outputs: []
+    });
+    connect(cur, vpId);
+    cur = vpId;
+    y += SP;
+  } else {
+    const feId = generateId();
+    components.push({
+      id: feId,
+      type: "projection",
+      name: "Audio feature embed",
+      position: { x: xPos, y },
+      params: { inDim: mcfg.num_mel_bins || mcfg.input_features || 128, outDim: towerDim },
+      inputs: [],
+      outputs: []
+    });
+    connect(cur, feId);
+    cur = feId;
+    y += SP;
+  }
+  const nLayers = mcfg.num_hidden_layers || mcfg.num_layers || mcfg.encoder_layers || 0;
+  const nHeads = mcfg.num_attention_heads || mcfg.encoder_attention_heads || mcfg.num_heads || 0;
+  const ffDim = mcfg.intermediate_size || mcfg.encoder_ffn_dim || mcfg.ffn_dim || 0;
+  const hasFullSpec = nLayers > 0 && nHeads > 0 && ffDim > 0;
+  if (hasFullSpec) {
+    for (let i = 0; i < nLayers; i++) {
+      const normId = generateId();
+      components.push({
+        id: normId,
+        type: "layerNorm",
+        name: `${cap}_LN_${i + 1}`,
+        position: { x: xPos, y },
+        params: { normalizedShape: towerDim },
+        inputs: [],
+        outputs: []
+      });
+      connect(cur, normId);
+      y += SP;
+      const attnId = generateId();
+      components.push({
+        id: attnId,
+        type: "multiHeadAttention",
+        name: `${cap}_Attn_${i + 1}`,
+        position: { x: xPos, y },
+        params: { numHeads: nHeads, hiddenDim: towerDim },
+        inputs: [],
+        outputs: []
+      });
+      connect(normId, attnId);
+      y += SP;
+      const addId = generateId();
+      components.push({
+        id: addId,
+        type: "add",
+        name: `${cap}_Add_${i + 1}`,
+        position: { x: xPos, y },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connect(attnId, addId);
+      connections.push({ id: generateConnId(), from: cur, to: addId, fromPort: "bottom", toPort: "left" });
+      y += SP;
+      const ffId = generateId();
+      components.push({
+        id: ffId,
+        type: "feedForward",
+        name: `${cap}_FFN_${i + 1}`,
+        position: { x: xPos, y },
+        params: { hiddenDim: towerDim, ffDim },
+        inputs: [],
+        outputs: []
+      });
+      connect(addId, ffId);
+      cur = ffId;
+      y += SP;
+    }
+  }
+  const projId = generateId();
+  components.push({
+    id: projId,
+    type: "projection",
+    name: hasFullSpec ? `${cap} projector` : `${cap} encoder (internals not in config)`,
+    position: { x: xPos, y },
+    params: { inDim: towerDim, outDim: textHidden, projDim: textHidden },
+    inputs: [],
+    outputs: []
+  });
+  connect(cur, projId);
+  y += SP;
+  const tokens = kind === "vision" ? mcfg.num_soft_tokens || Math.floor((imgSize / patchSize) ** 2) || 256 : mcfg.num_soft_tokens || 256;
+  const rsId = generateId();
+  components.push({
+    id: rsId,
+    type: "reshape",
+    name: `${cap} tokens`,
+    position: { x: xPos, y },
+    params: { shape: [1, tokens, textHidden] },
+    inputs: [],
+    outputs: []
+  });
+  connect(projId, rsId);
+  return rsId;
+}
+function convertHFConfigToModel(modelId, config) {
+  const components = [];
+  const connections = [];
+  const generateId = () => `comp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  const generateConnId = () => `conn-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  let yPos = 50;
+  const xPos = 200;
+  const verticalSpacing = 200;
+  const architectureClass = config.architectures?.[0] || "";
+  const modelType = config.model_type || "";
+  const inputId = generateId();
+  let inputShape;
+  const isDiffusionEarly = !!config._diffusion || /transformer2dmodel|transformer3dmodel|unet2dconditionmodel|unet2dmodel|controlnet|consistency|\bdit\b|mmdit|pixart|\bflux\b|stablediffusion3|sd3transformer|sd35|lumina|\bsana\b|auraflow|hunyuandit|cogview|cogvideo|kandinsky|\bmochi\b|\blatte\b|\bltx\b|ltxvideo|allegro|easyanimate/.test((architectureClass + " " + modelType).toLowerCase());
+  const isViTOrCLIP = architectureClass.toLowerCase().includes("vit") || modelType.toLowerCase() === "vit" || architectureClass.toLowerCase().includes("clip") || modelType.toLowerCase().includes("clip") || modelId.toLowerCase().includes("clip");
+  if (isDiffusionEarly) {
+    const latentCh = config.in_channels ?? 4;
+    const latentHW = config.sample_size ?? 64;
+    inputShape = [latentCh, latentHW, latentHW];
+  } else if (isViTOrCLIP) {
+    const imageSize = config.image_size || 224;
+    const numChannels = config.num_channels || 3;
+    inputShape = [1, numChannels, imageSize, imageSize];
+  } else if (architectureClass.toLowerCase().includes("resnet") || modelType.toLowerCase().includes("resnet") || modelType.toLowerCase() === "vgg" || architectureClass.toLowerCase().includes("vgg") || modelType.toLowerCase().includes("mobilenet") || modelType.toLowerCase().includes("efficientnet") || modelType.toLowerCase().includes("convnext") || modelType.toLowerCase().includes("swin")) {
+    const imageSize = config.image_size || 224;
+    const numChannels = config.num_channels || 3;
+    inputShape = [1, numChannels, imageSize, imageSize];
+  } else {
+    inputShape = [1, config.max_position_embeddings || 512];
+  }
+  components.push({
+    id: inputId,
+    type: "input",
+    name: isDiffusionEarly ? "Latent" : "Input",
+    position: { x: xPos, y: yPos },
+    params: { shape: inputShape },
+    inputs: [],
+    outputs: [],
+    inputShape
+  });
+  yPos += verticalSpacing;
+  let lastId = inputId;
+  const archLower = architectureClass.toLowerCase();
+  const typeLower = modelType.toLowerCase();
+  const modelIdLower = modelId.toLowerCase();
+  const isCLIP = archLower.includes("clip") || typeLower.includes("clip") || modelIdLower.includes("clip");
+  const ENCODER_DECODER_TYPES = ["t5", "mt5", "bart", "mbart", "pegasus", "marian", "whisper", "wav2vec2"];
+  const isEncoderDecoder = ENCODER_DECODER_TYPES.some(
+    (t) => typeLower.includes(t) || archLower.includes(t) || modelIdLower.includes(t)
+  );
+  const GPT_LIKE_TYPES = [
+    "gpt",
+    "gpt2",
+    "gpt_neo",
+    "gpt_neox",
+    "gptj",
+    "gpt-j",
+    "codegen",
+    "llama",
+    "llama2",
+    "llama3",
+    "opt",
+    "bloom",
+    "falcon",
+    "mistral",
+    "mixtral",
+    "phi",
+    "phi3",
+    "qwen",
+    "qwen2",
+    "gemma",
+    "gemma2",
+    "deepseek",
+    "cohere",
+    "olmo",
+    "starcoder",
+    "codellama",
+    "yi",
+    "internlm",
+    "baichuan",
+    "aquila",
+    "chatglm",
+    "stablelm",
+    "mpt",
+    "pythia",
+    // Decoder-only multimodal LLMs (image/audio tokens fused into the text
+    // stream). Their top-level model_type is a wrapper name, so list them here;
+    // the nested text decoder's model_type is also matched via _textModelType.
+    "llava",
+    "paligemma",
+    "idefics",
+    "mllama",
+    "internvl",
+    "smolvlm",
+    "pixtral",
+    "minicpm"
+  ];
+  const isDiffusion = !!config._diffusion || /transformer2dmodel|transformer3dmodel|unet2dconditionmodel|unet2dmodel|controlnet|consistency|\bdit\b|mmdit|pixart|\bflux\b|stablediffusion3|sd3transformer|sd35|lumina|\bsana\b|auraflow|hunyuandit|cogview|cogvideo|kandinsky|\bmochi\b|\blatte\b|\bltx\b|ltxvideo|allegro|easyanimate/.test(archLower + " " + typeLower);
+  const denoiserKind = config._denoiser || (archLower.includes("unet") || typeLower === "unet" || archLower.includes("controlnet") || archLower.includes("consistency") ? "unet" : "transformer");
+  const isUNet = isDiffusion && denoiserKind === "unet";
+  const textTypeLower = String(config._textModelType ?? "").toLowerCase();
+  const isGPTLike = !isCLIP && !isEncoderDecoder && !isDiffusion && (GPT_LIKE_TYPES.some((t) => typeLower.includes(t) || archLower.includes(t) || textTypeLower.includes(t)) || GPT_LIKE_TYPES.some((t) => modelIdLower.includes(t)) || // Fallback: any `*ForCausalLM` architecture is a decoder-only LM even when
+  // its family isn't in the keyword list (e.g. MoonshotKimiaForCausalLM). The
+  // decoder builder then reads hidden_act (→ SwiGLU) and num_key_value_heads
+  // (→ GQA) from the config, so it isn't undercounted by the generic path.
+  archLower.endsWith("forcausallm"));
+  const GATED_DECODER_STEMS = [
+    "llama",
+    "mistral",
+    "mixtral",
+    "qwen",
+    "gemma",
+    "phi3",
+    "phi4",
+    "deepseek",
+    "cohere",
+    "command",
+    "starcoder2",
+    "olmo",
+    "stablelm",
+    "yi",
+    "baichuan",
+    "internlm",
+    "minicpm",
+    "granite",
+    "aquila",
+    "chatglm"
+  ];
+  const actLower = String(config.hidden_act ?? config.hidden_activation ?? "").toLowerCase();
+  const isGatedDecoder = GATED_DECODER_STEMS.some((t) => typeLower.includes(t) || modelIdLower.includes(t)) || /silu|swish|geglu|swiglu/.test(actLower);
+  const BERT_LIKE_TYPES = [
+    "bert",
+    "roberta",
+    "distilbert",
+    "albert",
+    "electra",
+    "deberta",
+    "xlnet",
+    "camembert",
+    "xlm",
+    "flaubert",
+    "funnel",
+    "layoutlm",
+    "mpnet",
+    "squeezebert"
+  ];
+  const isBERTLike = !isCLIP && !isEncoderDecoder && !isGPTLike && !isDiffusion && (BERT_LIKE_TYPES.some((t) => archLower.includes(t) || typeLower.includes(t)) || // Generic encoder: has hidden_size/layers/heads but no decoder indicators
+  config.hidden_size && config.num_hidden_layers && config.num_attention_heads && !archLower.includes("vit") && !typeLower.includes("vit") && !archLower.includes("resnet") && !typeLower.includes("resnet"));
+  const isConformerCTC = !isDiffusion && (modelIdLower.includes("parakeet") || modelIdLower.includes("conformer") || typeLower.includes("conformer") || archLower.includes("conformer") || (archLower.includes("ctc") || modelIdLower.includes("ctc")) && !modelIdLower.includes("wav2vec") && !typeLower.includes("wav2vec"));
+  if (isConformerCTC) {
+    const dModel = config.hidden_size ?? config.d_model ?? config.encoder_dim ?? 1024;
+    const numLayers = config.num_hidden_layers ?? config.num_layers ?? config.n_layers ?? 24;
+    const numHeads = config.num_attention_heads ?? config.n_heads ?? 8;
+    const ffDim = config.intermediate_size ?? dModel * 4;
+    const vocab = config.vocab_size ?? 1025;
+    const melId = generateId();
+    components.push({
+      id: melId,
+      type: "melSpectrogram",
+      name: "MelSpectrogram",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: melId, fromPort: "bottom", toPort: "top" });
+    lastId = melId;
+    yPos += verticalSpacing;
+    for (let s = 0; s < 2; s++) {
+      const subId = generateId();
+      components.push({
+        id: subId,
+        type: "conv2d",
+        name: `Subsample_Conv${s + 1}`,
+        position: { x: xPos, y: yPos },
+        params: { outChannels: dModel, kernelSize: 3, stride: 2, padding: 1 },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: subId, fromPort: "bottom", toPort: "top" });
+      lastId = subId;
+      yPos += verticalSpacing;
+    }
+    const projId = generateId();
+    components.push({
+      id: projId,
+      type: "linear",
+      name: "Subsample_Proj",
+      position: { x: xPos, y: yPos },
+      params: { outFeatures: dModel },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: projId, fromPort: "bottom", toPort: "top" });
+    lastId = projId;
+    yPos += verticalSpacing;
+    const posId = generateId();
+    components.push({
+      id: posId,
+      type: "positionalEncoding",
+      name: "Rel_PosEnc",
+      position: { x: xPos, y: yPos },
+      params: { dModel, embedDim: dModel, maxLen: config.max_source_positions ?? 5e3 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: posId, fromPort: "bottom", toPort: "top" });
+    lastId = posId;
+    yPos += verticalSpacing;
+    for (let i = 0; i < numLayers; i++) {
+      const blkId = generateId();
+      components.push({
+        id: blkId,
+        type: "conformerBlock",
+        name: `Conformer_${i + 1}`,
+        position: { x: xPos, y: yPos },
+        params: { dModel, numHeads, ffDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: blkId, fromPort: "bottom", toPort: "top" });
+      lastId = blkId;
+      yPos += verticalSpacing;
+    }
+    const ctcId = generateId();
+    components.push({
+      id: ctcId,
+      type: "linear",
+      name: "CTC_Head",
+      position: { x: xPos, y: yPos },
+      params: { inFeatures: dModel, outFeatures: vocab },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: ctcId, fromPort: "bottom", toPort: "top" });
+    lastId = ctcId;
+    yPos += verticalSpacing;
+  } else if (isDiffusion) {
+    const adv = buildDiffusionDenoiser({
+      isUNet,
+      config,
+      components,
+      connections,
+      generateId,
+      generateConnId,
+      lastId,
+      xPos,
+      yPos,
+      verticalSpacing
+    });
+    lastId = adv.lastId;
+    yPos = adv.yPos;
+    const vae = config._vae;
+    if (vae) {
+      const chans = Array.isArray(vae.block_out_channels) && vae.block_out_channels.length ? vae.block_out_channels : [128, 256, 512, 512];
+      const lpb = vae.layers_per_block || 2;
+      const outC = vae.in_channels || 3;
+      const conv = (name, inC, oc, k = 3) => {
+        const id = generateId();
+        components.push({
+          id,
+          type: "conv2d",
+          name,
+          position: { x: xPos, y: yPos },
+          params: { inChannels: inC, outChannels: oc, kernelSize: k, stride: 1, padding: Math.floor(k / 2) },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({ id: generateConnId(), from: lastId, to: id, fromPort: "bottom", toPort: "top" });
+        lastId = id;
+        yPos += verticalSpacing;
+      };
+      const rev = [...chans].reverse();
+      let prev = vae.latent_channels || config.in_channels || 4;
+      conv("VAE_ConvIn", prev, rev[0]);
+      prev = rev[0];
+      conv("VAE_Mid1", prev, prev);
+      conv("VAE_Mid2", prev, prev);
+      rev.forEach((ch, s) => {
+        for (let l = 0; l <= lpb; l++) {
+          conv(`VAE_Up${s + 1}_Res${l + 1}`, prev, ch);
+          prev = ch;
+        }
+        if (s < rev.length - 1) {
+          const upId = generateId();
+          components.push({
+            id: upId,
+            type: "upsample",
+            name: `VAE_Up${s + 1}_Upsample`,
+            position: { x: xPos, y: yPos },
+            params: { scaleFactor: 2 },
+            inputs: [],
+            outputs: []
+          });
+          connections.push({ id: generateConnId(), from: lastId, to: upId, fromPort: "bottom", toPort: "top" });
+          lastId = upId;
+          yPos += verticalSpacing;
+        }
+      });
+      conv("VAE_ConvOut", prev, outC);
+    }
+  } else if (isBERTLike) {
+    const numLayers = config.num_hidden_layers || 12;
+    const hiddenSize = config.hidden_size || 768;
+    const numHeads = config.num_attention_heads || 12;
+    const intermediateSize = config.intermediate_size || config.ffn_dim || 3072;
+    const embeddingId = generateId();
+    components.push({
+      id: embeddingId,
+      type: "embedding",
+      name: "Embedding",
+      position: { x: xPos, y: yPos },
+      params: {
+        vocabSize: config.vocab_size || 30522,
+        embeddingDim: hiddenSize,
+        maxSeqLen: config.max_position_embeddings || 512
+      },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({
+      id: generateConnId(),
+      from: lastId,
+      to: embeddingId,
+      fromPort: "bottom",
+      toPort: "top"
+    });
+    lastId = embeddingId;
+    yPos += verticalSpacing;
+    const bertPosId = generateId();
+    components.push({
+      id: bertPosId,
+      type: "learnedPositionalEmbedding",
+      name: "Positional_Embedding",
+      position: { x: xPos, y: yPos },
+      params: { maxLen: config.max_position_embeddings || 512, embedDim: hiddenSize },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: bertPosId, fromPort: "bottom", toPort: "top" });
+    lastId = bertPosId;
+    yPos += verticalSpacing;
+    const layerSpacing = 450;
+    const componentSpacing = 120;
+    for (let i = 0; i < numLayers; i++) {
+      const layerStartY = yPos;
+      const attentionId = generateId();
+      components.push({
+        id: attentionId,
+        type: "multiHeadAttention",
+        name: `Attention_${i + 1}`,
+        position: { x: xPos - 150, y: layerStartY },
+        params: {
+          numHeads,
+          hiddenDim: hiddenSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: lastId,
+        to: attentionId,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      const addId = generateId();
+      components.push({
+        id: addId,
+        type: "add",
+        name: `Add_${i + 1}`,
+        position: { x: xPos, y: layerStartY + componentSpacing },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: lastId,
+        to: addId,
+        fromPort: "bottom",
+        toPort: "left"
+      });
+      connections.push({
+        id: generateConnId(),
+        from: attentionId,
+        to: addId,
+        fromPort: "bottom",
+        toPort: "right"
+      });
+      const norm1Id = generateId();
+      components.push({
+        id: norm1Id,
+        type: "layerNorm",
+        name: `LayerNorm_${i + 1}_1`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 2 },
+        params: {
+          normalizedShape: hiddenSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: addId,
+        to: norm1Id,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      const ffId = generateId();
+      components.push({
+        id: ffId,
+        type: "feedForward",
+        name: `FFN_${i + 1}`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 3 },
+        params: {
+          hiddenDim: hiddenSize,
+          ffDim: intermediateSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: norm1Id,
+        to: ffId,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      lastId = ffId;
+      yPos = layerStartY + layerSpacing;
+    }
+  } else if (isGPTLike) {
+    const numLayers = config.num_hidden_layers || config.n_layer || 12;
+    const hiddenSize = config.hidden_size || config.n_embd || 768;
+    const numHeads = config.num_attention_heads || config.n_head || 12;
+    const intermediateSize = config.intermediate_size || config.n_inner || config.ffn_dim_hidden || 3072;
+    const numKVHeads = config.num_key_value_heads ?? config.num_kv_heads ?? numHeads;
+    const headDim = config.head_dim ?? (numHeads > 0 ? Math.floor(hiddenSize / numHeads) : 64);
+    const useGQA = isGatedDecoder || config.num_key_value_heads != null;
+    const cfgAny = config;
+    const useRMSNorm = cfgAny.rms_norm_eps != null || isGatedDecoder && cfgAny.layer_norm_epsilon == null && cfgAny.layer_norm_eps == null;
+    const normType = useRMSNorm ? "rmsNorm" : "layerNorm";
+    const normLabel = useRMSNorm ? "RMSNorm" : "LayerNorm";
+    const useRoPE = useRMSNorm || cfgAny.rope_theta != null || cfgAny.rope_scaling != null;
+    const maxPositions = cfgAny.max_position_embeddings ?? cfgAny.n_positions ?? 0;
+    const numExperts = config.num_local_experts ?? config.num_experts ?? config.n_routed_experts ?? 0;
+    const numSharedExperts = config.n_shared_experts ?? config.num_shared_experts ?? 0;
+    const expertDim = config.moe_intermediate_size ?? config.expert_intermediate_size ?? intermediateSize;
+    const topK = config.num_experts_per_tok ?? config.experts_per_token ?? config.num_experts_per_token;
+    const isMoE = numExperts > 1;
+    const firstKDense = config.first_k_dense_replace ?? config.first_k_dense ?? 0;
+    const mlpOnlyLayers = Array.isArray(config.mlp_only_layers) ? config.mlp_only_layers : [];
+    const sparseStep = config.decoder_sparse_step ?? 0;
+    const layerIsMoE = (i) => {
+      if (!isMoE) return false;
+      if (i < firstKDense) return false;
+      if (mlpOnlyLayers.includes(i)) return false;
+      if (sparseStep > 1 && (i + 1) % sparseStep !== 0) return false;
+      return true;
+    };
+    const embeddingId = generateId();
+    components.push({
+      id: embeddingId,
+      type: "embedding",
+      name: "Embedding",
+      position: { x: xPos, y: yPos },
+      params: {
+        vocabSize: config.vocab_size || 50257,
+        embeddingDim: hiddenSize,
+        maxSeqLen: config.max_position_embeddings || config.n_positions || 1024
+      },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({
+      id: generateConnId(),
+      from: lastId,
+      to: embeddingId,
+      fromPort: "bottom",
+      toPort: "top"
+    });
+    lastId = embeddingId;
+    yPos += verticalSpacing;
+    const posId = generateId();
+    components.push({
+      id: posId,
+      type: useRoPE ? "rope" : "learnedPositionalEmbedding",
+      name: useRoPE ? "RoPE" : "Positional_Embedding",
+      position: { x: xPos, y: yPos },
+      params: useRoPE ? { headDim, theta: cfgAny.rope_theta ?? 1e4 } : { maxLen: maxPositions || 1024, embedDim: hiddenSize },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: posId, fromPort: "bottom", toPort: "top" });
+    lastId = posId;
+    yPos += verticalSpacing;
+    const visionCfg = config.vision_config;
+    const audioCfg = config.audio_config;
+    const towerOuts = [];
+    if (visionCfg && typeof visionCfg === "object") {
+      towerOuts.push(buildModalityTower({
+        kind: "vision",
+        mcfg: visionCfg,
+        textHidden: hiddenSize,
+        components,
+        connections,
+        generateId,
+        generateConnId,
+        xPos: xPos - 520,
+        yStart: yPos
+      }));
+    }
+    if (audioCfg && typeof audioCfg === "object") {
+      towerOuts.push(buildModalityTower({
+        kind: "audio",
+        mcfg: audioCfg,
+        textHidden: hiddenSize,
+        components,
+        connections,
+        generateId,
+        generateConnId,
+        xPos: xPos + 520,
+        yStart: yPos
+      }));
+    }
+    if (towerOuts.length > 0) {
+      const fusionId = generateId();
+      components.push({
+        id: fusionId,
+        type: "concatenate",
+        name: "Multimodal fusion (concat tokens)",
+        position: { x: xPos, y: yPos },
+        params: { dim: 1 },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: embeddingId, to: fusionId, fromPort: "bottom", toPort: "top" });
+      for (const t of towerOuts) {
+        connections.push({ id: generateConnId(), from: t, to: fusionId, fromPort: "bottom", toPort: "left" });
+      }
+      lastId = fusionId;
+      yPos += verticalSpacing;
+    }
+    const layerSpacing = 600;
+    const componentSpacing = 120;
+    for (let i = 0; i < numLayers; i++) {
+      const layerStartY = yPos;
+      const skipId = lastId;
+      const norm1Id = generateId();
+      components.push({
+        id: norm1Id,
+        type: normType,
+        name: `${normLabel}_${i + 1}_1`,
+        position: { x: xPos, y: layerStartY },
+        params: { normalizedShape: hiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: norm1Id, fromPort: "bottom", toPort: "top" });
+      const attentionId = generateId();
+      components.push({
+        id: attentionId,
+        type: useGQA ? "groupedQueryAttention" : "multiHeadAttention",
+        name: `Attention_${i + 1}`,
+        position: { x: xPos, y: layerStartY + componentSpacing },
+        params: useGQA ? { embedDim: hiddenSize, numHeads, numKVHeads, headDim } : { numHeads, hiddenDim: hiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: norm1Id, to: attentionId, fromPort: "bottom", toPort: "top" });
+      const add1Id = generateId();
+      components.push({
+        id: add1Id,
+        type: "add",
+        name: `Add_${i + 1}_attn`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 2 },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: attentionId, to: add1Id, fromPort: "bottom", toPort: "top" });
+      connections.push({ id: generateConnId(), from: skipId, to: add1Id, fromPort: "bottom", toPort: "left" });
+      const norm2Id = generateId();
+      components.push({
+        id: norm2Id,
+        type: normType,
+        name: `${normLabel}_${i + 1}_2`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 3 },
+        params: { normalizedShape: hiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: add1Id, to: norm2Id, fromPort: "bottom", toPort: "top" });
+      const ffId = generateId();
+      const thisMoE = layerIsMoE(i);
+      const moeType = numSharedExperts > 0 ? "sharedExpertMoE" : "moeLayer";
+      components.push({
+        id: ffId,
+        type: thisMoE ? moeType : isGatedDecoder ? "swiglu" : "feedForward",
+        name: thisMoE ? `MoE_${i + 1}` : `FFN_${i + 1}`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 4 },
+        // `dim` is what pythonExporter reads for SwiGLU; `embedDim`/`intermediateSize`
+        // are what codeGenerator + paramEstimator read. Emit all three so every
+        // consumer resolves the real size (not the 512 literal fallback).
+        params: thisMoE ? numSharedExperts > 0 ? { embedDim: hiddenSize, numExperts, numSharedExperts, expertDim, topK } : { embedDim: hiddenSize, numExperts, expertDim, topK } : isGatedDecoder ? { embedDim: hiddenSize, dim: hiddenSize, intermediateSize } : { hiddenDim: hiddenSize, ffDim: intermediateSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: norm2Id, to: ffId, fromPort: "bottom", toPort: "top" });
+      const add2Id = generateId();
+      components.push({
+        id: add2Id,
+        type: "add",
+        name: `Add_${i + 1}_ffn`,
+        position: { x: xPos, y: layerStartY + componentSpacing * 5 },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: ffId, to: add2Id, fromPort: "bottom", toPort: "top" });
+      connections.push({ id: generateConnId(), from: add1Id, to: add2Id, fromPort: "bottom", toPort: "left" });
+      lastId = add2Id;
+      yPos = layerStartY + layerSpacing;
+    }
+    if (config.tie_word_embeddings === false) {
+      const finalNormId = generateId();
+      components.push({
+        id: finalNormId,
+        type: normType,
+        name: `Final_${normLabel}`,
+        position: { x: xPos, y: yPos },
+        params: { normalizedShape: hiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: finalNormId, fromPort: "bottom", toPort: "top" });
+      yPos += verticalSpacing;
+      const lmHeadId = generateId();
+      components.push({
+        id: lmHeadId,
+        type: "linear",
+        name: "LM_Head",
+        position: { x: xPos, y: yPos },
+        params: { inFeatures: hiddenSize, outFeatures: config.vocab_size || 50257, bias: false },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: finalNormId, to: lmHeadId, fromPort: "bottom", toPort: "top" });
+      lastId = lmHeadId;
+      yPos += verticalSpacing;
+    }
+  } else if (archLower.includes("vit") || typeLower.includes("vit") || isCLIP || typeLower.includes("swin") || typeLower.includes("deit") || typeLower.includes("beit")) {
+    const visionConfig = config.vision_config || config;
+    const imageSize = visionConfig.image_size || config.image_size || 224;
+    const patchSize = visionConfig.patch_size || config.patch_size || 16;
+    const numPatches = Math.floor((imageSize / patchSize) ** 2);
+    const hiddenSize = visionConfig.hidden_size || visionConfig.d_model || config.hidden_size || config.d_model || 768;
+    const numLayers = visionConfig.num_hidden_layers || visionConfig.num_layers || visionConfig.encoder_layers || config.num_hidden_layers || config.num_layers || 12;
+    const numHeads = visionConfig.num_attention_heads || visionConfig.attention_heads || visionConfig.n_head || config.num_attention_heads || config.attention_heads || 12;
+    const intermediateSize = visionConfig.intermediate_size || visionConfig.ffn_dim || visionConfig.dim_feedforward || config.intermediate_size || config.ffn_dim || 3072;
+    const patchEmbedId = generateId();
+    components.push({
+      id: patchEmbedId,
+      type: "embedding",
+      name: "PatchEmbedding",
+      position: { x: xPos, y: yPos },
+      params: {
+        vocabSize: numPatches + 1,
+        // +1 for CLS token
+        embeddingDim: hiddenSize,
+        maxSeqLen: numPatches + 1
+      },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({
+      id: generateConnId(),
+      from: lastId,
+      to: patchEmbedId,
+      fromPort: "bottom",
+      toPort: "top"
+    });
+    lastId = patchEmbedId;
+    yPos += verticalSpacing;
+    const vitPosId = generateId();
+    components.push({
+      id: vitPosId,
+      type: "learnedPositionalEmbedding",
+      name: "Patch_Position_Embedding",
+      position: { x: xPos, y: yPos },
+      params: { maxLen: numPatches + 1, embedDim: hiddenSize },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: vitPosId, fromPort: "bottom", toPort: "top" });
+    lastId = vitPosId;
+    yPos += verticalSpacing;
+    for (let i = 0; i < numLayers; i++) {
+      const attentionId = generateId();
+      components.push({
+        id: attentionId,
+        type: "multiHeadAttention",
+        name: `Attention_${i + 1}`,
+        position: { x: xPos - 100, y: yPos },
+        params: {
+          numHeads,
+          hiddenDim: hiddenSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: lastId,
+        to: attentionId,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      const addId = generateId();
+      components.push({
+        id: addId,
+        type: "add",
+        name: `Add_${i + 1}`,
+        position: { x: xPos, y: yPos + 50 },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: lastId,
+        to: addId,
+        fromPort: "bottom",
+        toPort: "left"
+      });
+      connections.push({
+        id: generateConnId(),
+        from: attentionId,
+        to: addId,
+        fromPort: "bottom",
+        toPort: "right"
+      });
+      const norm1Id = generateId();
+      components.push({
+        id: norm1Id,
+        type: "layerNorm",
+        name: `LayerNorm_${i + 1}_1`,
+        position: { x: xPos, y: yPos + 100 },
+        params: {
+          normalizedShape: hiddenSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: addId,
+        to: norm1Id,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      const ffId = generateId();
+      components.push({
+        id: ffId,
+        type: "feedForward",
+        name: `FFN_${i + 1}`,
+        position: { x: xPos, y: yPos + 250 },
+        params: {
+          hiddenDim: hiddenSize,
+          ffDim: intermediateSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: norm1Id,
+        to: ffId,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      const add2Id = generateId();
+      components.push({
+        id: add2Id,
+        type: "add",
+        name: `Add_${i + 1}_2`,
+        position: { x: xPos, y: yPos + 350 },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: norm1Id,
+        to: add2Id,
+        fromPort: "bottom",
+        toPort: "left"
+      });
+      connections.push({
+        id: generateConnId(),
+        from: ffId,
+        to: add2Id,
+        fromPort: "bottom",
+        toPort: "right"
+      });
+      const norm2Id = generateId();
+      components.push({
+        id: norm2Id,
+        type: "layerNorm",
+        name: `LayerNorm_${i + 1}_2`,
+        position: { x: xPos, y: yPos + 400 },
+        params: {
+          normalizedShape: hiddenSize
+        },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({
+        id: generateConnId(),
+        from: add2Id,
+        to: norm2Id,
+        fromPort: "bottom",
+        toPort: "top"
+      });
+      lastId = norm2Id;
+      yPos += verticalSpacing * 4;
+    }
+  } else if (archLower.includes("resnet") || typeLower.includes("resnet")) {
+    const rcfg = config;
+    const depths = Array.isArray(rcfg.depths) ? rcfg.depths : Array.isArray(rcfg.layers) ? rcfg.layers : [2, 2, 2, 2];
+    const isBottleneck = rcfg.layer_type ? String(rcfg.layer_type).toLowerCase() === "bottleneck" : Array.isArray(rcfg.hidden_sizes) ? rcfg.hidden_sizes[0] >= 256 : depths.reduce((a, b) => a + b, 0) > 8;
+    const stageChannels = Array.isArray(rcfg.hidden_sizes) && rcfg.hidden_sizes.length >= depths.length ? rcfg.hidden_sizes : isBottleneck ? [256, 512, 1024, 2048] : [64, 128, 256, 512];
+    const stemChannels = rcfg.embedding_size ?? 64;
+    const stemConvId = generateId();
+    components.push({
+      id: stemConvId,
+      type: "conv2d",
+      name: "Stem_Conv",
+      position: { x: xPos, y: yPos },
+      params: { outChannels: stemChannels, kernelSize: 7, stride: 2, padding: 3 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: stemConvId, fromPort: "bottom", toPort: "top" });
+    lastId = stemConvId;
+    yPos += verticalSpacing;
+    const stemBnId = generateId();
+    components.push({
+      id: stemBnId,
+      type: "batchNorm",
+      name: "Stem_BN",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: stemBnId, fromPort: "bottom", toPort: "top" });
+    lastId = stemBnId;
+    yPos += verticalSpacing;
+    const stemReluId = generateId();
+    components.push({
+      id: stemReluId,
+      type: "relu",
+      name: "Stem_ReLU",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: stemReluId, fromPort: "bottom", toPort: "top" });
+    lastId = stemReluId;
+    yPos += verticalSpacing;
+    const stemPoolId = generateId();
+    components.push({
+      id: stemPoolId,
+      type: "maxpool2d",
+      name: "Stem_MaxPool",
+      position: { x: xPos, y: yPos },
+      params: { kernelSize: 3, stride: 2, padding: 1 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: stemPoolId, fromPort: "bottom", toPort: "top" });
+    lastId = stemPoolId;
+    yPos += verticalSpacing;
+    const conv = (name, params, from) => {
+      const id = generateId();
+      components.push({ id, type: "conv2d", name, position: { x: xPos, y: yPos }, params, inputs: [], outputs: [] });
+      connections.push({ id: generateConnId(), from, to: id, fromPort: "bottom", toPort: "top" });
+      yPos += verticalSpacing;
+      return id;
+    };
+    const simple = (type, name, from, x = xPos) => {
+      const id = generateId();
+      components.push({ id, type, name, position: { x, y: yPos }, params: {}, inputs: [], outputs: [] });
+      connections.push({ id: generateConnId(), from, to: id, fromPort: "bottom", toPort: "top" });
+      yPos += verticalSpacing;
+      return id;
+    };
+    let prevOutCh = stemChannels;
+    for (let stageIdx = 0; stageIdx < depths.length; stageIdx++) {
+      const outCh = stageChannels[stageIdx] ?? stageChannels[stageChannels.length - 1];
+      const innerCh = isBottleneck ? Math.max(1, Math.floor(outCh / 4)) : outCh;
+      const numBlocks = depths[stageIdx] || 1;
+      for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
+        const tag = `Stage${stageIdx + 1}_Block${blockIdx + 1}`;
+        const stride = blockIdx === 0 && stageIdx > 0 ? 2 : 1;
+        const blockIn = lastId;
+        let mainId;
+        if (isBottleneck) {
+          mainId = conv(`${tag}_Conv1x1_reduce`, { outChannels: innerCh, kernelSize: 1, stride: 1, padding: 0 }, blockIn);
+          mainId = simple("batchNorm", `${tag}_BN1`, mainId);
+          mainId = simple("relu", `${tag}_ReLU1`, mainId);
+          mainId = conv(`${tag}_Conv3x3`, { outChannels: innerCh, kernelSize: 3, stride, padding: 1 }, mainId);
+          mainId = simple("batchNorm", `${tag}_BN2`, mainId);
+          mainId = simple("relu", `${tag}_ReLU2`, mainId);
+          mainId = conv(`${tag}_Conv1x1_expand`, { outChannels: outCh, kernelSize: 1, stride: 1, padding: 0 }, mainId);
+          mainId = simple("batchNorm", `${tag}_BN3`, mainId);
+        } else {
+          mainId = conv(`${tag}_Conv1`, { outChannels: outCh, kernelSize: 3, stride, padding: 1 }, blockIn);
+          mainId = simple("batchNorm", `${tag}_BN1`, mainId);
+          mainId = simple("relu", `${tag}_ReLU1`, mainId);
+          mainId = conv(`${tag}_Conv2`, { outChannels: outCh, kernelSize: 3, stride: 1, padding: 1 }, mainId);
+          mainId = simple("batchNorm", `${tag}_BN2`, mainId);
+        }
+        let shortcutId = blockIn;
+        if (stride !== 1 || prevOutCh !== outCh) {
+          const dsY = yPos;
+          const dsId = generateId();
+          components.push({
+            id: dsId,
+            type: "conv2d",
+            name: `${tag}_Downsample`,
+            position: { x: xPos + 260, y: dsY },
+            params: { outChannels: outCh, kernelSize: 1, stride, padding: 0 },
+            inputs: [],
+            outputs: []
+          });
+          connections.push({ id: generateConnId(), from: blockIn, to: dsId, fromPort: "bottom", toPort: "top" });
+          const dsBnId = generateId();
+          components.push({
+            id: dsBnId,
+            type: "batchNorm",
+            name: `${tag}_Downsample_BN`,
+            position: { x: xPos + 260, y: dsY + verticalSpacing },
+            params: {},
+            inputs: [],
+            outputs: []
+          });
+          connections.push({ id: generateConnId(), from: dsId, to: dsBnId, fromPort: "bottom", toPort: "top" });
+          shortcutId = dsBnId;
+        }
+        const addId = generateId();
+        components.push({
+          id: addId,
+          type: "add",
+          name: `${tag}_Add`,
+          position: { x: xPos, y: yPos },
+          params: {},
+          inputs: [],
+          outputs: []
+        });
+        connections.push({ id: generateConnId(), from: mainId, to: addId, fromPort: "bottom", toPort: "top" });
+        connections.push({ id: generateConnId(), from: shortcutId, to: addId, fromPort: "bottom", toPort: "left" });
+        yPos += verticalSpacing;
+        lastId = simple("relu", `${tag}_ReLU_out`, addId);
+        prevOutCh = outCh;
+      }
+    }
+    const gapId = generateId();
+    components.push({
+      id: gapId,
+      type: "globalAvgPool2d",
+      name: "GlobalAvgPool",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: gapId, fromPort: "bottom", toPort: "top" });
+    lastId = gapId;
+    yPos += verticalSpacing;
+    const flatId = generateId();
+    components.push({
+      id: flatId,
+      type: "flatten",
+      name: "Flatten",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: flatId, fromPort: "bottom", toPort: "top" });
+    lastId = flatId;
+    yPos += verticalSpacing;
+    const numClasses = config.num_labels || config.num_classes || 1e3;
+    const fcId = generateId();
+    components.push({
+      id: fcId,
+      type: "linear",
+      name: "Classifier",
+      position: { x: xPos, y: yPos },
+      // The last stage's width, not a hard-coded 512: a bottleneck ResNet ends
+      // at 2048, and the wrong number both blocked on shape and lost the 2M
+      // parameters the classifier actually carries.
+      params: { inFeatures: stageChannels[depths.length - 1] ?? stageChannels[stageChannels.length - 1] ?? 512, outFeatures: numClasses },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: fcId, fromPort: "bottom", toPort: "top" });
+    lastId = fcId;
+    yPos += verticalSpacing;
+  } else if (typeLower === "vgg" || archLower.includes("vgg")) {
+    const depths = config.depths || [2, 2, 3, 3, 3];
+    const outChannels = config.out_channels || [64, 128, 256, 512, 512];
+    const hiddenDim = config.hidden_dim || 4096;
+    const numClasses = config.num_labels || config.output_dim || 1e3;
+    const useBN = config.batch_norm || false;
+    for (let si = 0; si < depths.length; si++) {
+      const outCh = outChannels[si] ?? 64;
+      const numConvs = depths[si] ?? 2;
+      for (let ci = 0; ci < numConvs; ci++) {
+        const convId = generateId();
+        components.push({
+          id: convId,
+          type: "conv2d",
+          name: `Stage${si + 1}_Conv${ci + 1}`,
+          position: { x: xPos, y: yPos },
+          params: { outChannels: outCh, kernelSize: 3, stride: 1, padding: 1 },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({ id: generateConnId(), from: lastId, to: convId, fromPort: "bottom", toPort: "top" });
+        lastId = convId;
+        yPos += verticalSpacing;
+        if (useBN) {
+          const bnId = generateId();
+          components.push({
+            id: bnId,
+            type: "batchNorm",
+            name: `Stage${si + 1}_BN${ci + 1}`,
+            position: { x: xPos, y: yPos },
+            params: {},
+            inputs: [],
+            outputs: []
+          });
+          connections.push({ id: generateConnId(), from: lastId, to: bnId, fromPort: "bottom", toPort: "top" });
+          lastId = bnId;
+          yPos += verticalSpacing;
+        }
+        const reluId = generateId();
+        components.push({
+          id: reluId,
+          type: "relu",
+          name: `Stage${si + 1}_ReLU${ci + 1}`,
+          position: { x: xPos, y: yPos },
+          params: {},
+          inputs: [],
+          outputs: []
+        });
+        connections.push({ id: generateConnId(), from: lastId, to: reluId, fromPort: "bottom", toPort: "top" });
+        lastId = reluId;
+        yPos += verticalSpacing;
+      }
+      const poolId = generateId();
+      components.push({
+        id: poolId,
+        type: "maxpool2d",
+        name: `Stage${si + 1}_MaxPool`,
+        position: { x: xPos, y: yPos },
+        params: { kernelSize: 2, stride: 2 },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: poolId, fromPort: "bottom", toPort: "top" });
+      lastId = poolId;
+      yPos += verticalSpacing;
+    }
+    const avgPoolId = generateId();
+    components.push({
+      id: avgPoolId,
+      type: "adaptiveAvgPool2d",
+      name: "AdaptiveAvgPool",
+      position: { x: xPos, y: yPos },
+      params: { outputSize: 7 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: avgPoolId, fromPort: "bottom", toPort: "top" });
+    lastId = avgPoolId;
+    yPos += verticalSpacing;
+    const flatId = generateId();
+    components.push({
+      id: flatId,
+      type: "flatten",
+      name: "Flatten",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: flatId, fromPort: "bottom", toPort: "top" });
+    lastId = flatId;
+    yPos += verticalSpacing;
+    const lastOutCh = outChannels[outChannels.length - 1] ?? 512;
+    for (let fi = 0; fi < 2; fi++) {
+      const inF = fi === 0 ? lastOutCh * 7 * 7 : hiddenDim;
+      const fcId = generateId();
+      components.push({
+        id: fcId,
+        type: "linear",
+        name: `FC${fi + 1}`,
+        position: { x: xPos, y: yPos },
+        params: { inFeatures: inF, outFeatures: hiddenDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: fcId, fromPort: "bottom", toPort: "top" });
+      lastId = fcId;
+      yPos += verticalSpacing;
+      const rId = generateId();
+      components.push({
+        id: rId,
+        type: "relu",
+        name: `FC_ReLU${fi + 1}`,
+        position: { x: xPos, y: yPos },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: rId, fromPort: "bottom", toPort: "top" });
+      lastId = rId;
+      yPos += verticalSpacing;
+      const drId = generateId();
+      components.push({
+        id: drId,
+        type: "dropout",
+        name: `Dropout${fi + 1}`,
+        position: { x: xPos, y: yPos },
+        params: { dropout: 0.5 },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: drId, fromPort: "bottom", toPort: "top" });
+      lastId = drId;
+      yPos += verticalSpacing;
+    }
+    const classId = generateId();
+    components.push({
+      id: classId,
+      type: "linear",
+      name: "Classifier",
+      position: { x: xPos, y: yPos },
+      params: { inFeatures: hiddenDim, outFeatures: numClasses },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: classId, fromPort: "bottom", toPort: "top" });
+    lastId = classId;
+    yPos += verticalSpacing;
+  } else if (isEncoderDecoder && typeLower !== "whisper") {
+    const encHiddenSize = config.hidden_size || config.d_model || 768;
+    const encNumLayers = config.num_encoder_layers || config.encoder_layers || config.num_hidden_layers || 6;
+    const decNumLayers = config.num_decoder_layers || config.decoder_layers || config.num_hidden_layers || 6;
+    const numHeads = config.num_attention_heads || config.encoder_attention_heads || 8;
+    const ffDim = config.intermediate_size || config.d_ff || config.encoder_ffn_dim || 2048;
+    const encX = xPos - 200;
+    const decX = xPos + 200;
+    const encEmbId = generateId();
+    components.push({
+      id: encEmbId,
+      type: "embedding",
+      name: "Encoder_Embedding",
+      position: { x: encX, y: yPos },
+      params: { vocabSize: config.vocab_size || 32128, embeddingDim: encHiddenSize, maxSeqLen: config.max_position_embeddings || 512 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: encEmbId, fromPort: "bottom", toPort: "top" });
+    let encLastId = encEmbId;
+    yPos += verticalSpacing;
+    const relBuckets = config.relative_attention_num_buckets;
+    const encPosId = generateId();
+    components.push({
+      id: encPosId,
+      type: relBuckets != null ? "relativePositionBias" : "learnedPositionalEmbedding",
+      name: relBuckets != null ? "Relative_Position_Bias" : "Encoder_Position_Embedding",
+      position: { x: encX, y: yPos },
+      params: relBuckets != null ? {
+        numHeads: config.num_heads ?? config.encoder_attention_heads ?? 8,
+        numBuckets: relBuckets,
+        maxDistance: config.relative_attention_max_distance ?? 128
+      } : { maxLen: config.max_position_embeddings || 1024, embedDim: encHiddenSize },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: encLastId, to: encPosId, fromPort: "bottom", toPort: "top" });
+    encLastId = encPosId;
+    yPos += verticalSpacing;
+    const encLayerSpacing = 350;
+    const encCompSpacing = 100;
+    for (let i = 0; i < encNumLayers; i++) {
+      const ly = yPos + i * encLayerSpacing;
+      const eAttnId = generateId();
+      components.push({
+        id: eAttnId,
+        type: "multiHeadAttention",
+        name: `Enc_Attn_${i + 1}`,
+        position: { x: encX, y: ly },
+        params: { numHeads, hiddenDim: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: encLastId, to: eAttnId, fromPort: "bottom", toPort: "top" });
+      const eAddId = generateId();
+      components.push({
+        id: eAddId,
+        type: "add",
+        name: `Enc_Add_${i + 1}`,
+        position: { x: encX, y: ly + encCompSpacing },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: encLastId, to: eAddId, fromPort: "bottom", toPort: "left" });
+      connections.push({ id: generateConnId(), from: eAttnId, to: eAddId, fromPort: "bottom", toPort: "right" });
+      const eNormId = generateId();
+      components.push({
+        id: eNormId,
+        type: "layerNorm",
+        name: `Enc_Norm_${i + 1}`,
+        position: { x: encX, y: ly + encCompSpacing * 2 },
+        params: { normalizedShape: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: eAddId, to: eNormId, fromPort: "bottom", toPort: "top" });
+      const eFfId = generateId();
+      components.push({
+        id: eFfId,
+        type: "feedForward",
+        name: `Enc_FFN_${i + 1}`,
+        position: { x: encX, y: ly + encCompSpacing * 3 },
+        params: { hiddenDim: encHiddenSize, ffDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: eNormId, to: eFfId, fromPort: "bottom", toPort: "top" });
+      encLastId = eFfId;
+    }
+    const decEmbId = generateId();
+    components.push({
+      id: decEmbId,
+      type: "embedding",
+      name: "Decoder_Embedding",
+      position: { x: decX, y: encEmbId ? verticalSpacing : yPos },
+      // T5/BART share one token-embedding matrix across encoder and decoder, so the
+      // decoder copy is weight-tied (counted on the encoder embedding, not again here).
+      params: { vocabSize: config.vocab_size || 32128, embeddingDim: encHiddenSize, maxSeqLen: config.max_position_embeddings || 512, tied: true },
+      inputs: [],
+      outputs: []
+    });
+    let decLastId = decEmbId;
+    connections.push({ id: generateConnId(), from: lastId, to: decEmbId, fromPort: "bottom", toPort: "top" });
+    const decLayerSpacing = 800;
+    const decCompSpacing = 100;
+    for (let i = 0; i < decNumLayers; i++) {
+      const ly = verticalSpacing + i * decLayerSpacing;
+      const dSelfAttnId = generateId();
+      components.push({
+        id: dSelfAttnId,
+        type: "multiHeadAttention",
+        name: `Dec_SelfAttn_${i + 1}`,
+        position: { x: decX, y: ly },
+        params: { numHeads, hiddenDim: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: decLastId, to: dSelfAttnId, fromPort: "bottom", toPort: "top" });
+      const dAddId = generateId();
+      components.push({
+        id: dAddId,
+        type: "add",
+        name: `Dec_Add_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: decLastId, to: dAddId, fromPort: "bottom", toPort: "left" });
+      connections.push({ id: generateConnId(), from: dSelfAttnId, to: dAddId, fromPort: "bottom", toPort: "right" });
+      const dNorm1Id = generateId();
+      components.push({
+        id: dNorm1Id,
+        type: "layerNorm",
+        name: `Dec_Norm1_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing * 2 },
+        params: { normalizedShape: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dAddId, to: dNorm1Id, fromPort: "bottom", toPort: "top" });
+      const dCrossId = generateId();
+      components.push({
+        id: dCrossId,
+        type: "crossAttention",
+        name: `Dec_CrossAttn_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing * 3 },
+        params: { numHeads, hiddenDim: encHiddenSize, embedDim: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dNorm1Id, to: dCrossId, fromPort: "bottom", toPort: "top" });
+      connections.push({ id: generateConnId(), from: encLastId, to: dCrossId, fromPort: "right", toPort: "left" });
+      const dAdd2Id = generateId();
+      components.push({
+        id: dAdd2Id,
+        type: "add",
+        name: `Dec_Add2_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing * 4 },
+        params: {},
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dNorm1Id, to: dAdd2Id, fromPort: "bottom", toPort: "left" });
+      connections.push({ id: generateConnId(), from: dCrossId, to: dAdd2Id, fromPort: "bottom", toPort: "right" });
+      const dNorm2Id = generateId();
+      components.push({
+        id: dNorm2Id,
+        type: "layerNorm",
+        name: `Dec_Norm2_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing * 5 },
+        params: { normalizedShape: encHiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dAdd2Id, to: dNorm2Id, fromPort: "bottom", toPort: "top" });
+      const dFfId = generateId();
+      components.push({
+        id: dFfId,
+        type: "feedForward",
+        name: `Dec_FFN_${i + 1}`,
+        position: { x: decX, y: ly + decCompSpacing * 6 },
+        params: { hiddenDim: encHiddenSize, ffDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dNorm2Id, to: dFfId, fromPort: "bottom", toPort: "top" });
+      decLastId = dFfId;
+    }
+    const projId = generateId();
+    const projY = verticalSpacing + decNumLayers * decLayerSpacing;
+    const lmHeadTied = config.tie_word_embeddings !== false;
+    components.push({
+      id: projId,
+      type: "linear",
+      name: "LM_Head",
+      position: { x: decX, y: projY },
+      params: { inFeatures: encHiddenSize, outFeatures: config.vocab_size || 32128, ...lmHeadTied ? { tied: true } : {} },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: decLastId, to: projId, fromPort: "bottom", toPort: "top" });
+    lastId = projId;
+    yPos = projY + verticalSpacing;
+  } else if (isEncoderDecoder && (typeLower.includes("whisper") || archLower.includes("whisper") || modelIdLower.includes("whisper"))) {
+    const dModel = config.d_model || 512;
+    const encLayers = config.encoder_layers || 6;
+    const numHeads = config.encoder_attention_heads || 8;
+    const ffDim = config.encoder_ffn_dim || 2048;
+    const melId = generateId();
+    components.push({
+      id: melId,
+      type: "melSpectrogram",
+      name: "MelSpectrogram",
+      position: { x: xPos, y: yPos },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: melId, fromPort: "bottom", toPort: "top" });
+    lastId = melId;
+    yPos += verticalSpacing;
+    const conv1Id = generateId();
+    components.push({
+      id: conv1Id,
+      type: "conv1d",
+      name: "Enc_Conv1",
+      position: { x: xPos, y: yPos },
+      params: { outChannels: dModel, kernelSize: 3, stride: 1, padding: 1 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: conv1Id, fromPort: "bottom", toPort: "top" });
+    lastId = conv1Id;
+    yPos += verticalSpacing;
+    const conv2Id = generateId();
+    components.push({
+      id: conv2Id,
+      type: "conv1d",
+      name: "Enc_Conv2",
+      position: { x: xPos, y: yPos },
+      params: { outChannels: dModel, kernelSize: 3, stride: 2, padding: 1 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: conv2Id, fromPort: "bottom", toPort: "top" });
+    lastId = conv2Id;
+    yPos += verticalSpacing;
+    const encPermuteId = generateId();
+    components.push({
+      id: encPermuteId,
+      type: "permute",
+      name: "Enc_ToTokens",
+      position: { x: xPos, y: yPos },
+      params: { dims: [0, 2, 1] },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: encPermuteId, fromPort: "bottom", toPort: "top" });
+    lastId = encPermuteId;
+    yPos += verticalSpacing;
+    const posEncId = generateId();
+    components.push({
+      id: posEncId,
+      type: "positionalEncoding",
+      name: "Enc_PosEnc",
+      position: { x: xPos, y: yPos },
+      // maxLen is what the encoder actually positions: Whisper's 30-second
+      // window is max_source_positions frames, 1500 for every released size.
+      params: { dModel, embedDim: dModel, maxLen: config.max_source_positions ?? 1500 },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: lastId, to: posEncId, fromPort: "bottom", toPort: "top" });
+    lastId = posEncId;
+    yPos += verticalSpacing;
+    const layerSpacing = 350;
+    const compSpacing = 100;
+    for (let i = 0; i < encLayers; i++) {
+      const ly = yPos + i * layerSpacing;
+      const attnId = generateId();
+      components.push({
+        id: attnId,
+        type: "multiHeadAttention",
+        name: `Enc_Attn_${i + 1}`,
+        position: { x: xPos, y: ly },
+        params: { numHeads, hiddenDim: dModel },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: attnId, fromPort: "bottom", toPort: "top" });
+      const normId = generateId();
+      components.push({
+        id: normId,
+        type: "layerNorm",
+        name: `Enc_Norm_${i + 1}`,
+        position: { x: xPos, y: ly + compSpacing },
+        params: { normalizedShape: dModel },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: attnId, to: normId, fromPort: "bottom", toPort: "top" });
+      const ffId = generateId();
+      components.push({
+        id: ffId,
+        type: "feedForward",
+        name: `Enc_FFN_${i + 1}`,
+        position: { x: xPos, y: ly + compSpacing * 2 },
+        params: { hiddenDim: dModel, ffDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: normId, to: ffId, fromPort: "bottom", toPort: "top" });
+      lastId = ffId;
+    }
+    yPos += encLayers * layerSpacing + verticalSpacing;
+    const encOutId = lastId;
+    const decX = xPos + 520;
+    const decLayers = config.decoder_layers ?? encLayers;
+    const decHeads = config.decoder_attention_heads ?? numHeads;
+    const decFfDim = config.decoder_ffn_dim ?? ffDim;
+    const maxTarget = config.max_target_positions ?? 448;
+    let decY = 50;
+    const decInId = generateId();
+    components.push({
+      id: decInId,
+      type: "input",
+      name: "decoder_tokens",
+      position: { x: decX, y: decY },
+      params: { shape: [1, maxTarget] },
+      inputs: [],
+      outputs: []
+    });
+    decY += verticalSpacing;
+    const decEmbId = generateId();
+    components.push({
+      id: decEmbId,
+      type: "embedding",
+      name: "Dec_Token_Embedding",
+      position: { x: decX, y: decY },
+      params: { vocabSize: config.vocab_size || 51866, embeddingDim: dModel, maxSeqLen: maxTarget },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: decInId, to: decEmbId, fromPort: "bottom", toPort: "top" });
+    decY += verticalSpacing;
+    const decPosId = generateId();
+    components.push({
+      id: decPosId,
+      type: "learnedPositionalEmbedding",
+      name: "Dec_PosEmbedding",
+      position: { x: decX, y: decY },
+      params: { maxLen: maxTarget, embedDim: dModel },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: decEmbId, to: decPosId, fromPort: "bottom", toPort: "top" });
+    decY += verticalSpacing;
+    let decLastId = decPosId;
+    for (let i = 0; i < decLayers; i++) {
+      const ly = decY + i * layerSpacing;
+      const selfId = generateId();
+      components.push({
+        id: selfId,
+        type: "causalAttention",
+        name: `Dec_SelfAttn_${i + 1}`,
+        position: { x: decX, y: ly },
+        params: { numHeads: decHeads, embedDim: dModel },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: decLastId, to: selfId, fromPort: "bottom", toPort: "top" });
+      const crossId = generateId();
+      components.push({
+        id: crossId,
+        type: "crossAttention",
+        name: `Dec_CrossAttn_${i + 1}`,
+        position: { x: decX, y: ly + compSpacing },
+        params: { numHeads: decHeads, embedDim: dModel, kvDim: dModel },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: selfId, to: crossId, fromPort: "bottom", toPort: "top" });
+      connections.push({ id: generateConnId(), from: encOutId, to: crossId, fromPort: "bottom", toPort: "left" });
+      const dNormId = generateId();
+      components.push({
+        id: dNormId,
+        type: "layerNorm",
+        name: `Dec_Norm_${i + 1}`,
+        position: { x: decX, y: ly + compSpacing * 2 },
+        params: { normalizedShape: dModel },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: crossId, to: dNormId, fromPort: "bottom", toPort: "top" });
+      const dFfId = generateId();
+      components.push({
+        id: dFfId,
+        type: "feedForward",
+        name: `Dec_FFN_${i + 1}`,
+        position: { x: decX, y: ly + compSpacing * 3 },
+        params: { hiddenDim: dModel, ffDim: decFfDim },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: dNormId, to: dFfId, fromPort: "bottom", toPort: "top" });
+      decLastId = dFfId;
+    }
+    decY += decLayers * layerSpacing;
+    const decFinalNormId = generateId();
+    components.push({
+      id: decFinalNormId,
+      type: "layerNorm",
+      name: "Dec_Norm_Final",
+      position: { x: decX, y: decY },
+      params: { normalizedShape: dModel },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: decLastId, to: decFinalNormId, fromPort: "bottom", toPort: "top" });
+    decY += verticalSpacing;
+    const lmHeadId = generateId();
+    components.push({
+      id: lmHeadId,
+      type: "linear",
+      name: "LM_Head",
+      position: { x: decX, y: decY },
+      params: { inFeatures: dModel, outFeatures: config.vocab_size || 51866, tied: true },
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: decFinalNormId, to: lmHeadId, fromPort: "bottom", toPort: "top" });
+    lastId = lmHeadId;
+    yPos = Math.max(yPos, decY + verticalSpacing);
+  } else {
+    const hiddenSizeAny = config.hidden_size ?? config.d_model ?? config.n_embd ?? 0;
+    const numLayersAny = config.num_hidden_layers ?? config.n_layer ?? config.num_layers ?? 0;
+    const numHeadsAny = config.num_attention_heads ?? config.n_head ?? 0;
+    console.warn(
+      `[hfModelLoader] Unrecognised architecture for ${modelId}: model_type="${modelType}", architectures=${JSON.stringify(config.architectures ?? [])}. Falling back to generic transformer reconstruction (hidden_size=${hiddenSizeAny}, num_layers=${numLayersAny}). If both are 0 the loader will return only an Input node, caller should treat this as an import failure.`
+    );
+    if (hiddenSizeAny > 0 && numLayersAny > 0) {
+      const numLayers = numLayersAny;
+      const hiddenSize = hiddenSizeAny;
+      const numHeads = numHeadsAny || Math.max(1, Math.round(hiddenSize / 64));
+      const intermediateSize = config.intermediate_size ?? config.ffn_dim ?? hiddenSize * 4;
+      if (config.vocab_size) {
+        const embeddingId = generateId();
+        components.push({
+          id: embeddingId,
+          type: "embedding",
+          name: "Embedding",
+          position: { x: xPos, y: yPos },
+          params: {
+            vocabSize: config.vocab_size,
+            embeddingDim: hiddenSize,
+            maxSeqLen: config.max_position_embeddings || 512
+          },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: lastId,
+          to: embeddingId,
+          fromPort: "bottom",
+          toPort: "top"
+        });
+        lastId = embeddingId;
+        yPos += verticalSpacing;
+      }
+      const layerSpacing = 500;
+      const componentSpacing = 120;
+      for (let i = 0; i < numLayers; i++) {
+        const layerStartY = yPos;
+        const attentionId = generateId();
+        components.push({
+          id: attentionId,
+          type: "multiHeadAttention",
+          name: `Attention_${i + 1}`,
+          position: { x: xPos - 150, y: layerStartY },
+          params: {
+            numHeads,
+            hiddenDim: hiddenSize
+          },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: lastId,
+          to: attentionId,
+          fromPort: "bottom",
+          toPort: "top"
+        });
+        const addId = generateId();
+        components.push({
+          id: addId,
+          type: "add",
+          name: `Add_${i + 1}`,
+          position: { x: xPos, y: layerStartY + componentSpacing },
+          params: {},
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: lastId,
+          to: addId,
+          fromPort: "bottom",
+          toPort: "left"
+        });
+        connections.push({
+          id: generateConnId(),
+          from: attentionId,
+          to: addId,
+          fromPort: "bottom",
+          toPort: "right"
+        });
+        const norm1Id = generateId();
+        components.push({
+          id: norm1Id,
+          type: "layerNorm",
+          name: `LayerNorm_${i + 1}_1`,
+          position: { x: xPos, y: layerStartY + componentSpacing * 2 },
+          params: {
+            normalizedShape: hiddenSize
+          },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: addId,
+          to: norm1Id,
+          fromPort: "bottom",
+          toPort: "top"
+        });
+        const ffId = generateId();
+        components.push({
+          id: ffId,
+          type: "feedForward",
+          name: `FFN_${i + 1}`,
+          position: { x: xPos, y: layerStartY + componentSpacing * 3 },
+          params: {
+            hiddenDim: hiddenSize,
+            ffDim: intermediateSize
+          },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: norm1Id,
+          to: ffId,
+          fromPort: "bottom",
+          toPort: "top"
+        });
+        const add2Id = generateId();
+        components.push({
+          id: add2Id,
+          type: "add",
+          name: `Add_${i + 1}_2`,
+          position: { x: xPos, y: layerStartY + componentSpacing * 4 },
+          params: {},
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: norm1Id,
+          to: add2Id,
+          fromPort: "bottom",
+          toPort: "left"
+        });
+        connections.push({
+          id: generateConnId(),
+          from: ffId,
+          to: add2Id,
+          fromPort: "bottom",
+          toPort: "right"
+        });
+        const norm2Id = generateId();
+        components.push({
+          id: norm2Id,
+          type: "layerNorm",
+          name: `LayerNorm_${i + 1}_2`,
+          position: { x: xPos, y: layerStartY + componentSpacing * 5 },
+          params: {
+            normalizedShape: hiddenSize
+          },
+          inputs: [],
+          outputs: []
+        });
+        connections.push({
+          id: generateConnId(),
+          from: add2Id,
+          to: norm2Id,
+          fromPort: "bottom",
+          toPort: "top"
+        });
+        lastId = norm2Id;
+        yPos = layerStartY + layerSpacing;
+      }
+    }
+  }
+  const outputId = generateId();
+  components.push({
+    id: outputId,
+    type: "output",
+    name: "Output",
+    position: { x: xPos, y: yPos },
+    params: {},
+    inputs: [],
+    outputs: []
+  });
+  connections.push({
+    id: generateConnId(),
+    from: lastId,
+    to: outputId,
+    fromPort: "bottom",
+    toPort: "top"
+  });
+  rebuildNodeIO(components, connections);
+  components.forEach((comp) => {
+    const inferred = inferScopeFromHFName(comp.name);
+    if (inferred) comp.scope = inferred;
+  });
+  return { components, connections };
+}
+function inferScopeFromHFName(name) {
+  if (!name) return void 0;
+  let m = /^Enc_(Attn|Add|Norm)(?:_\d+)?_(\d+)$/.exec(name);
+  if (m) return `encoder.layer.${parseInt(m[2], 10) - 1}.attention`;
+  m = /^Enc_FFN_(\d+)$/.exec(name);
+  if (m) return `encoder.layer.${parseInt(m[1], 10) - 1}.ffn`;
+  m = /^Dec_(SelfAttn|CrossAttn|Add|Norm1)_(\d+)$/.exec(name);
+  if (m) return `decoder.layer.${parseInt(m[2], 10) - 1}.attention`;
+  m = /^Dec_FFN_(\d+)$/.exec(name);
+  if (m) return `decoder.layer.${parseInt(m[1], 10) - 1}.ffn`;
+  m = /^(Attention|Add)_(\d+)$/.exec(name);
+  if (m) return `layer.${parseInt(m[2], 10) - 1}.attention`;
+  m = /^LayerNorm_(\d+)_1$/.exec(name);
+  if (m) return `layer.${parseInt(m[1], 10) - 1}.attention`;
+  m = /^Add_(\d+)_2$/.exec(name);
+  if (m) return `layer.${parseInt(m[1], 10) - 1}.ffn`;
+  m = /^LayerNorm_(\d+)_2$/.exec(name);
+  if (m) return `layer.${parseInt(m[1], 10) - 1}.ffn`;
+  m = /^FFN_(\d+)$/.exec(name);
+  if (m) return `layer.${parseInt(m[1], 10) - 1}.ffn`;
+  m = /^Stage(\d+)_Block(\d+)_/.exec(name);
+  if (m) return `stage.${parseInt(m[1], 10) - 1}.block.${parseInt(m[2], 10) - 1}`;
+  if (/^Stem_/.test(name)) return "stem";
+  if (/^Enc_(Conv\d+|PosEnc)$/.test(name)) return "encoder.stem";
+  if (/^Encoder_Embedding$/.test(name)) return "encoder.embeddings";
+  if (/^Decoder_Embedding$/.test(name)) return "decoder.embeddings";
+  if (/^(Embedding|PatchEmbedding|MelSpectrogram)$/.test(name)) return "embeddings";
+  if (/^(LM_Head|Classifier|GlobalAvgPool|AdaptiveAvgPool|Flatten)$/.test(name)) return "head";
+  return void 0;
 }
 export {
   ADVISOR_RULE_IDS,
-  LINT_THRESHOLDS,
   SHAPE_RULE_IDS,
-  architectureFingerprint,
+  convertHFConfigToModel,
+  fetchHFModelConfig,
+  generatePyTorchCode,
   graphFromPyTorchSource,
-  lintModelGraph,
-  lintPyTorchSource,
-  physicsFromPyTorchSource,
-  toModelFile
+  lintModelGraph
 };
+/*! Bundled license information:
+
+react/cjs/react.production.min.js:
+  (**
+   * @license React
+   * react.production.min.js
+   *
+   * Copyright (c) Facebook, Inc. and its affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+react/cjs/react.development.js:
+  (**
+   * @license React
+   * react.development.js
+   *
+   * Copyright (c) Facebook, Inc. and its affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+use-sync-external-store/cjs/use-sync-external-store-shim.production.js:
+  (**
+   * @license React
+   * use-sync-external-store-shim.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+use-sync-external-store/cjs/use-sync-external-store-shim.development.js:
+  (**
+   * @license React
+   * use-sync-external-store-shim.development.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js:
+  (**
+   * @license React
+   * use-sync-external-store-shim/with-selector.production.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+
+use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js:
+  (**
+   * @license React
+   * use-sync-external-store-shim/with-selector.development.js
+   *
+   * Copyright (c) Meta Platforms, Inc. and affiliates.
+   *
+   * This source code is licensed under the MIT license found in the
+   * LICENSE file in the root directory of this source tree.
+   *)
+*/

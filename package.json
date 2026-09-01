@@ -1,7 +1,7 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.12.0",
-  "description": "MCP server that gives Claude Code, Cursor, Windsurf and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file or a Neurarch model graph and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), analyse blast radius before an edit, get a full readiness/cost/deployment verdict (check_design), trace paths, render Mermaid topology, and with --write mutate the graph. One server covers a whole repo via model_path. Supports --watch for live reload and --http to serve remotely over Streamable HTTP.",
+  "version": "0.13.0",
+  "description": "MCP server that gives Claude Code, Cursor, Claude Desktop, VS Code and other MCP-aware agents structural awareness of a neural network. Point it at a PyTorch .py file, a Neurarch graph, or a Hugging Face repo and the agent can read layers, parameters and FLOPs, run the design linter offline (lint_model), get the full readiness/cost/deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, export runnable PyTorch, and with --write edit the graph. Also a CLI: neurarch-mcp lint model.py.",
   "type": "module",
   "bin": {
     "neurarch-mcp": "dist/index.js"
@@ -9,10 +9,12 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
+    "zoo",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
-    "examples"
+    "examples",
+    "manifest.json"
   ],
   "scripts": {
     "build": "tsup",
@@ -20,23 +22,30 @@
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "sync:zoo": "node scripts/sync-zoo.mjs"
   },
   "keywords": [
+    "architecture-search",
+    "claude",
+    "claude-desktop",
+    "code-review",
+    "codex",
+    "copilot",
+    "cursor",
+    "huggingface",
+    "lint",
+    "machine-learning",
     "mcp",
     "model-context-protocol",
     "neural-network",
-    "pytorch",
-    "machine-learning",
-    "claude",
-    "cursor",
-    "windsurf",
     "neurarch",
-    "vscode",
-    "claude-desktop",
-    "lint",
+    "pytorch",
+    "pytorch-lint",
     "static-analysis",
-    "code-review"
+    "vscode",
+    "windsurf"
   ],
   "author": "neurarch-ai",
   "license": "MIT",
@@ -44,7 +53,7 @@
     "type": "git",
     "url": "git+https://github.com/neurarch-ai/neurarch-mcp.git"
   },
-  "homepage": "https://github.com/neurarch-ai/neurarch-mcp#readme",
+  "homepage": "https://www.neurarch.com/mcp",
   "bugs": {
     "url": "https://github.com/neurarch-ai/neurarch-mcp/issues"
   },

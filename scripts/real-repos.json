@@ -1,0 +1,413 @@
+[
+  {
+    "repo": "karpathy/nanoGPT",
+    "files": [
+      "model.py"
+    ]
+  },
+  {
+    "repo": "karpathy/minGPT",
+    "files": [
+      "mingpt/model.py"
+    ]
+  },
+  {
+    "repo": "karpathy/nanochat",
+    "files": [
+      "nanochat/gpt.py"
+    ]
+  },
+  {
+    "repo": "Lightning-AI/litgpt",
+    "files": [
+      "litgpt/model.py"
+    ]
+  },
+  {
+    "repo": "huggingface/transformers",
+    "files": [
+      "src/transformers/models/llama/modeling_llama.py",
+      "src/transformers/models/bert/modeling_bert.py",
+      "src/transformers/models/gpt2/modeling_gpt2.py",
+      "src/transformers/models/vit/modeling_vit.py",
+      "src/transformers/models/whisper/modeling_whisper.py",
+      "src/transformers/models/qwen2/modeling_qwen2.py",
+      "src/transformers/models/mistral/modeling_mistral.py",
+      "src/transformers/models/mixtral/modeling_mixtral.py",
+      "src/transformers/models/gemma/modeling_gemma.py",
+      "src/transformers/models/clip/modeling_clip.py"
+    ]
+  },
+  {
+    "repo": "huggingface/pytorch-image-models",
+    "files": [
+      "timm/models/vision_transformer.py",
+      "timm/models/resnet.py",
+      "timm/models/efficientnet.py",
+      "timm/models/convnext.py",
+      "timm/models/swin_transformer.py"
+    ]
+  },
+  {
+    "repo": "pytorch/vision",
+    "files": [
+      "torchvision/models/resnet.py",
+      "torchvision/models/vgg.py",
+      "torchvision/models/densenet.py",
+      "torchvision/models/mobilenetv2.py",
+      "torchvision/models/vision_transformer.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/DiT",
+    "files": [
+      "models.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/dinov2",
+    "files": [
+      "dinov2/models/vision_transformer.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/mae",
+    "files": [
+      "models_mae.py",
+      "models_vit.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/detr",
+    "files": [
+      "models/detr.py",
+      "models/transformer.py",
+      "models/backbone.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/segment-anything",
+    "files": [
+      "segment_anything/modeling/image_encoder.py",
+      "segment_anything/modeling/sam.py",
+      "segment_anything/modeling/mask_decoder.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/ConvNeXt",
+    "files": [
+      "models/convnext.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/deit",
+    "files": [
+      "models.py"
+    ]
+  },
+  {
+    "repo": "lucidrains/vit-pytorch",
+    "files": [
+      "vit_pytorch/vit.py",
+      "vit_pytorch/simple_vit.py"
+    ]
+  },
+  {
+    "repo": "lucidrains/x-transformers",
+    "files": [
+      "x_transformers/x_transformers.py"
+    ]
+  },
+  {
+    "repo": "lucidrains/denoising-diffusion-pytorch",
+    "files": [
+      "denoising_diffusion_pytorch/denoising_diffusion_pytorch.py"
+    ]
+  },
+  {
+    "repo": "lucidrains/PaLM-pytorch",
+    "files": [
+      "palm_pytorch/palm_pytorch.py"
+    ]
+  },
+  {
+    "repo": "openai/whisper",
+    "files": [
+      "whisper/model.py"
+    ]
+  },
+  {
+    "repo": "openai/CLIP",
+    "files": [
+      "clip/model.py"
+    ]
+  },
+  {
+    "repo": "openai/guided-diffusion",
+    "files": [
+      "guided_diffusion/unet.py"
+    ]
+  },
+  {
+    "repo": "state-spaces/mamba",
+    "files": [
+      "mamba_ssm/modules/mamba_simple.py",
+      "mamba_ssm/models/mixer_seq_simple.py"
+    ]
+  },
+  {
+    "repo": "BlinkDL/RWKV-LM",
+    "files": [
+      "RWKV-v4neo/src/model.py",
+      "RWKV-v7/rwkv_v7_demo.py"
+    ]
+  },
+  {
+    "repo": "deepseek-ai/DeepSeek-V3",
+    "files": [
+      "inference/model.py"
+    ]
+  },
+  {
+    "repo": "mistralai/mistral-inference",
+    "files": [
+      "src/mistral_inference/transformer.py"
+    ]
+  },
+  {
+    "repo": "meta-llama/llama",
+    "files": [
+      "llama/model.py"
+    ]
+  },
+  {
+    "repo": "meta-llama/llama3",
+    "files": [
+      "llama/model.py"
+    ]
+  },
+  {
+    "repo": "EleutherAI/gpt-neox",
+    "files": [
+      "megatron/model/gpt2_model.py",
+      "megatron/model/transformer.py"
+    ]
+  },
+  {
+    "repo": "jzhang38/TinyLlama",
+    "files": [
+      "lit_gpt/model.py"
+    ]
+  },
+  {
+    "repo": "CompVis/stable-diffusion",
+    "files": [
+      "ldm/modules/diffusionmodules/openaimodel.py",
+      "ldm/modules/attention.py"
+    ]
+  },
+  {
+    "repo": "lllyasviel/ControlNet",
+    "files": [
+      "cldm/cldm.py"
+    ]
+  },
+  {
+    "repo": "ultralytics/ultralytics",
+    "files": [
+      "ultralytics/nn/tasks.py",
+      "ultralytics/nn/modules/block.py"
+    ]
+  },
+  {
+    "repo": "WongKinYiu/yolov7",
+    "files": [
+      "models/yolo.py",
+      "models/common.py"
+    ]
+  },
+  {
+    "repo": "milesial/Pytorch-UNet",
+    "files": [
+      "unet/unet_model.py",
+      "unet/unet_parts.py"
+    ]
+  },
+  {
+    "repo": "kuangliu/pytorch-cifar",
+    "files": [
+      "models/resnet.py",
+      "models/vgg.py",
+      "models/densenet.py",
+      "models/mobilenetv2.py"
+    ]
+  },
+  {
+    "repo": "pytorch/examples",
+    "files": [
+      "mnist/main.py",
+      "word_language_model/model.py"
+    ]
+  },
+  {
+    "repo": "jadore801120/attention-is-all-you-need-pytorch",
+    "files": [
+      "transformer/Models.py",
+      "transformer/SubLayers.py",
+      "transformer/Layers.py"
+    ]
+  },
+  {
+    "repo": "hyunwoongko/transformer",
+    "files": [
+      "models/model/transformer.py",
+      "models/model/encoder.py",
+      "models/blocks/encoder_layer.py",
+      "models/layers/multi_head_attention.py"
+    ]
+  },
+  {
+    "repo": "kyegomez/BitNet",
+    "files": [
+      "bitnet/bit_transformer.py",
+      "bitnet/bitlinear.py"
+    ]
+  },
+  {
+    "repo": "Dao-AILab/flash-attention",
+    "files": [
+      "flash_attn/models/gpt.py",
+      "flash_attn/modules/mha.py"
+    ]
+  },
+  {
+    "repo": "NVIDIA/Megatron-LM",
+    "files": [
+      "megatron/core/models/gpt/gpt_model.py",
+      "megatron/core/transformer/transformer_layer.py",
+      "megatron/core/transformer/attention.py"
+    ]
+  },
+  {
+    "repo": "microsoft/LoRA",
+    "files": [
+      "loralib/layers.py"
+    ]
+  },
+  {
+    "repo": "ashawkey/stable-dreamfusion",
+    "files": [
+      "nerf/network.py",
+      "nerf/renderer.py"
+    ]
+  },
+  {
+    "repo": "huggingface/diffusers",
+    "files": [
+      "src/diffusers/models/unets/unet_2d.py",
+      "src/diffusers/models/attention.py",
+      "src/diffusers/models/unets/unet_2d_condition.py"
+    ]
+  },
+  {
+    "repo": "open-mmlab/mmdetection",
+    "files": [
+      "mmdet/models/backbones/resnet.py",
+      "mmdet/models/backbones/swin.py"
+    ]
+  },
+  {
+    "repo": "pytorch/audio",
+    "files": [
+      "src/torchaudio/models/wav2vec2/model.py",
+      "src/torchaudio/models/wav2vec2/components.py",
+      "src/torchaudio/models/conformer.py"
+    ]
+  },
+  {
+    "repo": "speechbrain/speechbrain",
+    "files": [
+      "speechbrain/lobes/models/transformer/Transformer.py",
+      "speechbrain/nnet/attention.py"
+    ]
+  },
+  {
+    "repo": "rwightman/gen-efficientnet-pytorch",
+    "files": [
+      "geffnet/gen_efficientnet.py",
+      "geffnet/mobilenetv3.py"
+    ]
+  },
+  {
+    "repo": "xinntao/ESRGAN",
+    "files": [
+      "RRDBNet_arch.py"
+    ]
+  },
+  {
+    "repo": "NVlabs/stylegan2-ada-pytorch",
+    "files": [
+      "training/networks.py"
+    ]
+  },
+  {
+    "repo": "facebookresearch/fairseq",
+    "files": [
+      "fairseq/models/transformer/transformer_encoder.py",
+      "fairseq/modules/multihead_attention.py",
+      "fairseq/models/roberta/model.py"
+    ]
+  },
+  {
+    "repo": "ultralytics/yolov5",
+    "files": [
+      "models/yolo.py",
+      "models/common.py"
+    ]
+  },
+  {
+    "repo": "microsoft/Swin-Transformer",
+    "files": [
+      "models/swin_transformer.py"
+    ]
+  },
+  {
+    "repo": "google/gemma_pytorch",
+    "files": [
+      "gemma/model.py"
+    ]
+  },
+  {
+    "repo": "black-forest-labs/flux",
+    "files": [
+      "src/flux/model.py",
+      "src/flux/modules/layers.py"
+    ]
+  },
+  {
+    "repo": "mosaicml/llm-foundry",
+    "files": [
+      "llmfoundry/models/mpt/modeling_mpt.py"
+    ]
+  },
+  {
+    "repo": "eriklindernoren/PyTorch-GAN",
+    "files": [
+      "implementations/dcgan/dcgan.py",
+      "implementations/cyclegan/models.py"
+    ]
+  },
+  {
+    "repo": "yunjey/pytorch-tutorial",
+    "files": [
+      "tutorials/02-intermediate/convolutional_neural_network/main.py",
+      "tutorials/03-advanced/image_captioning/model.py"
+    ]
+  },
+  {
+    "repo": "microsoft/unilm",
+    "files": [
+      "beit/modeling_finetune.py"
+    ]
+  }
+]

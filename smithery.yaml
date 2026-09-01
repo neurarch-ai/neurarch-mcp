@@ -1,0 +1,37 @@
+# Smithery (smithery.ai) listing for a stdio server: how to start it from the
+# user's config. Smithery renders configSchema as a form and passes the values
+# to commandFunction.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required: [modelPath]
+    properties:
+      modelPath:
+        type: string
+        title: Model
+        description: "Absolute path to a PyTorch .py file or .neurarch.json graph, or zoo:<id> for a bundled reference architecture (e.g. zoo:qwen2.5-7b)."
+      write:
+        type: boolean
+        title: Enable write tools
+        default: false
+        description: "Expose add_layer / modify_layer / delete_layer / save_model. Off by default."
+      hf:
+        type: boolean
+        title: Allow Hugging Face lookups
+        default: false
+        description: "Allow hf:<org/name> refs and load_hf_model. The one network switch."
+      tools:
+        type: string
+        title: Tool set
+        enum: [full, core]
+        default: full
+        description: "core advertises eleven tools instead of twenty-five; all stay callable."
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', 'neurarch-mcp', config.modelPath]
+        .concat(config.write ? ['--write'] : [])
+        .concat(config.hf ? ['--hf'] : [])
+        .concat(config.tools === 'core' ? ['--tools=core'] : []),
+    })
