@@ -75,7 +75,12 @@ writeFileSync(mcpConfig, JSON.stringify({
 function runCase(c) {
   return new Promise((res) => {
     const argv = ['-p', c.ask, '--output-format', 'stream-json', '--verbose', '--mcp-config', mcpConfig, '--strict-mcp-config',
-      '--allowedTools', 'mcp__neurarch__*', '--max-turns', '8'];
+      '--allowedTools', 'mcp__neurarch__*',
+      // The agent must answer through the server, not by reading the file
+      // itself: the question is whether it picks the right MCP tool, and
+      // `cat model.py` would make every case pass for the wrong reason.
+      '--disallowedTools', 'Bash', 'Read', 'Grep', 'Glob', 'Edit', 'Write', 'WebFetch', 'WebSearch', 'Task', 'Agent',
+      '--max-turns', '8'];
     if (model) argv.push('--model', model);
     const child = spawn('claude', argv, { cwd: root, env: { ...process.env, CLAUDECODE: '' } });
     let out = '', err = '';
