@@ -219,7 +219,10 @@ def test_module_entry_point_runs_as_subprocess(tmp_path):
         capture_output=True, text=True, env=env, cwd=str(tmp_path),
     )
     # Identity is pass-through, so there is nothing to record: a clear one-line failure.
-    assert r.returncode == 1 and r.stderr.strip().startswith("neurarch-trace:")
+    # Torch may print its own warnings to stderr first (no NumPy on a bare CI
+    # box), so look for our line rather than the first byte.
+    assert r.returncode == 1
+    assert any(line.startswith("neurarch-trace:") for line in r.stderr.splitlines())
     r = subprocess.run(
         [sys.executable, "-m", "neurarch_trace", "torch.nn:Linear", "--input", "1,4", "-o", "-", "--verbose"],
         capture_output=True, text=True, env=env, cwd=str(tmp_path),

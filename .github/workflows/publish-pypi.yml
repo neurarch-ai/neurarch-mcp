@@ -34,7 +34,7 @@ jobs:
           test "$want" = "$have" || { echo "tag $want != pyproject $have"; exit 1; }
       - name: Tests
         run: |
-          uv venv && uv pip install torch --index-url https://download.pytorch.org/whl/cpu && uv pip install pytest -e .
+          uv venv && uv pip install torch --index-url https://download.pytorch.org/whl/cpu && uv pip install pytest numpy -e .
           uv run --no-sync pytest tests -q
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
