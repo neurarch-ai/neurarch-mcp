@@ -4,8 +4,14 @@ primary_region = "sjc"
 
 [build]
 
+# The image's default command is hosted STDIO (what Docker MCP Toolkit runs).
+# Fly serves the network, so override to Streamable HTTP here.
+[processes]
+  app = "node dist/index.js --http --host=0.0.0.0 --hf --tools=core"
+
 [http_service]
   internal_port = 8787
+  processes = ["app"]
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true

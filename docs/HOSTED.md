@@ -22,15 +22,25 @@ NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) \
 
 ## Deploy
 
-`Dockerfile` and `fly.toml` are in the repo root:
+`Dockerfile` and `fly.toml` are in the repo root. The image's default command
+is hosted stdio (what Docker MCP Toolkit runs); `fly.toml`'s `[processes]`
+overrides it to HTTP. First deploy:
 
 ```bash
-fly launch --copy-config --no-deploy
-fly secrets set NEURARCH_MCP_TOKEN=$(openssl rand -hex 16)
-fly deploy
+fly apps create neurarch-mcp
+fly secrets set NEURARCH_MCP_TOKEN=$(openssl rand -hex 16) --stage
+fly deploy --remote-only
+fly ips allocate-v4 --shared && fly ips allocate-v6   # if the deploy could not provision IPs
 ```
 
 Any container host works the same way; the image listens on 8787.
+
+The production instance lives at `https://neurarch-mcp.fly.dev/mcp` (bearer
+token required; `GET /health` is open). Connect a client with:
+
+```json
+{ "mcpServers": { "neurarch": { "type": "http", "url": "https://neurarch-mcp.fly.dev/mcp", "headers": { "Authorization": "Bearer <token>" } } } }
+```
 
 ## What the hosted server sees
 
