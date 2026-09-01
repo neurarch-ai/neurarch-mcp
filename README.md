@@ -89,6 +89,8 @@ Three tools grade the model, and they are a ladder worth climbing in order. Each
 | 3 | `check_design` | Will it train, what will it cost, where can it run: readiness, parameter and cost estimates, the best deployment target and its latency, and the decisions still left to the human. Same code path as the app and `POST /api/v1/check`. |
 | 4 | `rank_designs` | **Which of k candidate designs deserves the training budget.** Candidates are paths, `zoo:`/`hf:` refs or inline graphs. Blocked ones (a pre-flight finding that means the graph will not forward-pass) rank last and come back as reclaimable budget; that part is measured, 96 of 96 blocked graphs crashed PyTorch forward and 80 of 80 passes ran. Legal candidates are ordered only by rules with a trained outcome behind them, and **a tie stays a tie**: `recommended` is null when nothing measured separates the top, which is the common answer. Params, cost and GPU fit are returned per candidate for you to break ties on your own budget; they never order. `calibration` ships inside every result (pairwise accuracy 51.4% at 8.3% coverage, in-sample), so the ordering cannot be read as a quality prediction. |
 
+| 5 | `suggest_fix` | **The finding as a change to the file.** A unified diff per finding: `exact` where the rule pins a number or an order (the head-dim crash above becomes a 7-line diff that changes every `258` to `256`), `proposal` where a layer is missing. Apply, then lint again. |
+
 ### Inspect
 
 | Tool | What it does |
@@ -114,6 +116,7 @@ Three tools grade the model, and they are a ladder worth climbing in order. Each
 | `load_architecture` | Open one and describe it. Then `model_path: "zoo:<id>"` on any tool. |
 | `load_hf_model` | A Hugging Face repo as a graph. Listed only under `--hf`, because it is the one tool that opens a socket. |
 | `find_models` | Walk a directory for nn.Module definitions and saved graphs, try the parser on each, and say which need `neurarch-trace` instead. |
+| `trace_model` | Run `neurarch-trace` in your Python with the input dims and get a graph with real shapes back as a `model_path`. The way past the static parser. |
 | `export_pytorch` | The graph as a runnable `nn.Module`, the app's own generator. `save_to` needs `--write` and never targets the file the server was started from. |
 
 ### Write (opt in with `--write`)
@@ -134,7 +137,11 @@ In Claude Desktop, Cursor and VS Code these show up as slash commands. Each is t
 | `/compare_with_reference` | `architecture?` | The model next to a published one from the library, with the differences that would change training. |
 | `/explain_finding` | `rule` | What a finding means for this model, the evidence behind it, the smallest edit that clears it. |
 
-Resources a client can pin as context: `neurarch://model` (the graph), `neurarch://model/mermaid`, `neurarch://model/pytorch`, `neurarch://zoo`, `neurarch://zoo/{id}`, `neurarch://rules` (the provenance table).
+Resources a client can pin as context: `neurarch://model` (the graph), `neurarch://model/mermaid`, `neurarch://model/pytorch`, `neurarch://zoo`, `neurarch://zoo/{id}`, `neurarch://rules` (the provenance table), `neurarch://docs` and `neurarch://docs/{tool}` (every tool's full contract).
+
+`check_design` can also **ask the person** when the verdict ends in a decision only they can make (which data, whether to spend the money): pass `ask_user: true` and, in a client that supports MCP elicitation, the question is put to them and their answer comes back with the verdict.
+
+Whether an agent reaches for the right tool is measured, not assumed: `npm run eval:tools` runs six fixed asks through Claude Code against the built server and grades the tool calls (lint before proposing an edit, `rank_designs` for a which-of-k question). The latest result is in [`docs/tool-selection-eval.json`](./docs/tool-selection-eval.json).
 
 ## Also a CLI
 
@@ -207,7 +214,7 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=core`: advertise eleven tools instead of twenty-five (every tool stays callable by name). Trims what rides along in the agent's context on every turn.
+- `--tools=full`: advertise every read tool. The default is the core thirteen; every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 3.9k tokens per turn, the full one 5.8k.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
@@ -252,7 +259,7 @@ Shapes come out batchless (`[3,224,224]`, never `[1,3,224,224]`), the convention
 ```bash
 git clone https://github.com/neurarch-ai/neurarch-mcp && cd neurarch-mcp
 npm install
-npm run typecheck && npm run build && npm test     # vitest, 240+ tests
+npm run typecheck && npm run build && npm test     # vitest, 260+ tests
 node dist/index.js --help
 npm run build:mcpb                                 # the Claude Desktop bundle
 ```

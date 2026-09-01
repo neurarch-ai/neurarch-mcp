@@ -6,6 +6,50 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.14.0]
+
+### Added
+- **`suggest_fix`**: lint findings as unified diffs against the .py they came
+  from. `exact` where the rule pins a number or an order (a width that does
+  not divide by the head count is changed on every line that shares it; two
+  forward() statements in the wrong order are swapped), `proposal` where a
+  layer is missing (inserted, with what forward() still needs). Findings with
+  no mechanical fix come back as `notFixable` with the reason. On tiny-vit.py
+  the head-dim crash becomes a 7-line diff that lints clean.
+
+- **`trace_model`**: runs neurarch-trace in the user's Python with the input
+  dims and returns a graph with real shapes as a `model_path`. The way past
+  the static parser for code it cannot follow.
+
+- **`check_design` `ask_user`**: when the verdict ends in a decision only the
+  human can make and the client supports MCP elicitation, ask them through
+  the client and return their answer with the verdict.
+
+- **`neurarch://docs` and `neurarch://docs/{tool}`**: the full contract of
+  every tool as a resource, including the ones the default listing omits.
+
+- **`scripts/eval-tool-selection.mjs`** (`npm run eval:tools`): six fixed asks
+  run through Claude Code headless against the built server, graded on which
+  tools were called (lint before proposing an edit, rank_designs for a
+  which-of-k question, layer_impact for what-breaks). Results land in
+  `docs/tool-selection-eval.json` with the date. Costs tokens; not in CI.
+
+### Changed
+- **The default listing is the core set.** Thirteen tools instead of
+  twenty-six; `--tools=full` advertises all. Every tool stays callable by
+  name. Measured on 0.13 the full list cost about 6.9k tokens per turn; the
+  default is now about 3.9k and the full set 5.8k, most of the rest being
+  input schemas.
+- **Every description is one or two sentences.** The long form moved to the
+  docs resource. The injected `model_path` / `model_source` descriptions,
+  repeated on every read tool, were the single largest cost and are a line
+  each now.
+- **`check_design` returns the trimmed verdict by default**: verdict,
+  findings, stage headlines, decision. `verbose:true` adds each stage's data.
+- **Loose `outputSchema`** on the core tools: the keys an agent should rely
+  on, `additionalProperties: true`, so a drift costs a hint and not a call.
+- The Smithery bundle lists all 26 tools with the short descriptions.
+
 ## [0.13.0]
 
 ### Added

@@ -54,10 +54,15 @@ for (const p of smitheryManifest.prompts ?? []) {
     p.arguments = p.arguments.map((a) => (typeof a === 'string' ? { name: a, description: a, required: true } : a));
   }
 }
+// Every tool, not the eight headline ones: Smithery scores a listing on what
+// the manifest declares, and the short descriptions are what ListTools sends.
 const schemas = JSON.parse(readFileSync(join(root, 'scripts', 'tool-schemas.json'), 'utf-8'));
-for (const t of smitheryManifest.tools ?? []) {
-  t.inputSchema = schemas[t.name] ?? { type: 'object', properties: {} };
-}
+const shorts = JSON.parse(readFileSync(join(root, 'scripts', 'tool-short.json'), 'utf-8'));
+smitheryManifest.tools = Object.keys(schemas).map((name) => ({
+  name,
+  description: shorts[name] ?? (smitheryManifest.tools ?? []).find((t) => t.name === name)?.description ?? name,
+  inputSchema: schemas[name],
+}));
 writeFileSync(join(stage, 'manifest.json'), JSON.stringify(smitheryManifest, null, 2));
 const outSmithery = join(root, `neurarch-mcp-${pkg.version}.smithery.mcpb`);
 rmSync(outSmithery, { force: true });

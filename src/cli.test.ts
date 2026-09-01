@@ -67,11 +67,13 @@ describe('parseFlags', () => {
 });
 
 describe('selectTools', () => {
-  it('exposes only read tools by default', () => {
-    expect(selectTools(false)).toEqual(TOOLS);
+  it('exposes the core read tools by default, all of them with --tools=full', () => {
+    expect(selectTools(false).every(t => TOOLS.includes(t))).toBe(true);
+    expect(selectTools(false).length).toBeLessThan(TOOLS.length);
+    expect(selectTools(false, 'full')).toEqual(TOOLS);
   });
   it('adds write tools with --write', () => {
-    const all = selectTools(true);
+    const all = selectTools(true, 'full');
     expect(all).toHaveLength(TOOLS.length + WRITE_TOOLS.length);
     expect(all.some(t => t.name === 'add_layer')).toBe(true);
   });
@@ -107,8 +109,9 @@ describe('0.13 flags and subcommands', () => {
     expect(f.toolSet).toBe('core');
     expect(f.json).toBe(true);
     expect(f.unknownFlags).toEqual([]);
-    expect(parseFlags(['m.py']).toolSet).toBe('full');
-    expect(parseFlags(['m.py', '--tools=bogus']).toolSet).toBe('full');
+    expect(parseFlags(['m.py']).toolSet).toBe('core');
+    expect(parseFlags(['m.py', '--tools=full']).toolSet).toBe('full');
+    expect(parseFlags(['m.py', '--tools=bogus']).toolSet).toBe('core');
   });
   it('parses --hosted', () => {
     expect(parseFlags(['--hosted']).hostedRequested).toBe(true);
