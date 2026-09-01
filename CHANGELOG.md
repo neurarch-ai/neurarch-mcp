@@ -80,6 +80,20 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 - **`skills/neurarch-skill`**: the evidence-gated edit loop skill now lives in
   this repo (`npx skills add neurarch-ai/neurarch-mcp`).
 
+- **`docs/REAL_REPOS_STUDY.md`**: the static parser and linter measured against
+  116 model files from 59 popular repositories. A graph came back for 63% of
+  files, a recognisable one for 8%, and all 103 findings on real code were
+  hand-judged to be parser artefacts or design choices: zero real bugs. It is
+  in the repo because the alternative is a README that says "point it at a
+  .py and it works" about code where it mostly does not.
+
+  Three consequences shipped with it: `describe_architecture` and `lint_model`
+  return a `parseQuality` grade (`full` / `partial` / `thin`) with the fix
+  named; dimension rules are held back on layers whose dimension is still
+  source text (54 of 54 such `invalid-output-shape` warnings were false) and
+  reported as `suppressed` rather than dropped; `find_models` marks thin
+  parses `partial`.
+
 ### Changed
 - The README leads with a GIF (GitHub strips `<video>`), has Cursor and VS Code
   install buttons, and is written for the search terms people use.

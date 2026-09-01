@@ -120,7 +120,8 @@ describe('list_architectures / load_architecture', () => {
 
 describe('find_models', () => {
   it('finds parseable source, flags unparseable nn.Modules, skips junk dirs', async () => {
-    await writeFile(join(dir, 'net.py'), 'import torch.nn as nn\nclass Net(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc = nn.Linear(8, 4)\n        self.act = nn.ReLU()\n    def forward(self, x):\n        return self.act(self.fc(x))\n');
+    await writeFile(join(dir, 'net.py'), 'import torch.nn as nn\nclass Net(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc1 = nn.Linear(8, 16)\n        self.act = nn.ReLU()\n        self.fc2 = nn.Linear(16, 8)\n        self.act2 = nn.ReLU()\n        self.fc3 = nn.Linear(8, 4)\n    def forward(self, x):\n        return self.fc3(self.act2(self.fc2(self.act(self.fc1(x)))))\n');
+    await writeFile(join(dir, 'thin.py'), 'import torch.nn as nn\nclass Thin(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc = nn.Linear(8, 4)\n        self.act = nn.ReLU()\n    def forward(self, x):\n        return self.act(self.fc(x))\n');
     await writeFile(join(dir, 'dynamic.py'), 'import torch.nn as nn\nclass Dyn(nn.Module):\n    def __init__(self, cfg):\n        super().__init__()\n        self.body = build(cfg)\n');
     await writeFile(join(dir, 'train.py'), 'def train():\n    pass\n');
     await writeFile(join(dir, 'saved.neurarch.json'), JSON.stringify(makeModel()));
@@ -131,6 +132,8 @@ describe('find_models', () => {
     const byPath = Object.fromEntries(r.models.map((m: any) => [m.path, m]));
     expect(byPath['net.py'].status).toBe('parsed');
     expect(byPath['net.py'].classes).toEqual(['Net']);
+    expect(byPath['thin.py'].status).toBe('partial');
+    expect(byPath['thin.py'].detail).toMatch(/neurarch-trace/);
     expect(byPath['dynamic.py'].status).toBe('no-model');
     expect(byPath['dynamic.py'].detail).toMatch(/neurarch-trace/);
     expect(byPath['saved.neurarch.json'].kind).toBe('neurarch-json');

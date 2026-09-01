@@ -11,6 +11,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { graphFromPyTorchSource } from './vendor/engine.bundle.mjs';
+import { parseQuality } from './lib/parseQuality.js';
 
 const SKIP_DIRS = new Set([
   'node_modules', '.git', '.hg', '.svn', '__pycache__', '.venv', 'venv', 'env',
@@ -20,7 +21,8 @@ const SKIP_DIRS = new Set([
 export interface DiscoveredModel {
   path: string;
   kind: 'pytorch-source' | 'neurarch-json';
-  status: 'parsed' | 'no-model' | 'error';
+  /** 'partial': a graph came back but it is thin or carries unevaluated params; trust it less than 'parsed'. */
+  status: 'parsed' | 'partial' | 'no-model' | 'error';
   /** The nn.Module subclasses declared in the file, parsed or not. */
   classes: string[];
   layers?: number;
@@ -81,7 +83,11 @@ export async function discoverModels(opts: DiscoverOptions): Promise<{ dir: stri
     try {
       const g = graphFromPyTorchSource(code, rel.replace(/\.py$/, ''));
       if (g && g.components.length > 2) {
-        models.push({ path: rel, kind: 'pytorch-source', status: 'parsed', classes, layers: g.components.length, connections: g.connections.length });
+        const q = parseQuality(g);
+        models.push({
+          path: rel, kind: 'pytorch-source', status: q.grade === 'full' ? 'parsed' : 'partial', classes,
+          layers: g.components.length, connections: g.connections.length, ...(q.note ? { detail: q.note } : {}),
+        });
       } else {
         models.push({
           path: rel, kind: 'pytorch-source', status: 'no-model', classes,

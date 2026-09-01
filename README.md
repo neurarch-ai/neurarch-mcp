@@ -57,17 +57,23 @@ block  head-dim-divisibility [attn:multiHeadAttention]: embed dim (258) must be
        divisible by numHeads (8); head_dim would be 32.25
 ```
 
-That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run.
+That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run. The rules are measured (the crash rules: 96 of 96 blocked graphs crashed PyTorch forward, 80 of 80 passes ran); the static parser in front of them is the weaker half, and [we measured that too](#what-the-static-parser-can-read).
 
 ## Three ways in
 
 | Input | What the agent gets | How |
 |---|---|---|
-| **A PyTorch `.py` file** | Layers, types, hyperparameters and wiring, all exact. Parameter counts. Shapes and FLOPs are unknown, because the source never says what goes in, and are reported as unknown rather than as zero. | `npx -y neurarch-mcp model.py` |
+| **A self-contained PyTorch `.py` file** | Layers, types, hyperparameters and wiring, when the file builds its own layers with literal sizes. Shapes and FLOPs are unknown, because the source never says what goes in, and are reported as unknown rather than as zero. **On real repositories this is the weak path**: see [what the parser can read](#what-the-static-parser-can-read). | `npx -y neurarch-mcp model.py` |
 | **A traced graph** (`neurarch-trace`) | Everything, with real shapes. Handles what static parsing cannot: `from_pretrained`, timm, models spread across files, anything built dynamically. | `pip install neurarch-trace`<br>`neurarch-trace my_pkg.model:build --input 1,3,224,224` |
 | **A Hugging Face repo** | The architecture from `config.json`, with the published parameter count next to the graph's so you can see how close it is (Qwen2.5-0.5B: 494.00M against 494,032,768). | `npx -y neurarch-mcp hf:Qwen/Qwen2.5-0.5B --hf` |
 
 A `.neurarch.json` saved from the [Neurarch app](https://neurarch.com) (**File → Save**) is the fourth, and carries shapes, groups and design notes. Add `--watch` so the agent sees app-side saves without a restart.
+
+### What the static parser can read
+
+We measured it rather than describe it: [`docs/REAL_REPOS_STUDY.md`](./docs/REAL_REPOS_STUDY.md) runs the parser and linter over 116 model files from 59 popular repositories (nanoGPT, HF `modeling_*.py`, timm, torchvision, DiT, MAE, CLIP, Mamba, SAM, diffusers and more). The parser returned a graph for 63% of files, a graph a person would recognise as the model for 8% (DiT, MAE, CLIP, RWKV, x-transformers, Mamba, DETR and two others), and every one of the 103 findings it raised on real code was judged by hand to be its own artefact or a deliberate design choice: **zero real bugs found**. The causes are counted in the study (layers built through other classes, factories, loops, and dimensions like `config.hidden_size` the parser cannot evaluate).
+
+Three consequences are in this release. A graph from source carries a `parseQuality` grade (`full`, `partial`, `thin`) on `describe_architecture` and `lint_model`, with the fix named. Dimension rules are held back on layers whose dimension is still source text, and the count is reported as `suppressed` rather than dropped. And `find_models` marks thin parses `partial` so an agent does not build a plan on two layers. For real repositories, use `neurarch-trace`: it reads the numbers at runtime, which is the only place they exist.
 
 Every read tool also takes an optional `model_path`, so **one server covers a whole repository**: ask about `baseline.py`, then `variant_b.neurarch.json`, then `zoo:llama-3-8b`, without restarting anything. `find_models` tells the agent what is there.
 

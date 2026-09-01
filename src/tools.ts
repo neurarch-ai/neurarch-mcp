@@ -13,6 +13,7 @@ import { renderMermaid } from './mermaid.js';
 import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
 import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
 import { EXTRA_TOOLS } from './extraTools.js';
+import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
 export interface ToolContext {
   modelPath: string;
@@ -86,7 +87,10 @@ const describeArchitectureTool: ToolDef = {
   name: 'describe_architecture',
   description: 'One-call orientation: topologically-ordered layer pipeline, model depth (longest path), input/output shapes, total params and MACs, the top-5 heaviest layers by parameters AND by compute, and a validation rollup. Use this instead of chaining get_model_summary + param_count_by_block + flops_by_block + validate_model — it answers "what is this model and where is the budget" in a single call.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  handler: (_args, model) => describeArchitecture(model),
+  handler: (_args, model) => {
+    const quality = parseQuality(model);
+    return { ...describeArchitecture(model), ...(quality.grade !== 'full' ? { parseQuality: quality } : {}) };
+  },
 };
 
 // ── get_layer ────────────────────────────────────────────────────────────────
@@ -459,9 +463,16 @@ const lintModelTool: ToolDef = {
     const order = { block: 0, warn: 1, info: 2 } as const;
     const floor = severity ? order[severity] : 2;
     const all = lintModelGraph(model);
-    const findings = all.filter(f => order[f.severity] <= floor);
+    // A dimension rule on a layer whose dimension is still source text is the
+    // parser judging its own placeholder (54 of 54 such warnings were false in
+    // docs/REAL_REPOS_STUDY.md). Held back and counted, not silently dropped.
+    const unresolvedByName = new Map(model.components.map(c => [c.name, unresolvedParamsOf(c)]));
+    const kept = all.filter(f => !(DIMENSION_RULES.has(f.rule) && f.componentName && (unresolvedByName.get(f.componentName)?.length ?? 0) > 0));
+    const suppressed = all.length - kept.length;
+    const findings = kept.filter(f => order[f.severity] <= floor);
     const counts = { block: 0, warn: 0, info: 0 };
     for (const f of findings) counts[f.severity]++;
+    const quality = parseQuality(model);
     return {
       // The headline an agent should act on before reading the list: a block is
       // a design that will not run or will not train, not a style note.
@@ -476,6 +487,13 @@ const lintModelTool: ToolDef = {
       // Says plainly that a filtered view is a filtered view.
       reportedSeverityFloor: severity ?? 'info',
       totalBeforeFilter: all.length,
+      ...(suppressed > 0 ? {
+        suppressed: {
+          count: suppressed,
+          why: 'Dimension rules on layers whose dimension is unevaluated source text: the finding would be about the parser\'s placeholder, not the model.',
+        },
+      } : {}),
+      ...(quality.grade !== 'full' ? { parseQuality: quality } : {}),
     };
   },
 };

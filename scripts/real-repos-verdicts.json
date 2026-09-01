@@ -1,0 +1,543 @@
+{
+  "BlinkDL/RWKV-LM|RWKV-v4neo/src/model.py|consecutive-linear-no-activation|head": {
+    "verdict": "artefact",
+    "reason": "head is the LM head; the graph shows it feeding head_q, which only exists because init order was taken as data flow"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v4neo/src/model.py|consecutive-linear-no-activation|head_k": {
+    "verdict": "artefact",
+    "reason": "parallel copy-head projection chained in init order"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v4neo/src/model.py|consecutive-linear-no-activation|head_q": {
+    "verdict": "artefact",
+    "reason": "head_q and head_k are the optional copy-head projections (args.head_qk > 0) used in parallel with head; the parser chained them in init order"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v4neo/src/model.py|invalid-output-shape|emb": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"args.n_embd\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v7/rwkv_v7_demo.py|invalid-output-shape|emb": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"args.n_embd\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "CompVis/stable-diffusion|ldm/modules/attention.py|@cause": {
+    "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))"
+  },
+  "Dao-AILab/flash-attention|flash_attn/models/gpt.py|consecutive-linear-no-activation|project_out": {
+    "verdict": "not-a-bug",
+    "reason": "project_out exists only when embed_dim != n_embd (muP width projection, line 593) and feeds lm_head directly; two stacked linears with no activation is the intended design there"
+  },
+  "Dao-AILab/flash-attention|flash_attn/models/gpt.py|invalid-output-shape|project_out": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "Dao-AILab/flash-attention|flash_attn/modules/mha.py|deep-no-norm|": {
+    "verdict": "not-a-bug",
+    "reason": "an attention module has no norm by construction; the norm sits in the Block that wraps it"
+  },
+  "Dao-AILab/flash-attention|flash_attn/modules/mha.py|duplicate-positional-encoding|rotary_emb": {
+    "verdict": "artefact",
+    "reason": "self.rotary_emb = RotaryEmbedding(...) appears once in MHA (line 440) and once in ParallelMHA (line 779); the parser merged init lines from two classes into one graph"
+  },
+  "EleutherAI/gpt-neox|megatron/model/gpt2_model.py|@cause": {
+    "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)"
+  },
+  "EleutherAI/gpt-neox|megatron/model/transformer.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "Lightning-AI/litgpt|litgpt/model.py|@cause": {
+    "cause": "the last class in the file is a norm or utility holding only nn.Parameter"
+  },
+  "NVIDIA/Megatron-LM|megatron/core/transformer/attention.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "NVIDIA/Megatron-LM|megatron/core/transformer/transformer_layer.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "WongKinYiu/yolov7|models/common.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "WongKinYiu/yolov7|models/yolo.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "ashawkey/stable-dreamfusion|nerf/renderer.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "black-forest-labs/flux|src/flux/model.py|consecutive-linear-no-activation|img_in": {
+    "verdict": "artefact",
+    "reason": "img_in projects image tokens and txt_in projects text tokens (lines 55, 61); they are two parallel streams, not a chain"
+  },
+  "black-forest-labs/flux|src/flux/model.py|invalid-output-shape|img_in": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"self.hidden_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "black-forest-labs/flux|src/flux/modules/layers.py|invalid-output-shape|linear": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"patch_size * patch_size * out_channels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "deepseek-ai/DeepSeek-V3|inference/model.py|bn-at-output|rms_norm": {
+    "verdict": "artefact",
+    "reason": "Transformer.forward applies self.head (ColumnParallelLinear, a custom class in the same file) after the norm; the custom linear is not mapped to a node"
+  },
+  "eriklindernoren/PyTorch-GAN|implementations/cyclegan/models.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "eriklindernoren/PyTorch-GAN|implementations/dcgan/dcgan.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "facebookresearch/ConvNeXt|models/convnext.py|@cause": {
+    "cause": "the last class in the file is a norm or utility holding only nn.Parameter"
+  },
+  "facebookresearch/DiT|models.py|attention-no-pe|attn": {
+    "verdict": "artefact",
+    "reason": "pos_embed is an nn.Parameter (line 174) added to x in forward; the parser only turns nn.Module constructors into nodes"
+  },
+  "facebookresearch/DiT|models.py|bn-after-activation|adaLN_modulation_1": {
+    "verdict": "artefact",
+    "reason": "adaLN_modulation is Sequential(SiLU, Linear(hidden_size, 6*hidden_size)) (lines 113-116); the Linear was dropped and the branch produces modulation vectors, it does not feed norm1"
+  },
+  "facebookresearch/DiT|models.py|deep-attention-default-init|attn": {
+    "verdict": "not-a-bug",
+    "reason": "DiT.initialize_weights zero-inits every adaLN modulation and the final layer (lines 209-210), which is its own depth-scaling scheme"
+  },
+  "facebookresearch/deit|models.py|consecutive-linear-no-activation|head_dist": {
+    "verdict": "artefact",
+    "reason": "head_dist is duplicated in the graph (conditional constructor on line 26 plus self.head_dist.apply on line 30); the finding says the node feeds into itself"
+  },
+  "facebookresearch/deit|models.py|invalid-output-shape|head_dist": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"self.num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "facebookresearch/detr|models/backbone.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "facebookresearch/detr|models/transformer.py|attention-no-pe|self_attn": {
+    "verdict": "not-a-bug",
+    "reason": "DETR feeds positional encodings in through forward (pos, query_pos) from position_encoding.py; this file is the layer stack, and the fact that it holds no PE module is true and intended"
+  },
+  "facebookresearch/detr|models/transformer.py|double-norm|norm1": {
+    "verdict": "artefact",
+    "reason": "attention and dropout sit between norm1 and norm2 in forward_post; the parser ordered by init after failing to follow the forward dispatch"
+  },
+  "facebookresearch/detr|models/transformer.py|double-norm|norm2": {
+    "verdict": "artefact",
+    "reason": "cross-attention and dropout sit between norm2 and norm3 in forward_post; same ordering artefact"
+  },
+  "facebookresearch/detr|models/transformer.py|dropout-at-output|dropout3": {
+    "verdict": "artefact",
+    "reason": "forward dispatches to forward_post / forward_pre (line 265); in forward_post norm3 follows dropout3 (lines 231-232); the parser did not follow the dispatch and ordered by __init__"
+  },
+  "facebookresearch/detr|models/transformer.py|invalid-output-shape|linear1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"dim_feedforward\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "facebookresearch/dinov2|dinov2/models/vision_transformer.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "facebookresearch/fairseq|fairseq/models/roberta/model.py|invalid-output-shape|dense": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "facebookresearch/fairseq|fairseq/models/transformer/transformer_encoder.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "facebookresearch/fairseq|fairseq/modules/multihead_attention.py|@cause": {
+    "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))"
+  },
+  "facebookresearch/mae|models_mae.py|deep-no-norm|": {
+    "verdict": "artefact",
+    "reason": "the 32 Block nodes are timm Blocks that each hold two LayerNorms, and self.norm / decoder_norm are built through the norm_layer partial (lines 42, 57); the norms are inside opaque blocks or factory callables"
+  },
+  "facebookresearch/mae|models_mae.py|invalid-output-shape|decoder_embed": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"decoder_embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "facebookresearch/mae|models_vit.py|@cause": {
+    "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/image_encoder.py|@cause": {
+    "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/mask_decoder.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/sam.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "google/gemma_pytorch|gemma/model.py|output-activation|softmax": {
+    "verdict": "not-a-bug",
+    "reason": "this is the inference Sampler; softmax produces sampling probabilities and no loss is computed on them"
+  },
+  "google/gemma_pytorch|gemma/model.py|redundant-activation|tanh": {
+    "verdict": "not-a-bug",
+    "reason": "Sampler applies final-logit soft-capping tanh(logits/cap)*cap (lines 53-56) and then softmax for sampling (line 65); two activations with no linear between them is the intended Gemma 2 design"
+  },
+  "huggingface/diffusers|src/diffusers/models/attention.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "huggingface/diffusers|src/diffusers/models/unets/unet_2d.py|invalid-output-shape|time_proj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"block_out_channels[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/diffusers|src/diffusers/models/unets/unet_2d_condition.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "huggingface/pytorch-image-models|timm/models/convnext.py|invalid-output-shape|stem_1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"dims[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/pytorch-image-models|timm/models/efficientnet.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "huggingface/pytorch-image-models|timm/models/resnet.py|invalid-output-shape|conv1_1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"stem_chs[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/pytorch-image-models|timm/models/swin_transformer.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "huggingface/pytorch-image-models|timm/models/vision_transformer.py|invalid-output-shape|head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/clip/modeling_clip.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "huggingface/transformers|src/transformers/models/gemma/modeling_gemma.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/gpt2/modeling_gpt2.py|bn-at-output|ln_f": {
+    "verdict": "artefact",
+    "reason": "main class is GPT2ForQuestionAnswering; its qa_outputs Linear(config.hidden_size, 2) after the transformer was dropped (config.* unresolved), so the GPT2Model ln_f became the last node"
+  },
+  "huggingface/transformers|src/transformers/models/gpt2/modeling_gpt2.py|dropout-before-bn|drop": {
+    "verdict": "artefact",
+    "reason": "the twelve GPT2Block layers between drop and ln_f live in a ModuleList built in a loop and were not expanded"
+  },
+  "huggingface/transformers|src/transformers/models/gpt2/modeling_gpt2.py|invalid-output-shape|wte": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"self.embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/llama/modeling_llama.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/mistral/modeling_mistral.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/mixtral/modeling_mixtral.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/qwen2/modeling_qwen2.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/vit/modeling_vit.py|invalid-output-shape|classifier": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.num_labels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "huggingface/transformers|src/transformers/models/whisper/modeling_whisper.py|bn-at-output|layer_norm": {
+    "verdict": "artefact",
+    "reason": "WhisperForAudioClassification has projector and classifier Linears after the encoder; both were dropped on config.* dims, leaving the encoder layer_norm as the last node"
+  },
+  "huggingface/transformers|src/transformers/models/whisper/modeling_whisper.py|invalid-output-shape|embed_tokens": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "hyunwoongko/transformer|models/blocks/encoder_layer.py|attention-no-pe|attention": {
+    "verdict": "not-a-bug",
+    "reason": "TransformerEmbedding (models/embedding) adds PE in Encoder before the layer stack; the layer file holding no PE is a true fact of the split, not a defect"
+  },
+  "hyunwoongko/transformer|models/blocks/encoder_layer.py|dropout-at-output|dropout2": {
+    "verdict": "artefact",
+    "reason": "norm2 follows dropout2 at line 40, but norm2 is the repo-local LayerNorm class from another file and was dropped, so dropout2 became the last node"
+  },
+  "hyunwoongko/transformer|models/layers/multi_head_attention.py|consecutive-linear-no-activation|w_k": {
+    "verdict": "artefact",
+    "reason": "parallel projection chained in init order"
+  },
+  "hyunwoongko/transformer|models/layers/multi_head_attention.py|consecutive-linear-no-activation|w_q": {
+    "verdict": "artefact",
+    "reason": "w_q feeds the attention op, not w_concat directly; the attention op was not placed between them"
+  },
+  "hyunwoongko/transformer|models/layers/multi_head_attention.py|consecutive-linear-no-activation|w_v": {
+    "verdict": "artefact",
+    "reason": "w_q, w_k, w_v are parallel projections of the same input; chained in init order"
+  },
+  "hyunwoongko/transformer|models/layers/multi_head_attention.py|invalid-output-shape|w_v": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "hyunwoongko/transformer|models/model/transformer.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/Layers.py|attention-no-pe|slf_attn": {
+    "verdict": "not-a-bug",
+    "reason": "PositionalEncoding is applied in Models.py Encoder/Decoder before these layers; Layers.py legitimately has attention and no PE"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/Models.py|invalid-output-shape|trg_word_prj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"n_trg_vocab\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/SubLayers.py|bn-at-output|layer_norm": {
+    "verdict": "not-a-bug",
+    "reason": "PositionwiseFeedForward is a post-norm sublayer that ends in LayerNorm by design (original Transformer); the parser read a sublayer as if it were the whole model"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/SubLayers.py|consecutive-linear-no-activation|w_1": {
+    "verdict": "artefact",
+    "reason": "self.w_2(F.relu(self.w_1(x))) (line 76) has a functional ReLU between the two linears; the parser found the relu but did not place it inside the nested call"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/SubLayers.py|dropout-before-bn|dropout": {
+    "verdict": "not-a-bug",
+    "reason": "dropout, residual add, LayerNorm is the standard post-norm Transformer sublayer; the finding also mislabels LayerNorm as BatchNorm in its text"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/SubLayers.py|invalid-output-shape|w_1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"d_hid\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "karpathy/minGPT|mingpt/model.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "karpathy/nanoGPT|model.py|consecutive-linear-no-activation|lm_head": {
+    "verdict": "artefact",
+    "reason": "lm_head appears twice in the graph: the weight-tying line self.transformer.wte.weight = self.lm_head.weight (line 138) was read as a second definition, so the node feeds into its own duplicate"
+  },
+  "karpathy/nanoGPT|model.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "karpathy/nanochat|nanochat/gpt.py|attention-no-pe|attn": {
+    "verdict": "artefact",
+    "reason": "nanochat uses rotary embeddings applied functionally (apply_rotary_emb, line 101) with cos/sin precomputed in GPT; no nn.Module carries the PE, so the parser cannot see it"
+  },
+  "kuangliu/pytorch-cifar|models/densenet.py|invalid-output-shape|conv1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_planes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "kuangliu/pytorch-cifar|models/mobilenetv2.py|invalid-output-shape|linear": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "kuangliu/pytorch-cifar|models/mobilenetv2.py|pool-into-linear-no-flatten|avg_pool2d": {
+    "verdict": "artefact",
+    "reason": "out = out.view(out.size(0), -1) sits between F.avg_pool2d and self.linear; .view is invisible to the parser"
+  },
+  "kuangliu/pytorch-cifar|models/resnet.py|invalid-output-shape|linear": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "kuangliu/pytorch-cifar|models/resnet.py|pool-into-linear-no-flatten|avg_pool2d": {
+    "verdict": "artefact",
+    "reason": "out = out.view(out.size(0), -1) sits between F.avg_pool2d and self.linear; .view is invisible to the parser"
+  },
+  "kuangliu/pytorch-cifar|models/vgg.py|invalid-output-shape|features_1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"x\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "kuangliu/pytorch-cifar|models/vgg.py|pool-into-linear-no-flatten|features_4": {
+    "verdict": "artefact",
+    "reason": "out = out.view(out.size(0), -1) sits between self.features and self.classifier; .view is invisible to the parser"
+  },
+  "kyegomez/BitNet|bitnet/bit_transformer.py|invalid-output-shape|emb": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "kyegomez/BitNet|bitnet/bitlinear.py|@cause": {
+    "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)"
+  },
+  "lllyasviel/ControlNet|cldm/cldm.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "lucidrains/PaLM-pytorch|palm_pytorch/palm_pytorch.py|invalid-output-shape|attn_out": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "lucidrains/PaLM-pytorch|palm_pytorch/palm_pytorch.py|invalid-output-shape|fused_attn_ff_proj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"sum(self.fused_dims\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "lucidrains/denoising-diffusion-pytorch|denoising_diffusion_pytorch/denoising_diffusion_pytorch.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "lucidrains/vit-pytorch|vit_pytorch/simple_vit.py|invalid-output-shape|linear_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "lucidrains/vit-pytorch|vit_pytorch/vit.py|invalid-output-shape|mlp_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "lucidrains/x-transformers|x_transformers/x_transformers.py|deep-no-norm|": {
+    "verdict": "artefact",
+    "reason": "all norms live inside AttentionLayers, a custom class assembled from keyword config that the parser did not expand"
+  },
+  "lucidrains/x-transformers|x_transformers/x_transformers.py|invalid-output-shape|project_emb": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "meta-llama/llama3|llama/model.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "meta-llama/llama|llama/model.py|@cause": {
+    "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)"
+  },
+  "microsoft/LoRA|loralib/layers.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "microsoft/Swin-Transformer|models/swin_transformer.py|invalid-output-shape|head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "microsoft/unilm|beit/modeling_finetune.py|invalid-output-shape|head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "milesial/Pytorch-UNet|unet/unet_model.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "milesial/Pytorch-UNet|unet/unet_parts.py|invalid-output-shape|conv": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"out_channels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "mistralai/mistral-inference|src/mistral_inference/transformer.py|invalid-output-shape|output": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"args.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "mosaicml/llm-foundry|llmfoundry/models/mpt/modeling_mpt.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "open-mmlab/mmdetection|mmdet/models/backbones/resnet.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "open-mmlab/mmdetection|mmdet/models/backbones/swin.py|dropout-at-output|drop_after_pos": {
+    "verdict": "artefact",
+    "reason": "drop_after_pos (line 596) is followed by self.stages, a ModuleList of SwinBlockSequence built in a loop from config dicts, which the parser did not expand"
+  },
+  "openai/CLIP|clip/model.py|consecutive-linear-no-activation|k_proj": {
+    "verdict": "artefact",
+    "reason": "k_proj, q_proj, v_proj are parallel projections passed to F.multi_head_attention_forward (lines 76-80), not a chain"
+  },
+  "openai/CLIP|clip/model.py|consecutive-linear-no-activation|q_proj": {
+    "verdict": "artefact",
+    "reason": "parallel q/k/v projections chained in init order"
+  },
+  "openai/CLIP|clip/model.py|consecutive-linear-no-activation|v_proj": {
+    "verdict": "artefact",
+    "reason": "v_proj and c_proj are joined by the attention op, which the parser did not place between them"
+  },
+  "openai/CLIP|clip/model.py|invalid-output-shape|conv1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"width // 2\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "openai/CLIP|clip/model.py|invalid-output-shape|k_proj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "openai/whisper|whisper/model.py|invalid-output-shape|token_embedding": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"n_state\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "openai/whisper|whisper/model.py|redundant-activation|gelu": {
+    "verdict": "artefact",
+    "reason": "AudioEncoder does F.gelu(self.conv1(x)); F.gelu(self.conv2(x)) (lines 200-201); both Conv1d nodes were dropped (n_state unresolved), which made the two gelus adjacent"
+  },
+  "pytorch/audio|src/torchaudio/models/conformer.py|@cause": {
+    "cause": "torch.nn.X fully-qualified prefix instead of nn.X"
+  },
+  "pytorch/audio|src/torchaudio/models/wav2vec2/components.py|@cause": {
+    "cause": "torch.nn.X fully-qualified prefix instead of nn.X"
+  },
+  "pytorch/audio|src/torchaudio/models/wav2vec2/model.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "pytorch/examples|mnist/main.py|deep-no-norm|": {
+    "verdict": "not-a-bug",
+    "reason": "the MNIST example is 2 conv + 2 fc and trains to about 99% without normalization; the 11-layer count includes relu, dropout, pool and flatten nodes"
+  },
+  "pytorch/examples|word_language_model/model.py|@cause": {
+    "cause": "a triple-quoted string spanning lines inside a call in __init__ (a raise ValueError with a triple-quoted message) aborts the parse of the whole file"
+  },
+  "pytorch/vision|torchvision/models/densenet.py|invalid-output-shape|features_1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_init_features\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "pytorch/vision|torchvision/models/mobilenetv2.py|dropout-at-output|classifier_1": {
+    "verdict": "artefact",
+    "reason": "classifier is Sequential(Dropout, Linear(self.last_channel, num_classes)) at line 145; the Linear was dropped (self.last_channel unresolved), leaving Dropout as the last node"
+  },
+  "pytorch/vision|torchvision/models/resnet.py|invalid-output-shape|conv1": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"self.inplanes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "pytorch/vision|torchvision/models/vision_transformer.py|dropout-at-output|dropout": {
+    "verdict": "artefact",
+    "reason": "the Encoder (layers built in a loop into an OrderedDict) and the heads Sequential were not parsed; this dropout is the first op of Encoder.forward, not the last op of the model"
+  },
+  "rwightman/gen-efficientnet-pytorch|geffnet/gen_efficientnet.py|invalid-output-shape|classifier": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "rwightman/gen-efficientnet-pytorch|geffnet/mobilenetv3.py|invalid-output-shape|classifier": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "speechbrain/speechbrain|speechbrain/lobes/models/transformer/Transformer.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "speechbrain/speechbrain|speechbrain/nnet/attention.py|attention-no-pe|scaled_dot_product_attention": {
+    "verdict": "artefact",
+    "reason": "the class is RoPEMHA: rotary position is applied functionally inside forward, so the one attention module the parser found is the one that carries its own PE"
+  },
+  "speechbrain/speechbrain|speechbrain/nnet/attention.py|invalid-output-shape|out_proj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "state-spaces/mamba|mamba_ssm/models/mixer_seq_simple.py|invalid-output-shape|lm_head": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "state-spaces/mamba|mamba_ssm/modules/mamba_simple.py|deep-no-norm|": {
+    "verdict": "not-a-bug",
+    "reason": "Mamba is the mixer; RMSNorm wraps it in Block (mamba_ssm/modules/block.py) by design, so a mixer with no norm is the intended split"
+  },
+  "state-spaces/mamba|mamba_ssm/modules/mamba_simple.py|invalid-output-shape|out_proj": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"self.d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "ultralytics/ultralytics|ultralytics/nn/modules/block.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "ultralytics/ultralytics|ultralytics/nn/tasks.py|@cause": {
+    "cause": "sub-modules are instances of classes from other files, or are passed in through __init__"
+  },
+  "ultralytics/yolov5|models/common.py|invalid-output-shape|linear": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"c2\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "ultralytics/yolov5|models/yolo.py|@cause": {
+    "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)"
+  },
+  "xinntao/ESRGAN|RRDBNet_arch.py|deep-no-norm|conv_first": {
+    "verdict": "not-a-bug",
+    "reason": "ESRGAN removes BatchNorm on purpose (stated design choice of the paper for super-resolution); the RRDB trunk built by make_layer (line 59) was also not expanded, but the no-norm fact is real and intentional"
+  },
+  "xinntao/ESRGAN|RRDBNet_arch.py|invalid-output-shape|conv_first": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"nf\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "yunjey/pytorch-tutorial|tutorials/02-intermediate/convolutional_neural_network/main.py|invalid-output-shape|fc": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "yunjey/pytorch-tutorial|tutorials/02-intermediate/convolutional_neural_network/main.py|linear-after-conv-no-flatten|layer2_1": {
+    "verdict": "artefact",
+    "reason": "forward does out.reshape(out.size(0), -1) at line 54 before self.fc; tensor-method reshapes in forward are invisible to the parser, so the flatten is missing from the graph"
+  },
+  "yunjey/pytorch-tutorial|tutorials/03-advanced/image_captioning/model.py|invalid-output-shape|embed": {
+    "verdict": "artefact",
+    "reason": "shape carries the unresolved source text \"embed_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  }
+}
