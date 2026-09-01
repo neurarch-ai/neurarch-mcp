@@ -5,8 +5,12 @@ import { loadModelFile, sourceKindFor } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
-import { parseFlags } from './cli.js';
+import { parseFlags, CORE_TOOLS } from './cli.js';
 import { createMcpServer } from './server.js';
+import { setHfEnabled } from './sources.js';
+import { EXTRA_TOOLS, HF_TOOLS } from './extraTools.js';
+import { PROMPTS } from './prompts.js';
+import { runLintCommand, runCheckCommand } from './commands.js';
 import {
   startHttpServer,
   isLoopbackHost,
@@ -17,17 +21,23 @@ import pkg from '../package.json';
 
 const VERSION: string = pkg.version;
 
-const HELP = `neurarch-mcp — Model Context Protocol server for a Neurarch model file.
+const ZOO_COUNT = 81;
+
+const HELP = `neurarch-mcp: Model Context Protocol server for a neural network model.
 
 Usage:
-  npx neurarch-mcp <model.neurarch.json | model.py> [--write] [--watch] [--http[=PORT]]
+  npx neurarch-mcp <model.py | model.neurarch.json | zoo:<id> | hf:<org/name>> [flags]
+  npx neurarch-mcp lint  <model...> [--json]     print the design-rule findings, exit 1 on a block
+  npx neurarch-mcp check <model>    [--json]     print the full verdict, exit 1 on a block
+  npx neurarch-mcp --http [--host=0.0.0.0]       serve with no model; callers pass model_path or model_source
 
-Model file:
-  Either a .neurarch.json saved from the Neurarch app, or a PyTorch .py file,
-  which is parsed into the same graph. Python source carries no tensor shapes,
-  so layers, params and wiring are exact while FLOPs and shape contracts are
-  reported as unknown; --write is refused on a .py file because the graph was
-  derived from it and cannot be written back.
+Model:
+  A PyTorch .py file (parsed into a graph: layers, params and wiring exact,
+  shapes unknown), a .neurarch.json saved from the app or written by
+  neurarch-trace (everything), zoo:<id> for one of the ${ZOO_COUNT} bundled reference
+  architectures (list_architectures), or hf:<org/name> for a Hugging Face repo
+  (needs --hf). --write is refused on a .py file because the graph was derived
+  from it and cannot be written back; use export_pytorch to emit new source.
 
 Flags:
   --version Print the neurarch-mcp version and exit (alias: -v).
@@ -47,8 +57,16 @@ Flags:
             GET /health for a liveness probe.
   --host=ADDR
             Bind address for --http. Defaults to 127.0.0.1 (loopback only). Use
-            0.0.0.0 to expose it to a tunnel — but then a token is required if
+            0.0.0.0 to expose it to a tunnel, but then a token is required if
             --write is on (see below).
+  --hf      Allow hf:<org/name> model refs and list load_hf_model. This is the
+            one switch that lets a tool open a socket on your behalf
+            (huggingface.co, to read config.json). HF_TOKEN is sent for gated
+            repos. Results are cached for a day under ~/.cache/neurarch-mcp.
+  --tools=core
+            Advertise only the core tools (${CORE_TOOLS.length}: ${CORE_TOOLS.join(', ')})
+            instead of all of them. Every tool stays callable by name; this
+            trims what rides along in the agent's context on every turn.
 
 Environment:
   NEURARCH_MCP_TOKEN  When set, --http requires 'Authorization: Bearer <token>'
@@ -66,10 +84,20 @@ Environment:
   a vendored verifier. No API key is read anywhere in this package.
 
 Read tools (always available):
-${TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+${TOOLS.filter(t => !EXTRA_TOOLS.includes(t)).map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+${EXTRA_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+
+Network tools (only with --hf):
+${HF_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
 
 Write tools (only when --write is set):
 ${WRITE_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+
+Prompts (slash commands in Claude Desktop, Cursor, VS Code):
+${PROMPTS.map(p => `  - ${p.name}: ${p.description.split('.')[0]}`).join('\n')}
+
+Resources: neurarch://model, neurarch://model/mermaid, neurarch://model/pytorch,
+  neurarch://zoo, neurarch://zoo/{id}, neurarch://rules
 
 Example Claude Code config (~/.claude/mcp_servers.json):
 {
@@ -91,35 +119,69 @@ Remote example (serve locally, drive from a cloud agent over a tunnel):
 async function main(): Promise<void> {
   const {
     versionRequested, helpRequested, writeEnabled, watchEnabled,
-    httpEnabled, httpPort, httpHost, modelArg,
+    httpEnabled, httpPort, httpHost, modelArg, hfEnabled, toolSet, command, json, positional,
   } = parseFlags(process.argv.slice(2));
 
   if (versionRequested) {
     process.stdout.write(`neurarch-mcp ${VERSION}\n`);
     process.exit(0);
   }
-  if (helpRequested || !modelArg) {
+  setHfEnabled(hfEnabled);
+
+  if (command) {
+    const io = { out: (t: string) => process.stdout.write(t), err: (t: string) => process.stderr.write(t) };
+    const code = command === 'lint'
+      ? await runLintCommand(positional, json, io)
+      : await runCheckCommand(positional, json, io);
+    process.exit(code);
+  }
+
+  // A server with no model is only meaningful over HTTP, where every call can
+  // carry model_path or model_source. On stdio the client shares our disk, so
+  // asking for a path up front costs nothing and catches typos at startup.
+  const hosted = httpEnabled && !modelArg;
+  if (helpRequested || (!modelArg && !hosted)) {
     process.stdout.write(HELP);
     process.exit(helpRequested ? 0 : 1);
   }
 
-  const modelPath = resolve(modelArg);
-
-  let currentModel: ModelArchitecture;
-  try {
-    currentModel = await loadModelFile(modelPath);
-  } catch (e) {
-    process.stderr.write(`neurarch-mcp: ${(e as Error).message}\n`);
-    process.exit(1);
+  // stdio IS the protocol channel. Anything in the vendored engine that logs
+  // to stdout (the code generator warns about layer types it has no template
+  // for) would corrupt a JSON-RPC frame, so route it to stderr for the life of
+  // the process. Nothing in this server writes to stdout on purpose.
+  if (!httpEnabled) {
+    console.log = (...a: unknown[]) => process.stderr.write(a.map(String).join(' ') + '\n');
+    console.info = console.log;
   }
 
-  const ctx: ToolContext = { modelPath };
+  const modelPath = modelArg ? resolve(modelArg) : '';
+
+  let currentModel: ModelArchitecture | null = null;
+  if (modelArg) {
+    try {
+      currentModel = /^(zoo|hf):/i.test(modelArg)
+        ? await (await import('./models.js')).loadModelCached(modelArg)
+        : await loadModelFile(modelPath);
+    } catch (e) {
+      process.stderr.write(`neurarch-mcp: ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+  }
+
+  const ctx: ToolContext = { modelPath, writeEnabled };
 
   // Mutations against a graph parsed out of Python have nowhere to go: writing
   // them back means regenerating source, which this server does not do, and
   // save_model would put JSON where the .py was. Refused at startup rather than
   // at the first edit, so the user finds out before an agent has built a plan
   // on top of tools that were never going to work.
+  if (writeEnabled && (!modelArg || /^(zoo|hf):/i.test(modelArg))) {
+    process.stderr.write(
+      'neurarch-mcp: --write needs a .neurarch.json file to write to. zoo:/hf: references and the hosted mode '
+      + 'have no file behind them; use load_architecture / load_hf_model with save_to first, then start on that file.\n',
+    );
+    process.exit(1);
+  }
   if (writeEnabled && sourceKindFor(modelPath) === 'pytorch-source') {
     process.stderr.write(
       'neurarch-mcp: refusing --write on a PyTorch source file. The graph is derived from '
@@ -135,7 +197,11 @@ async function main(): Promise<void> {
     );
   }
 
-  if (watchEnabled) {
+  if (hfEnabled) {
+    process.stderr.write('neurarch-mcp: --hf on. load_hf_model and hf:<org/name> refs may contact huggingface.co.\n');
+  }
+
+  if (watchEnabled && currentModel && !/^(zoo|hf):/i.test(modelArg ?? '')) {
     process.stderr.write(`neurarch-mcp: watch mode enabled. Polling ${modelPath} for changes.\n`);
     let reloading = false;
     watchFile(modelPath, { interval: 1000 }, async (curr, prev) => {
@@ -160,8 +226,18 @@ async function main(): Promise<void> {
   }
 
   // Read the model through a getter so --watch reloads (which reassign
-  // currentModel) and in-place --write edits are both always seen.
-  const getModel = () => currentModel;
+  // currentModel) and in-place --write edits are both always seen. In hosted
+  // mode there is none, and the error is the answer for a call that named no
+  // model_path or model_source.
+  const getModel = (): ModelArchitecture => {
+    if (!currentModel) {
+      throw new Error(
+        'This server was started without a model. Pass model_path (a path, zoo:<id> or hf:<org/name>) '
+        + 'or model_source (inline .neurarch.json or PyTorch source) with the call.',
+      );
+    }
+    return currentModel;
+  };
 
   if (httpEnabled) {
     const host = httpHost ?? DEFAULT_HTTP_HOST;
@@ -176,11 +252,11 @@ async function main(): Promise<void> {
       );
       process.exit(1);
     }
-    startHttpServer({ getModel, ctx, writeEnabled, version: VERSION, host, port, token });
+    startHttpServer({ getModel, ctx, writeEnabled, version: VERSION, host, port, token, toolSet, hosted });
     return;
   }
 
-  const server = createMcpServer({ getModel, ctx, writeEnabled, version: VERSION });
+  const server = createMcpServer({ getModel, ctx, writeEnabled, version: VERSION, toolSet });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

@@ -222,3 +222,78 @@ describe('CallTool', () => {
     expect(res.content[0].text).toMatch(/--write/);
   });
 });
+
+describe('prompts and resources', () => {
+  it('advertises prompts and renders one with its argument', async () => {
+    const client = await connect();
+    const { prompts } = await client.listPrompts();
+    expect(prompts.map(p => p.name)).toContain('review_design');
+    expect(prompts.map(p => p.name)).toContain('shrink_for_target');
+    const got = await client.getPrompt({ name: 'shrink_for_target', arguments: { target: 'under 10M params' } });
+    const text = (got.messages[0].content as { text: string }).text;
+    expect(text).toMatch(/under 10M params/);
+    expect(text).toMatch(/rank_designs/);
+    await expect(client.getPrompt({ name: 'shrink_for_target' })).rejects.toThrow(/target/);
+  });
+
+  it('serves the model, its diagram, its source, the zoo and the rules as resources', async () => {
+    const client = await connect();
+    const { resources } = await client.listResources();
+    expect(resources.map(r => r.uri)).toEqual(expect.arrayContaining(['neurarch://model', 'neurarch://model/mermaid', 'neurarch://model/pytorch', 'neurarch://zoo', 'neurarch://rules']));
+    const model = await client.readResource({ uri: 'neurarch://model' });
+    expect(JSON.parse((model.contents[0] as { text: string }).text).components.length).toBe(7);
+    const mermaid = await client.readResource({ uri: 'neurarch://model/mermaid' });
+    expect((mermaid.contents[0] as { text: string }).text).toMatch(/^flowchart TD/);
+    const py = await client.readResource({ uri: 'neurarch://model/pytorch' });
+    expect((py.contents[0] as { text: string }).text).toMatch(/nn\.Module/);
+    const { resourceTemplates } = await client.listResourceTemplates();
+    expect(resourceTemplates[0].uriTemplate).toBe('neurarch://zoo/{id}');
+    const bert = await client.readResource({ uri: 'neurarch://zoo/bert-base' });
+    expect(JSON.parse((bert.contents[0] as { text: string }).text).components.length).toBeGreaterThan(10);
+    await expect(client.readResource({ uri: 'neurarch://nope' })).rejects.toThrow(/Unknown resource/);
+  });
+});
+
+describe('model_source and zoo: routing', () => {
+  it('answers about inline PyTorch source, and about a zoo entry by model_path', async () => {
+    const client = await connect();
+    const inline = await client.callTool({
+      name: 'get_model_summary',
+      arguments: { model_source: 'import torch.nn as nn\nclass M(nn.Module):\n    def __init__(self):\n        super().__init__()\n        self.fc = nn.Linear(8, 4)\n    def forward(self, x):\n        return self.fc(x)\n' },
+    });
+    expect((inline.structuredContent as any).name).toBe('model');
+    const zoo = await client.callTool({ name: 'get_model_summary', arguments: { [MODEL_PATH_PARAM]: 'zoo:bert-base' } });
+    expect((zoo.structuredContent as any).layerCount).toBeGreaterThan(10);
+    const both = await client.callTool({ name: 'get_model_summary', arguments: { [MODEL_PATH_PARAM]: 'zoo:bert-base', model_source: '{}' } });
+    expect(both.isError).toBe(true);
+  });
+
+  it('hosted: a server with no model says so until a call names one', async () => {
+    const server = createMcpServer({
+      getModel: () => { throw new Error('This server was started without a model.'); },
+      ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test',
+    });
+    const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const bare = await client.callTool({ name: 'get_model_summary', arguments: {} });
+    expect(bare.isError).toBe(true);
+    expect((bare.content as any)[0].text).toMatch(/without a model/);
+    const named = await client.callTool({ name: 'get_model_summary', arguments: { [MODEL_PATH_PARAM]: 'zoo:resnet-50' } });
+    expect(named.isError).toBeFalsy();
+  });
+
+  it('--tools=core advertises the core set but still answers a full-set tool by name', async () => {
+    const model = makeModel();
+    const server = createMcpServer({ getModel: () => model, ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test', toolSet: 'core' });
+    const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(st), client.connect(ct)]);
+    const { tools } = await client.listTools();
+    expect(tools.length).toBeLessThan(15);
+    expect(tools.map(t => t.name)).toContain('rank_designs');
+    expect(tools.map(t => t.name)).not.toContain('list_connections');
+    const r = await client.callTool({ name: 'list_connections', arguments: {} });
+    expect(r.isError).toBeFalsy();
+  });
+});

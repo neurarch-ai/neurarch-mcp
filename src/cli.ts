@@ -5,6 +5,7 @@
  */
 import { TOOLS, type ToolAnnotations, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
+import { HF_TOOLS, hfToolsIfEnabled } from './extraTools.js';
 
 export interface ParsedFlags {
   versionRequested: boolean;
@@ -17,13 +18,47 @@ export interface ParsedFlags {
   httpPort?: number;
   /** Bind address from `--host=ADDR`; undefined falls back to loopback. */
   httpHost?: string;
+  /** Allow hf:<org/name> model refs and list load_hf_model: the one network switch. */
+  hfEnabled: boolean;
+  /** Which read tools to advertise: 'full' (default) or the 'core' dozen. */
+  toolSet: ToolSetName;
+  /** A subcommand (`lint`, `check`) instead of serving, when the first token is one. */
+  command?: Command;
+  /** Emit JSON from a subcommand instead of a human report. */
+  json: boolean;
   /** First non-flag token — the model file path, or undefined if none given. */
   modelArg?: string;
+  /** Every non-flag token after the command, for subcommands that take several files. */
+  positional: string[];
   /** Flags we did not recognise (e.g. "--frobnicate"). */
   unknownFlags: string[];
 }
 
-const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host']);
+const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--json']);
+
+export type ToolSetName = 'core' | 'full';
+export type Command = 'lint' | 'check';
+const COMMANDS = new Set<Command>(['lint', 'check']);
+
+/**
+ * The tools that answer the questions an agent actually asks, without the
+ * long tail. Twenty-five tool descriptions ride along on every turn of every
+ * conversation the server is attached to, and some clients cap the count;
+ * `--tools=core` advertises these and keeps the rest callable by name.
+ */
+export const CORE_TOOLS: readonly string[] = [
+  'describe_architecture',
+  'get_layer',
+  'find_layers',
+  'layer_impact',
+  'lint_model',
+  'check_design',
+  'rank_designs',
+  'mermaid_diagram',
+  'export_pytorch',
+  'list_architectures',
+  'find_models',
+];
 
 /** Base name of a flag token, dropping any `=value` (so `--http=8787` → `--http`). */
 function flagName(token: string): string {
@@ -42,8 +77,17 @@ export function parseFlags(argv: string[]): ParsedFlags {
 
   const portRaw = valueOf('--http');
   const port = portRaw !== undefined ? Number(portRaw) : undefined;
+  const positionalAll = argv.filter(a => !a.startsWith('-'));
+  const command = COMMANDS.has(positionalAll[0] as Command) ? (positionalAll[0] as Command) : undefined;
+  const positional = command ? positionalAll.slice(1) : positionalAll;
+  const toolsRaw = valueOf('--tools');
 
   return {
+    hfEnabled: has('--hf'),
+    toolSet: toolsRaw === 'core' ? 'core' : 'full',
+    command,
+    json: has('--json'),
+    positional,
     versionRequested: has('--version', '-v'),
     helpRequested: has('--help', '-h'),
     writeEnabled: has('--write'),
@@ -51,14 +95,21 @@ export function parseFlags(argv: string[]): ParsedFlags {
     httpEnabled: has('--http'),
     httpPort: port !== undefined && Number.isInteger(port) && port > 0 && port < 65536 ? port : undefined,
     httpHost: valueOf('--host') || undefined,
-    modelArg: argv.find(a => !a.startsWith('-')),
+    modelArg: positional[0],
     unknownFlags: flags.filter(f => !KNOWN_FLAGS.has(flagName(f))),
   };
 }
 
-/** The tools exposed for a given mode: read-only by default, +writes with --write. */
-export function selectTools(writeEnabled: boolean): ToolDef[] {
-  return writeEnabled ? [...TOOLS, ...WRITE_TOOLS] : TOOLS;
+/**
+ * The tools exposed for a given mode: read-only by default, +writes with
+ * --write, +load_hf_model with --hf. `toolSet` narrows what is ADVERTISED, not
+ * what is callable: resolveToolCall still finds a full-set tool by name, so an
+ * agent that read the docs can use one the listing left out.
+ */
+export function selectTools(writeEnabled: boolean, toolSet: ToolSetName = 'full'): ToolDef[] {
+  const reads = [...TOOLS, ...hfToolsIfEnabled()];
+  const advertised = toolSet === 'core' ? reads.filter(t => CORE_TOOLS.includes(t.name)) : reads;
+  return writeEnabled ? [...advertised, ...WRITE_TOOLS] : advertised;
 }
 
 /** Argument name for "ask this about a different file". Read tools only. */
@@ -113,8 +164,8 @@ export interface ListedTool {
  * Build the ListTools payload: schemas with `model_path` where it applies, and
  * annotations resolved from the per-tool overrides over the read defaults.
  */
-export function listedTools(writeEnabled: boolean): ListedTool[] {
-  const reads = TOOLS.map(t => ({
+export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'full'): ListedTool[] {
+  const reads = selectTools(false, toolSet).map(t => ({
     name: t.name,
     description: t.description,
     inputSchema: withModelPath(t.inputSchema),
@@ -149,11 +200,14 @@ export interface ToolResolution {
  * rather than just saying "unknown tool".
  */
 export function resolveToolCall(name: string, writeEnabled: boolean): ToolResolution {
-  const tool = selectTools(writeEnabled).find(t => t.name === name);
+  const tool = selectTools(writeEnabled, 'full').find(t => t.name === name);
   if (tool) return { tool };
   const isGatedWriteTool = !writeEnabled && WRITE_TOOLS.some(t => t.name === name);
+  const isGatedHfTool = HF_TOOLS.some(t => t.name === name);
   const hint = isGatedWriteTool
     ? ' Restart the MCP server with --write to enable mutation tools.'
-    : '';
+    : isGatedHfTool
+      ? ' Restart the MCP server with --hf to allow the Hugging Face lookup (the one network call this server can make).'
+      : '';
   return { errorText: `Unknown tool: ${name}.${hint}` };
 }
