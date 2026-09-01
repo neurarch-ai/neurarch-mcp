@@ -1,0 +1,42 @@
+# Publish python/neurarch-trace to PyPI through Trusted Publishing: no token
+# in the repo, PyPI trusts this workflow's OIDC identity instead.
+#
+# One-time setup on PyPI (project page -> Publishing -> Add a new publisher):
+#   owner: neurarch-ai   repository: neurarch-mcp
+#   workflow: publish-pypi.yml   environment: pypi
+#
+# Release: bump `version` in python/neurarch-trace/pyproject.toml, then
+#   git tag trace-v0.1.1 && git push origin trace-v0.1.1
+# The tag must match the version or the job stops before building.
+name: Publish neurarch-trace
+
+on:
+  push:
+    tags: ['trace-v*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    defaults:
+      run:
+        working-directory: python/neurarch-trace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Tag matches pyproject version
+        run: |
+          want="${GITHUB_REF_NAME#trace-v}"
+          have=$(grep -E '^version *= *"' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          test "$want" = "$have" || { echo "tag $want != pyproject $have"; exit 1; }
+      - name: Tests
+        run: |
+          uv venv && uv pip install torch --index-url https://download.pytorch.org/whl/cpu && uv pip install pytest -e .
+          uv run --no-sync pytest tests -q
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/neurarch-trace/dist
