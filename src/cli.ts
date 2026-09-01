@@ -22,6 +22,8 @@ export interface ParsedFlags {
   hfEnabled: boolean;
   /** Which read tools to advertise: 'full' (default) or the 'core' dozen. */
   toolSet: ToolSetName;
+  /** Serve with no model on stdio too (a container with nothing mounted); every call names its model. */
+  hostedRequested: boolean;
   /** A subcommand (`lint`, `check`) instead of serving, when the first token is one. */
   command?: Command;
   /** Emit JSON from a subcommand instead of a human report. */
@@ -34,7 +36,7 @@ export interface ParsedFlags {
   unknownFlags: string[];
 }
 
-const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--json']);
+const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--json', '--hosted']);
 
 export type ToolSetName = 'core' | 'full';
 export type Command = 'lint' | 'check';
@@ -84,6 +86,7 @@ export function parseFlags(argv: string[]): ParsedFlags {
 
   return {
     hfEnabled: has('--hf'),
+    hostedRequested: has('--hosted'),
     toolSet: toolsRaw === 'core' ? 'core' : 'full',
     command,
     json: has('--json'),

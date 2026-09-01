@@ -10,9 +10,11 @@ COPY zoo ./zoo
 COPY README.md LICENSE ./
 ENV NODE_ENV=production
 EXPOSE 8787
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1:8787/health || exit 1
-# --hf is on: a hosted server exists to answer about models it does not have,
-# and hf:<org/name> is the one way in that needs no upload. The token is
-# required by the server itself before it will bind to 0.0.0.0 with anything
-# but read tools; set NEURARCH_MCP_TOKEN in the deploy.
-CMD ["node", "dist/index.js", "--http", "--host=0.0.0.0", "--hf", "--tools=core"]
+# stdio by default, which is how Docker MCP Toolkit drives a container: no
+# model is mounted, so every call names one (zoo:, hf:, or model_source).
+# --hf is on because a hosted server exists to answer about models it does
+# not have. For an HTTP deployment override the command:
+#   node dist/index.js --http --host=0.0.0.0 --hf --tools=core
+# and set NEURARCH_MCP_TOKEN (required before write tools may leave loopback).
+ENTRYPOINT ["node", "dist/index.js"]
+CMD ["--hosted", "--hf", "--tools=core"]

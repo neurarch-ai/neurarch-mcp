@@ -30,6 +30,7 @@ Usage:
   npx neurarch-mcp lint  <model...> [--json]     print the design-rule findings, exit 1 on a block
   npx neurarch-mcp check <model>    [--json]     print the full verdict, exit 1 on a block
   npx neurarch-mcp --http [--host=0.0.0.0]       serve with no model; callers pass model_path or model_source
+  npx neurarch-mcp --hosted                      the same over stdio (a container with nothing mounted)
 
 Model:
   A PyTorch .py file (parsed into a graph: layers, params and wiring exact,
@@ -119,7 +120,7 @@ Remote example (serve locally, drive from a cloud agent over a tunnel):
 async function main(): Promise<void> {
   const {
     versionRequested, helpRequested, writeEnabled, watchEnabled,
-    httpEnabled, httpPort, httpHost, modelArg, hfEnabled, toolSet, command, json, positional,
+    httpEnabled, httpPort, httpHost, modelArg, hfEnabled, toolSet, command, json, positional, hostedRequested,
   } = parseFlags(process.argv.slice(2));
 
   if (versionRequested) {
@@ -136,10 +137,12 @@ async function main(): Promise<void> {
     process.exit(code);
   }
 
-  // A server with no model is only meaningful over HTTP, where every call can
-  // carry model_path or model_source. On stdio the client shares our disk, so
-  // asking for a path up front costs nothing and catches typos at startup.
-  const hosted = httpEnabled && !modelArg;
+  // A server with no model is the norm over HTTP, where every call can carry
+  // model_path or model_source. On stdio the client usually shares our disk,
+  // so a path up front costs nothing and catches typos at startup; the
+  // exception is a container with nothing mounted (Docker MCP Toolkit runs
+  // stdio inside the image), which says so with --hosted.
+  const hosted = !modelArg && (httpEnabled || hostedRequested);
   if (helpRequested || (!modelArg && !hosted)) {
     process.stdout.write(HELP);
     process.exit(helpRequested ? 0 : 1);

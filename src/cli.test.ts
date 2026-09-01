@@ -110,6 +110,10 @@ describe('0.13 flags and subcommands', () => {
     expect(parseFlags(['m.py']).toolSet).toBe('full');
     expect(parseFlags(['m.py', '--tools=bogus']).toolSet).toBe('full');
   });
+  it('parses --hosted', () => {
+    expect(parseFlags(['--hosted']).hostedRequested).toBe(true);
+    expect(parseFlags(['--hosted']).unknownFlags).toEqual([]);
+  });
   it('recognises lint and check as commands and keeps their files positional', () => {
     const f = parseFlags(['lint', 'a.py', 'zoo:bert-base', '--json']);
     expect(f.command).toBe('lint');
