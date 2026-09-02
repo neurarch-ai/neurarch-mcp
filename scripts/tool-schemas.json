@@ -362,6 +362,15 @@
         "type": "boolean",
         "description": "Also rank the model this server was started with, as \"current\". Default false."
       },
+      "tie_break": {
+        "type": "string",
+        "enum": [
+          "none",
+          "cost",
+          "params"
+        ],
+        "description": "Break a measured tie: \"cost\" (cheapest first) or \"params\" (smallest first). Never crosses a measured rank. Default \"none\"."
+      },
       "model_path": {
         "type": "string",
         "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."

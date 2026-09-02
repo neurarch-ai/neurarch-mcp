@@ -6,6 +6,8 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-02
+
 ### Added
 - **`rank_designs` takes `tie_break`** (`"cost"` or `"params"`): where nothing
   measured separates two legal candidates, the caller's stated rule breaks the
