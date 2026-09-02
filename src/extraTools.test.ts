@@ -58,6 +58,36 @@ describe('rank_designs', () => {
     expect(r.details.broken.blocking.length).toBeGreaterThan(0);
   });
 
+  it('tie_break breaks a measured tie on params, says so, and keeps measuredRank', async () => {
+    const legal = await legalModel();
+    const r = await call('rank_designs', {
+      candidates: [{ id: 'a', model: legal }, { id: 'bert', model_path: 'zoo:bert-base' }],
+      tie_break: 'params',
+    }, {}, legal);
+    expect(r.tieBreak.rule).toBe('params');
+    for (const c of r.ranked) expect(c.measuredRank).toBeLessThanOrEqual(c.rank);
+    const top = r.ranked.filter((c: any) => c.measuredRank === 1);
+    if (top.length > 1) {
+      // The two legal graphs tied on measurement, so the rule decided: smallest first, labelled as ours.
+      expect(r.tieBreak.decided).toBe(top.length);
+      const smallest = [...top].sort((x: any, y: any) => x.params - y.params)[0];
+      expect(r.recommended).toBe(smallest.id);
+      expect(r.recommendation).toContain('broken on params');
+      expect(smallest.reasons.at(-1)).toContain('your tieBreak rule');
+    } else {
+      expect(r.tieBreak.decided).toBe(0);
+    }
+  });
+
+  it('without tie_break the same pair stays a tie and the response says how to break it', async () => {
+    const legal = await legalModel();
+    const r = await call('rank_designs', { candidates: [{ id: 'a', model: legal }, { id: 'b', model: legal }] });
+    expect(r.tieBreak.rule).toBe('none');
+    expect(r.recommended).toBeNull();
+    expect(r.recommendation).toContain('tieBreak');
+    expect(r.ranked.every((c: any) => c.rank === c.measuredRank)).toBe(true);
+  });
+
   it('loads candidates from paths and zoo refs, and labels them by path when no id is given', async () => {
     const p = join(dir, 'variant.neurarch.json');
     await writeFile(p, JSON.stringify(makeModel()));

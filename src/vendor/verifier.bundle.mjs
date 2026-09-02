@@ -6052,11 +6052,70 @@ var RANK_CALIBRATION = {
     pairwiseAccuracy: 0.514,
     coverage: 0.083,
     sampleSize: 36,
+    /**
+     * How many of those 36 pairs the score actually took a position on. Three.
+     * The accuracy above is 33 abstentions scored as coin flips plus three real
+     * comparisons, and it is shipped with `quotable: false` because a caller
+     * comparing 51.4% to the papers' 61.5% would be comparing an anecdote to a
+     * measurement. See MIN_DECIDED_PAIRS in scripts/rl-benchmark/selection.ts.
+     */
+    decidedPairs: 3,
+    quotable: false,
     basis: "in-sample: 24 designs over 6 tasks trained end to end on one T4 (scripts/rl-benchmark/grounded-results.json)",
     comparators: {
       chance: 0.5,
       "zheng-2026-best": 0.615,
       "foster-2026-best": 0.6935
+    }
+  },
+  /**
+   * The out-of-sample campaign exists and did not move this. 2026-09-01, five
+   * held-out tasks and two held-out designers on a T4: fifteen designs trained,
+   * fifteen within-task pairs, four decided, three of them correct. Still under
+   * MIN_DECIDED_PAIRS, so the accuracy is not promoted here.
+   *
+   * What it did reproduce is the abstention: the score declined to separate 11
+   * of 15 pairs of legal designs on tasks and designers it had never seen. That
+   * is the claim this endpoint's `recommended: null` is built on, and unlike an
+   * accuracy it does not need a sample size to be believed.
+   */
+  outOfSample: {
+    ran: "2026-09-01",
+    trainedRows: 15,
+    judgedPairs: 15,
+    decidedPairs: 4,
+    abstained: 11,
+    quotable: false,
+    note: "Held-out campaign reproduced the abstention (11 of 15 pairs) but decided too few pairs to promote an accuracy. See scripts/rl-benchmark/CALIBRATION.md.",
+    /**
+     * The objection, measured. 2026-09-01: two frontier models read the
+     * PyTorch exported from the same fifteen pairs, asked in both orderings and
+     * tallied by the same rules (`npm run bench:llm-baseline`). Both decided
+     * every pair, neither flipped on ordering, and both were right about three
+     * quarters of the time. This score decided four. Shipped here so a caller
+     * choosing between this ordering and a model call has both numbers, and so
+     * this endpoint cannot imply a ranking ability the harness has measured it
+     * not to have. Pinned to llm-baseline-results.json by test.
+     */
+    codeReadingJudges: {
+      basis: "same 15 held-out pairs, exported PyTorch, both orderings, position flips scored as abstentions (scripts/rl-benchmark/llm-baseline-results.json)",
+      "claude-opus-5": { decidedPairs: 15, correct: 12, pairwiseAccuracy: 0.8, coverage: 1 },
+      "grok-4.3": { decidedPairs: 15, correct: 11, pairwiseAccuracy: 0.7333, coverage: 1 }
+    },
+    /**
+     * The rule with no model in it, on the same fifteen pairs: always pick the
+     * design with more parameters. LLMRouter's largest_llm baseline, Zheng et
+     * al.'s complexity heuristic. It ties Grok 4.3 here, which is why the
+     * judges above are not shipped without it. Pinned to what
+     * scripts/rl-benchmark/selectors.ts computes (SELECTORS.md).
+     */
+    trivialBaseline: {
+      id: "largest-params",
+      decidedPairs: 15,
+      correct: 11,
+      pairwiseAccuracy: 0.7333,
+      coverage: 1,
+      note: "A no-model rule within a few pairs of both judges on this set. Neither judge number is evidence that reading code sees what parameter count does not."
     }
   },
   source: "https://neurarch.com/docs/structural-checks"
@@ -6104,16 +6163,53 @@ function signalsFromCheck(id, check, firedRuleIds, outcomeRuleIds) {
     summary: typeof c.summary === "string" ? c.summary : void 0
   };
 }
-function rankCandidates(candidates) {
+var TIE_KEY = {
+  cost: { of: (c) => c.estCostUsd, noun: "estimated cost" },
+  params: { of: (c) => c.params, noun: "parameter count" }
+};
+function rankCandidates(candidates, opts = {}) {
+  const tieBreak = opts.tieBreak ?? "none";
   const withTier = candidates.map((c) => {
     const tier = c.blocking > 0 ? "blocked" : "legal";
-    return { ...c, tier, rank: 0, tiedWith: 1, reasons: reasonsFor(c, tier) };
+    return { ...c, tier, rank: 0, measuredRank: 0, tiedWith: 1, reasons: reasonsFor(c, tier) };
   });
   const sorted = [...withTier].sort(cmp);
   let rank = 0;
   for (let i = 0; i < sorted.length; i++) {
     if (i === 0 || cmp(sorted[i - 1], sorted[i]) !== 0) rank = i + 1;
+    sorted[i].measuredRank = rank;
     sorted[i].rank = rank;
+  }
+  let decidedByTieBreak = 0;
+  if (tieBreak !== "none") {
+    const key = TIE_KEY[tieBreak];
+    const groups = /* @__PURE__ */ new Map();
+    for (const c of sorted) if (c.tier === "legal") groups.set(c.measuredRank, [...groups.get(c.measuredRank) ?? [], c]);
+    for (const [measuredRank, group] of groups) {
+      if (group.length < 2) continue;
+      const known = group.filter((c) => key.of(c) != null).sort((a, b) => key.of(a) - key.of(b));
+      const unknown = group.filter((c) => key.of(c) == null);
+      const ordered = [...known, ...unknown];
+      let sub = 0;
+      for (let i = 0; i < ordered.length; i++) {
+        const prev = i > 0 ? ordered[i - 1] : null;
+        const same = prev != null && key.of(prev) != null && key.of(ordered[i]) != null && key.of(prev) === key.of(ordered[i]);
+        const bothUnknown = prev != null && key.of(prev) == null && key.of(ordered[i]) == null;
+        if (i === 0 || !(same || bothUnknown)) sub = i;
+        ordered[i].rank = measuredRank + sub;
+      }
+      const distinct = new Set(ordered.map((c) => c.rank)).size;
+      if (distinct > 1) {
+        decidedByTieBreak += ordered.length;
+        for (const c of ordered) {
+          const v = key.of(c);
+          c.reasons.push(
+            v == null ? `Tied at measured rank ${measuredRank} with ${group.length - 1} other${group.length === 2 ? "" : "s"}; placed last among them because its ${key.noun} is unknown, on your tieBreak rule, not on any measurement.` : `Tied at measured rank ${measuredRank} with ${group.length - 1} other${group.length === 2 ? "" : "s"}; placed by ${key.noun} (${v}) on your tieBreak rule. That is a budget decision, not a claim about the design.`
+          );
+        }
+      }
+    }
+    sorted.sort((a, b) => a.rank - b.rank || cmp(a, b));
   }
   const groupSize = /* @__PURE__ */ new Map();
   for (const c of sorted) groupSize.set(c.rank, (groupSize.get(c.rank) ?? 0) + 1);
@@ -6125,7 +6221,11 @@ function rankCandidates(candidates) {
   if (legal.length === 0) {
     recommendation = blocked.length === 0 ? "No candidates were submitted." : "Every candidate has a blocking finding. None of them will forward-pass, so none should be given execution budget as submitted.";
   } else if (legal[0].tiedWith > 1) {
-    recommendation = `${legal[0].tiedWith} of ${legal.length} legal candidates are tied at the top and nothing measured separates them. Pick on your own budget (params, cost and GPU fit are returned per candidate), or run more than one: a verifier that abstains is telling you the truth about what it can see.`;
+    recommendation = `${legal[0].tiedWith} of ${legal.length} legal candidates are tied at the top and nothing measured separates them. ` + (tieBreak === "none" ? 'Pick on your own budget (params, cost and GPU fit are returned per candidate), pass tieBreak: "cost" or "params" to have that done for you, or run more than one: ' : `Your tieBreak rule (${tieBreak}) could not separate them either. Run more than one: `) + "a verifier that abstains is telling you the truth about what it can see.";
+  } else if (legal.length > 1 && legal[1].measuredRank === legal[0].measuredRank) {
+    recommended = legal[0].id;
+    const tiedAtMeasured = legal.filter((c) => c.measuredRank === legal[0].measuredRank).length;
+    recommendation = `${legal[0].id} sits alone at the top because you asked ties to be broken on ${tieBreak}. Nothing measured separates it from ${tiedAtMeasured - 1} other${tiedAtMeasured === 2 ? "" : "s"} at measured rank ${legal[0].measuredRank}; the choice is your budget's, not the verifier's.`;
   } else {
     recommended = legal[0].id;
     recommendation = `${legal[0].id} is the only candidate at the top rank. ${legal[0].reasons[0]}`;
@@ -6140,6 +6240,11 @@ function rankCandidates(candidates) {
       legal: legal.length,
       wouldNotRun: blocked.map((c) => c.id),
       reclaimed: sorted.length === 0 ? 0 : blocked.length / sorted.length
+    },
+    tieBreak: {
+      rule: tieBreak,
+      decided: decidedByTieBreak,
+      note: tieBreak === "none" ? 'No tie-break requested: ties are reported as ties. Pass tieBreak: "cost" or "params" to break them on your own budget.' : decidedByTieBreak === 0 ? `tieBreak: "${tieBreak}" was requested and decided nothing: no measured tie among legal candidates could be separated by ${TIE_KEY[tieBreak].noun}.` : `${decidedByTieBreak} candidate${decidedByTieBreak === 1 ? "" : "s"} were placed by ${TIE_KEY[tieBreak].noun} inside a measured tie. Those positions are your rule, not a measurement; measuredRank is what the verifier said.`
     },
     calibration: RANK_CALIBRATION
   };

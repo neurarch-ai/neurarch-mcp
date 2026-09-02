@@ -69,17 +69,26 @@ export interface CandidateSignals {
 }
 
 export interface RankedCandidate extends CandidateSignals {
+  /** Position after the caller's tieBreak, if any. */
   rank: number;
+  /** The rank on measured evidence alone. Equal to `rank` without a tieBreak. */
+  measuredRank: number;
   tier: 'legal' | 'blocked';
   tiedWith: number;
   reasons: string[];
 }
+
+/** How a caller may break a tie the verifier will not: cheapest first, or smallest first. */
+export type TieBreak = 'none' | 'cost' | 'params';
+export interface RankOptions { tieBreak?: TieBreak }
 
 export interface RankResult {
   ranked: RankedCandidate[];
   recommended: string | null;
   recommendation: string;
   budget: { candidates: number; blocked: number; legal: number; wouldNotRun: string[]; reclaimed: number };
+  /** The caller's rule, echoed, with how many positions it decided rather than a measurement. */
+  tieBreak: { rule: TieBreak; decided: number; note: string };
   calibration: typeof RANK_CALIBRATION;
 }
 
@@ -91,8 +100,8 @@ export function signalsFromCheck(
   outcomeRuleIds: Iterable<string>,
 ): CandidateSignals | null;
 
-/** Order candidates: blocked last, outcome rules only, ties stay ties. */
-export function rankCandidates(candidates: CandidateSignals[]): RankResult;
+/** Order candidates: blocked last, outcome rules only, ties stay ties unless the caller's tieBreak says otherwise inside a measured tie. */
+export function rankCandidates(candidates: CandidateSignals[], opts?: RankOptions): RankResult;
 
 /** Resolve name-keyed connections to ids and fill missing ids, the way the hosted endpoint does. */
 export function normalizeGraphForVerification<T>(graph: T): T;
