@@ -12,7 +12,7 @@ matters: the official registry first, because the directories crawl it.
 | PulseMCP | submissions paused until mid-August 2026; it ingests the Official MCP Registry automatically | will pick us up from the registry | nothing |
 | mcp.so | submission is a $39 paid listing as of 2026-09-01 (mcp.so/submit); it also crawls GitHub on its own | skipped: not worth paying for a 20k-entry directory before there is a reason to | nothing |
 | Docker MCP Catalog | PR to github.com/docker/mcp-registry adding `servers/neurarch-mcp/server.yaml` (below) | [PR #4867](https://github.com/docker/mcp-registry/pull/4867) open | bump the image tag in the PR |
-| Claude Desktop | `.mcpb` from `npm run build:mcpb`, attached to the GitHub release; submit to the Desktop Extension directory from the Anthropic form | v0.13.0 release carries the bundle; directory submission pending | rebuild, attach to release |
+| Claude Desktop | `.mcpb` from `npm run build:mcpb`, attached to the GitHub release; directory submission via the MCPB Google Form (linked from claude.com/docs/connectors/building/submission; requires README Privacy Policy section + manifest privacy_policies + tool titles, all present since 0.14) | v0.14.0 bundle on the release; form submission pending | rebuild, attach to release |
 | Cursor directory | cursor.directory/plugins/new (scans the repo; skill auto-detected, MCP component added by hand) | submitted 2026-09-01, security scan pending: cursor.directory/plugins/neurarch-mcp | nothing |
 | awesome-mcp-servers | PR to github.com/punkpeye/awesome-mcp-servers (entry below) | [PR #13342](https://github.com/punkpeye/awesome-mcp-servers/pull/13342) open | nothing |
 | VS Code | the `vscode.dev/redirect/mcp/install` badge in the README | live | nothing |

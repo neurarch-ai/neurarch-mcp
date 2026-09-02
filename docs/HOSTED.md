@@ -35,12 +35,18 @@ fly ips allocate-v4 --shared && fly ips allocate-v6   # if the deploy could not 
 
 Any container host works the same way; the image listens on 8787.
 
-The production instance lives at `https://neurarch-mcp.fly.dev/mcp` (bearer
-token required; `GET /health` is open). Connect a client with:
+The production instance lives at `https://neurarch-mcp.fly.dev/mcp` and runs
+in PUBLIC read-only mode (`NEURARCH_MCP_PUBLIC_HOST=neurarch-mcp.fly.dev`, no
+token): anyone may call the read tools, write tools are not exposed, and the
+DNS-rebinding check still pins the hostname. Connect a client with:
 
 ```json
-{ "mcpServers": { "neurarch": { "type": "http", "url": "https://neurarch-mcp.fly.dev/mcp", "headers": { "Authorization": "Bearer <token>" } } } }
+{ "mcpServers": { "neurarch": { "type": "http", "url": "https://neurarch-mcp.fly.dev/mcp" } } }
 ```
+
+claude.ai (web): Settings, Connectors, Add custom connector, paste the URL, no
+authentication. To run a private instance instead, set NEURARCH_MCP_TOKEN and
+leave NEURARCH_MCP_PUBLIC_HOST unset; clients then need the bearer header.
 
 ## What the hosted server sees
 
