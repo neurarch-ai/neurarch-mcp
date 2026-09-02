@@ -6,6 +6,22 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`rank_designs` takes `tie_break`** (`"cost"` or `"params"`): where nothing
+  measured separates two legal candidates, the caller's stated rule breaks the
+  tie, cheapest or smallest first. It never crosses a measured rank and never
+  lifts a blocked design. The result echoes the rule under `tieBreak` with how
+  many positions it decided, every candidate carries `measuredRank` (the
+  verifier's own answer), and each reason the rule decided says it was the
+  caller's budget, not a measurement.
+
+### Changed
+- Vendored verifier bundle rebuilt from neurarch `main` (#135, #136).
+  `calibration.outOfSample` now carries the two code-reading judges (Claude
+  Opus 5 12 of 15, Grok 4.3 11 of 15) and the no-model `largest-params` rule
+  measured on the same held-out pairs (11 of 15), so neither judge number can
+  be read alone.
+
 ## [0.14.0]
 
 ### Added

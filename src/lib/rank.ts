@@ -9,7 +9,11 @@
  * measurement behind it. Two legal candidates are ordered only by rules whose
  * provenance is a trained outcome, and when nothing separates them the result
  * says so and `recommended` is null. Parameter count and cost come back per
- * candidate for the caller to break ties on its own budget; they never order.
+ * candidate for the caller to break ties on its own budget; they never order
+ * on their own. `tieBreak: 'cost' | 'params'` lets the caller state that rule,
+ * and it acts only inside a measured tie among legal candidates: the result
+ * echoes it, `measuredRank` keeps the verifier's own answer, and every reason
+ * it decided says it was the caller's budget, not a measurement.
  *
  * `calibration` is inside every result so the ordering cannot be read as a
  * quality prediction by a caller that never saw the README.
@@ -18,7 +22,7 @@ import type { ModelArchitecture } from './types.js';
 import { lintModelGraph } from '../vendor/engine.bundle.mjs';
 import {
   checkDesign, rankCandidates, signalsFromCheck, normalizeGraphForVerification, OUTCOME_RULE_IDS,
-  type RankResult, type CandidateSignals,
+  type RankResult, type CandidateSignals, type TieBreak,
 } from '../vendor/verifier.bundle.mjs';
 import { MAX_COMPONENTS } from './checkDesign.js';
 
@@ -31,7 +35,7 @@ export interface RankDesignsResult extends RankResult {
   details: Record<string, { summary?: string; blocking: string[]; warnings: string[]; lintRules: string[] }>;
 }
 
-export function rankDesigns(candidates: NamedCandidate[]): RankDesignsResult {
+export function rankDesigns(candidates: NamedCandidate[], opts: { tieBreak?: TieBreak } = {}): RankDesignsResult {
   if (candidates.length === 0) throw new Error('rank_designs needs at least one candidate.');
   if (candidates.length > MAX_CANDIDATES) {
     throw new Error(`rank_designs takes at most ${MAX_CANDIDATES} candidates per call (got ${candidates.length}). Rank in batches.`);
@@ -60,5 +64,5 @@ export function rankDesigns(candidates: NamedCandidate[]): RankDesignsResult {
       lintRules: [...new Set(findings.map(f => f.rule))],
     };
   }
-  return { ...rankCandidates(signals), details };
+  return { ...rankCandidates(signals, { tieBreak: opts.tieBreak ?? 'none' }), details };
 }

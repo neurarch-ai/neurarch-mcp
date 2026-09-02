@@ -48,7 +48,8 @@ export const rankDesignsTool: ToolDef = {
     + '(96/96 blocked graphs crashed, 80/80 passes ran). Legal candidates are ordered only by rules with a trained '
     + 'outcome behind them, and a tie stays a tie: `recommended` is null when nothing measured separates the top '
     + 'candidates, which is the common and honest answer. Params, cost and GPU fit are returned per candidate for '
-    + 'you to break ties on your own budget; they are never used to order. `calibration` is inside every result.',
+    + 'you to break ties on your own budget, or pass tie_break to have that done and labelled as yours. '
+    + '`calibration` is inside every result.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -68,11 +69,16 @@ export const rankDesignsTool: ToolDef = {
         description: 'The designs to order. Each needs either model_path or model.',
       },
       include_current: { type: 'boolean', description: 'Also rank the model this server was started with, as "current". Default false.' },
+      tie_break: {
+        type: 'string',
+        enum: ['none', 'cost', 'params'],
+        description: 'Break a measured tie: "cost" (cheapest first) or "params" (smallest first). Never crosses a measured rank. Default "none".',
+      },
     },
     required: ['candidates'],
     additionalProperties: false,
   },
-  handler: async (args: { candidates: Array<{ id?: string; model_path?: string; model?: ModelArchitecture }>; include_current?: boolean }, model) => {
+  handler: async (args: { candidates: Array<{ id?: string; model_path?: string; model?: ModelArchitecture }>; include_current?: boolean; tie_break?: 'none' | 'cost' | 'params' }, model) => {
     const named: NamedCandidate[] = [];
     if (args.include_current) named.push({ id: 'current', model });
     for (const [i, c] of args.candidates.entries()) {
@@ -85,7 +91,7 @@ export const rankDesignsTool: ToolDef = {
         throw new Error(`candidates[${i}] has neither model_path nor model.`);
       }
     }
-    return rankDesigns(named);
+    return rankDesigns(named, { tieBreak: args.tie_break });
   },
 };
 
