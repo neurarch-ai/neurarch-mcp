@@ -46,6 +46,42 @@ export const SHORT: Record<string, string> = {
   save_model: 'Persist the in-memory model to disk. Call after any mutation.',
 };
 
+export const TITLES: Record<string, string> = {
+  get_model_summary: 'Model summary',
+  describe_architecture: 'Describe architecture',
+  get_layer: 'Get layer',
+  find_layers: 'Find layers',
+  compare_layers: 'Compare layers',
+  layer_impact: 'Layer impact',
+  param_count_by_block: 'Params by block',
+  flops_by_block: 'FLOPs by block',
+  mermaid_diagram: 'Mermaid diagram',
+  list_blocks: 'List blocks',
+  get_block: 'Get block',
+  diff_models: 'Diff models',
+  validate_model: 'Validate model',
+  lint_model: 'Lint model',
+  check_design: 'Check design',
+  find_path: 'Find path',
+  list_connections: 'List connections',
+  list_hyperparams: 'List hyperparams',
+  get_design_notes: 'Design notes',
+  rank_designs: 'Rank designs',
+  export_pytorch: 'Export PyTorch',
+  list_architectures: 'List reference architectures',
+  load_architecture: 'Load reference architecture',
+  load_hf_model: 'Load Hugging Face model',
+  find_models: 'Find models',
+  suggest_fix: 'Suggest fix',
+  trace_model: 'Trace model',
+  add_layer: 'Add layer',
+  modify_layer: 'Modify layer',
+  add_connection: 'Add connection',
+  delete_layer: 'Delete layer',
+  delete_connection: 'Delete connection',
+  save_model: 'Save model',
+};
+
 export function shortDescription(name: string, fallback: string): string {
   return SHORT[name] ?? fallback;
 }

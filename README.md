@@ -328,6 +328,20 @@ The package vendors from the main Neurarch repo, and everything is vendored for 
 
 Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
 
+## Privacy Policy
+
+This server runs on your machine and is built not to phone home:
+
+- **Data collection**: none by default. The server makes no network calls unless you enable a switch. Your model files, graphs and source code are read from your disk and never transmitted.
+- **`--hf` (optional)**: fetches a model's public `config.json` from huggingface.co. What is sent: the repo id you asked for, and your `HF_TOKEN` if you set one (to huggingface.co only). Responses are cached locally under `~/.cache/neurarch-mcp` and can be deleted at any time.
+- **`NEURARCH_REPORT=1` (optional, off by default)**: sends one anonymous structure row per graded graph to the Neurarch corpus: a structural fingerprint (8-char hash), a layer-type histogram, an edge count, and (rule id, severity) pairs. The payload format cannot carry your graph, parameter values, layer names, file paths, or any identity. Policy and examples: [neurarch.com/rules.html#data](https://www.neurarch.com/rules.html#data).
+- **The hosted instance** (`neurarch-mcp.fly.dev`) is different by nature: it processes the model text or references a client sends it, in memory, to answer that call. Nothing is stored server-side beyond a one-day `hf:` config cache; there are no accounts and no request logs of graph content.
+- **Retention**: the local server stores nothing beyond its local caches. Corpus rows (opt-in) are retained indefinitely as anonymous aggregates.
+- **Third parties**: no data is shared with anyone. The only third-party endpoint ever contacted is huggingface.co, and only under `--hf`.
+- **Contact**: neurarch.ai@gmail.com, or [open an issue](https://github.com/neurarch-ai/neurarch-mcp/issues).
+
+The app-wide policy at [neurarch.com/privacy](https://www.neurarch.com/privacy) covers the Neurarch web app; this section covers this server.
+
 ## License
 
 MIT. See [LICENSE](./LICENSE).

@@ -126,5 +126,9 @@
     "runtimes": {
       "node": ">=20.0.0"
     }
-  }
+  },
+  "privacy_policies": [
+    "https://github.com/neurarch-ai/neurarch-mcp#privacy-policy",
+    "https://www.neurarch.com/privacy"
+  ]
 }

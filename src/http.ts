@@ -80,6 +80,19 @@ export interface HttpServerOptions {
   token?: string;
 }
 
+let liveServer: import('node:http').Server | null = null;
+
+/** Close the listener and every live session. A test seam; production exits by signal. */
+export function stopHttpServer(): Promise<void> {
+  return new Promise((res) => {
+    const s = liveServer;
+    liveServer = null;
+    if (!s) return res();
+    s.close(() => res());
+    s.closeAllConnections?.();
+  });
+}
+
 /** Start the Streamable HTTP transport and register signal handlers. */
 export function startHttpServer(opts: HttpServerOptions): void {
   const { getModel, ctx, writeEnabled, version, host, port, token, toolSet, hosted } = opts;
@@ -88,7 +101,16 @@ export function startHttpServer(opts: HttpServerOptions): void {
   // tunnels whose Host header is the tunnel domain. Without a token we lean on
   // the loopback Host allowlist instead.
   const protectDns = !token;
-  const allowedHosts = [`${host}:${port}`, `127.0.0.1:${port}`, `localhost:${port}`];
+  // NEURARCH_MCP_PUBLIC_HOST opts a tokenless server into serving a public
+  // hostname (comma-separated; with or without a port). This is the deliberate
+  // "anyone may read" posture for a hosted deployment whose clients cannot
+  // send a header (claude.ai custom connectors speak OAuth or nothing): the
+  // read tools are open, --write stays refused on non-loopback without a
+  // token, and the DNS-rebinding check still pins the exact hostnames named.
+  const publicHosts = (process.env.NEURARCH_MCP_PUBLIC_HOST ?? '')
+    .split(',').map(h => h.trim()).filter(Boolean)
+    .flatMap(h => (h.includes(':') ? [h] : [h, `${h}:443`, `${h}:${port}`]));
+  const allowedHosts = [`${host}:${port}`, `127.0.0.1:${port}`, `localhost:${port}`, ...publicHosts];
 
   // One transport per live session, keyed by the id the SDK mints on initialize.
   const sessions = new Map<string, StreamableHTTPServerTransport>();
@@ -156,6 +178,19 @@ export function startHttpServer(opts: HttpServerOptions): void {
   const httpServer = createHttpServer((req, res) => {
     const url = (req.url ?? '/').split('?')[0];
 
+    // A person in a browser, not an MCP client: no session header and no SSE
+    // accept. Tell them what this is instead of a bare JSON-RPC error.
+    if (req.method === 'GET' && url === '/mcp' && !sessionHeader(req) && !String(req.headers.accept ?? '').includes('text/event-stream')) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(
+        `neurarch-mcp ${version}: a Model Context Protocol server, not a web page.\n\n`
+        + 'Connect an MCP client to this URL (Streamable HTTP). Claude Code:\n'
+        + `  claude mcp add --transport http neurarch <this URL>${token ? " --header \"Authorization: Bearer <token>\"" : ''}\n\n`
+        + 'Liveness: GET /health. Docs: https://www.neurarch.com/mcp\n',
+      );
+      return;
+    }
+
     if (req.method === 'GET' && url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
       if (hosted) {
@@ -182,6 +217,8 @@ export function startHttpServer(opts: HttpServerOptions): void {
       if (!res.headersSent) jsonRpcError(res, 500, -32603, (e as Error).message);
     });
   });
+
+  liveServer = httpServer;
 
   httpServer.listen(port, host, () => {
     const auth = token

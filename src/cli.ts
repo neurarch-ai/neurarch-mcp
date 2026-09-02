@@ -6,7 +6,7 @@
 import { TOOLS, type ToolAnnotations, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 import { HF_TOOLS, hfToolsIfEnabled } from './extraTools.js';
-import { shortDescription } from './toolDocs.js';
+import { shortDescription, TITLES } from './toolDocs.js';
 
 export interface ParsedFlags {
   versionRequested: boolean;
@@ -192,7 +192,7 @@ export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'
     name: t.name,
     description: shortDescription(t.name, t.description),
     inputSchema: withModelPath(t.inputSchema),
-    annotations: { ...READ_TOOL_DEFAULTS, ...(t.annotations ?? {}) },
+    annotations: { title: TITLES[t.name] ?? t.name, ...READ_TOOL_DEFAULTS, ...(t.annotations ?? {}) },
     ...(OUTPUT_SCHEMAS[t.name] ? { outputSchema: OUTPUT_SCHEMAS[t.name] } : {}),
   }));
   if (!writeEnabled) return reads;
@@ -202,7 +202,7 @@ export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'
     inputSchema: t.inputSchema,
     // Write tools always declare their own; the fallback exists so a new one
     // added without annotations is still never advertised as read-only.
-    annotations: t.annotations ?? { readOnlyHint: false, destructiveHint: true },
+    annotations: { title: TITLES[t.name] ?? t.name, readOnlyHint: false, destructiveHint: true, ...(t.annotations ?? {}) },
   }));
   return [...reads, ...writes];
 }
