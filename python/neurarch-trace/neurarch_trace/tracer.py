@@ -88,6 +88,7 @@ class Tracer:
         self.merge_ids: set = set()
         self.by_id: Dict[int, str] = {}
         self.by_gradfn: Dict[Any, str] = {}
+        self.gradfn_at_register: Dict[int, Any] = {}
         self.memo: Dict[Any, List[str]] = {}
         self.keep: List[torch.Tensor] = []
         self.param_ids = {id(p) for p in model.parameters()} | {id(b) for b in model.buffers()}
@@ -112,6 +113,11 @@ class Tracer:
     def _register(self, t: torch.Tensor, node_id: str) -> None:
         self.keep.append(t)
         self.by_id[id(t)] = node_id
+        # Remember the grad_fn the tensor had when the module returned it. An
+        # in-place op afterwards (`out += identity`, torchvision's residual)
+        # keeps the Python object and swaps the grad_fn, and that swap is the
+        # only sign the tensor is no longer what the module produced.
+        self.gradfn_at_register[id(t)] = t.grad_fn
         if t.grad_fn is not None:
             self.by_gradfn[t.grad_fn] = node_id
 
@@ -119,8 +125,12 @@ class Tracer:
 
     def _producers_of(self, t: torch.Tensor) -> List[str]:
         hit = self.by_id.get(id(t))
-        if hit is not None:
+        if hit is not None and t.grad_fn is self.gradfn_at_register.get(id(t)):
             return [hit]
+        # Same object, different grad_fn: modified in place since it was
+        # recorded (resnet's `out += identity`). Identity would wire the
+        # consumer to the pre-add producer and drop the residual branch as a
+        # dead end; the autograd walk below sees the AddBackward instead.
         fn = t.grad_fn
         if fn is not None:
             found = self._resolve(fn)

@@ -5,7 +5,7 @@
 """
 from typing import Any, Dict, Optional, Sequence
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 def trace_model(model, inputs: Sequence[Any], name: str = "model", depth: Optional[int] = None,

@@ -229,3 +229,38 @@ def test_module_entry_point_runs_as_subprocess(tmp_path):
     )
     assert r.returncode == 1  # nn.Linear() needs args; --verbose keeps the traceback
     assert "Traceback" in r.stderr
+
+
+class InplaceResBlock(nn.Module):
+    """torchvision's BasicBlock shape: `out += identity` in place, a downsample
+    branch, one ReLU module called twice."""
+
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(8, 16, 3, stride=2, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(16)
+        self.relu = nn.ReLU()
+        self.conv2 = nn.Conv2d(16, 16, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.downsample = nn.Sequential(nn.Conv2d(8, 16, 1, stride=2, bias=False), nn.BatchNorm2d(16))
+
+    def forward(self, x):
+        identity = self.downsample(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += identity
+        return self.relu(out)
+
+
+def test_inplace_residual_add_keeps_the_downsample_branch():
+    # Regression: resnet18 traced with three dead-end downsample.1 nodes and no
+    # add nodes (2026-09-03), because `out += identity` keeps the tensor object
+    # and the identity rule answered before the autograd walk could see the add.
+    g = trace_model(InplaceResBlock(), [torch.randn(1, 8, 16, 16)], name="inplace")
+    assert_loadable(g)
+    c = by_id(g)
+    adds = [x for x in g["components"] if x["type"] == "add"]
+    assert len(adds) == 1
+    assert sorted(adds[0]["inputs"]) == ["bn2", "downsample_1"]
+    assert c["relu_2"]["inputs"] == [adds[0]["id"]]
+    assert adds[0]["outputShape"] == [16, 8, 8]

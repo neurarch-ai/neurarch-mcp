@@ -6,6 +6,13 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **neurarch-trace 0.1.3: in-place residual adds.** `out += identity` (torchvision
+  BasicBlock) kept the tensor object, so the identity rule wired the consumer to the
+  pre-add producer and every downsample branch ended as a dead end; resnet18 traced
+  with 7 false warnings and no `add` nodes. The tracer now notices a grad_fn that
+  changed since the module returned the tensor and walks autograd instead.
+
 ### Added
 - **neurarch-trace 0.1.2: `--plan` and `--share`** (`python/neurarch-trace`).
   One command from a `.py` file to a plan card in the terminal, and with
