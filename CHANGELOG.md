@@ -6,6 +6,8 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-09-03
+
 ### Fixed
 - **neurarch-trace 0.1.3: in-place residual adds.** `out += identity` (torchvision
   BasicBlock) kept the tensor object, so the identity rule wired the consumer to the
