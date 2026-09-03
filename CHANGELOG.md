@@ -6,6 +6,16 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Vendored engine bundle rebuilt from neurarch `main` (60eae74). It carries
+  neurarch #128, the parser pass for real model files (same-file classes
+  inlined, root class chosen, source lines kept), which the 0.13 to 0.15
+  bundles predated. `docs/REAL_REPOS_STUDY.md` is re-measured against it.
+- Hosted instance: one machine stays warm (`min_machines_running = 1`; a cold
+  start answered the first `initialize` in 7.5s, warm is 77ms) and runs with
+  `NEURARCH_REPORT=1`. Stated in `docs/HOSTED.md` and the README privacy
+  section; a local server is unaffected.
+
 ## [0.15.0] - 2026-09-02
 
 ### Added
