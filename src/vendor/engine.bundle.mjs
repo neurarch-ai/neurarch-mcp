@@ -4547,14 +4547,18 @@ function toLogicalLines(src) {
     }
     const startLine = i;
     let combined = raw;
-    let depth = bracketDelta(raw);
-    let endsWithBackslash = stripComment(raw).trimEnd().endsWith("\\");
-    while ((depth > 0 || endsWithBackslash) && i + 1 < lines.length) {
+    let scan = scanLine(raw, false);
+    let depth = scan.delta;
+    let inStr = scan.inStr;
+    let endsWithBackslash = !inStr && scan.code.trimEnd().endsWith("\\");
+    while ((depth > 0 || endsWithBackslash || inStr) && i + 1 < lines.length) {
       i++;
       const next = lines[i];
       combined += "\n" + next;
-      depth += bracketDelta(next);
-      endsWithBackslash = stripComment(next).trimEnd().endsWith("\\");
+      scan = scanLine(next, inStr);
+      depth += scan.delta;
+      inStr = scan.inStr;
+      endsWithBackslash = !inStr && scan.code.trimEnd().endsWith("\\");
     }
     out.push({
       text: combined,
@@ -4566,68 +4570,15 @@ function toLogicalLines(src) {
   }
   return out;
 }
-function stripComment(line) {
-  let i = 0;
-  let inStr = false;
-  while (i < line.length) {
-    const ch = line[i];
-    if (inStr) {
-      if (typeof inStr === "string" && inStr.length === 3) {
-        if (line.slice(i, i + 3) === inStr) {
-          inStr = false;
-          i += 3;
-          continue;
-        }
-        if (ch === "\\") {
-          i += 2;
-          continue;
-        }
-      } else {
-        if (ch === inStr) {
-          inStr = false;
-          i++;
-          continue;
-        }
-        if (ch === "\\") {
-          i += 2;
-          continue;
-        }
-      }
-      i++;
-      continue;
-    }
-    if (ch === "#") return line.slice(0, i);
-    if (line.slice(i, i + 3) === "'''" || line.slice(i, i + 3) === '"""') {
-      inStr = line.slice(i, i + 3);
-      i += 3;
-      continue;
-    }
-    if (ch === "'" || ch === '"') {
-      inStr = ch;
-      i++;
-      continue;
-    }
-    i++;
-  }
-  return line;
-}
-function indentWidth(line) {
-  let w = 0;
-  for (const ch of line) {
-    if (ch === " ") w++;
-    else if (ch === "	") w += 8;
-    else break;
-  }
-  return w;
-}
-function bracketDelta(line) {
+function scanLine(line, startState) {
   let d = 0;
   let i = 0;
-  let inStr = false;
+  let inStr = startState;
+  let code = line;
   while (i < line.length) {
     const ch = line[i];
     if (inStr) {
-      if (typeof inStr === "string" && inStr.length === 3) {
+      if (inStr.length === 3) {
         if (line.slice(i, i + 3) === inStr) {
           inStr = false;
           i += 3;
@@ -4651,7 +4602,10 @@ function bracketDelta(line) {
       i++;
       continue;
     }
-    if (ch === "#") break;
+    if (ch === "#") {
+      code = line.slice(0, i);
+      break;
+    }
     if (line.slice(i, i + 3) === "'''" || line.slice(i, i + 3) === '"""') {
       inStr = line.slice(i, i + 3);
       i += 3;
@@ -4666,7 +4620,27 @@ function bracketDelta(line) {
     else if (ch === ")" || ch === "]" || ch === "}") d--;
     i++;
   }
-  return d;
+  if (inStr && inStr.length === 1) inStr = false;
+  return { delta: d, inStr, code };
+}
+function stmtCode(text) {
+  const parts = [];
+  let inStr = false;
+  for (const line of text.split("\n")) {
+    const scan = scanLine(line, inStr);
+    parts.push(scan.code);
+    inStr = scan.inStr;
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+function indentWidth(line) {
+  let w = 0;
+  for (const ch of line) {
+    if (ch === " ") w++;
+    else if (ch === "	") w += 8;
+    else break;
+  }
+  return w;
 }
 function buildTree(lines, start, end, baseIndent) {
   const out = [];
@@ -4791,19 +4765,18 @@ function* walk(stmts) {
     if (s.body.length > 0) yield* walk(s.body);
   }
 }
-function findMainModelClass(stmts) {
-  let candidate = null;
-  for (const s of walk(stmts)) {
-    if (s.kind !== "class") continue;
-    const hasInit = s.body.some((c) => c.kind === "def" && c.name === "__init__");
-    const hasForward = s.body.some((c) => c.kind === "def" && c.name === "forward");
-    if (hasInit && hasForward) candidate = s;
-  }
-  return candidate;
-}
 
 // src/utils/codeParser.ts
 var CUSTOM_CLASS_MAP = {
+  // Layers written as parameter-only classes (LlamaRMSNorm, nanoGPT LayerNorm,
+  // gemma's Linear / Embedding, StyleGAN's FullyConnectedLayer): the class
+  // expands to nothing, so the name has to say what it is.
+  rmsnorm: "rmsNorm",
+  layernorm: "layerNorm",
+  linear: "linear",
+  embedding: "embedding",
+  fullyconnectedlayer: "linear",
+  conv2dlayer: "conv2d",
   // Positional encoding
   positionalencoding: "positionalEncoding",
   posencoding: "positionalEncoding",
@@ -4884,24 +4857,21 @@ var CUSTOM_CLASS_MAP = {
   bottleneck: "residual"
 };
 function mapCustomClassToComponent(className) {
-  return CUSTOM_CLASS_MAP[className.toLowerCase()] ?? null;
+  const lc = className.toLowerCase();
+  const exact = CUSTOM_CLASS_MAP[lc];
+  if (exact) return exact;
+  let best = null;
+  for (const key of Object.keys(CUSTOM_CLASS_MAP)) {
+    if (key.length < 6 || !lc.endsWith(key) || lc === key) continue;
+    if (best === null || key.length > best.length) best = key;
+  }
+  return best ? CUSTOM_CLASS_MAP[best] : null;
 }
-function findMainClassRange(tree) {
-  const main = findMainModelClass(tree);
-  if (!main) return null;
-  const initStmt = main.body.find((c) => c.kind === "def" && c.name === "__init__");
-  const forwardStmt = main.body.find((c) => c.kind === "def" && c.name === "forward");
-  if (!initStmt || !forwardStmt) return null;
-  return {
-    name: main.name ?? "",
-    initLine: initStmt.startLine,
-    forwardLine: forwardStmt.startLine,
-    endLine: main.endLine
-  };
-}
-var MAX_EXPAND_DEPTH = 3;
+var MAX_EXPAND_DEPTH = 4;
+var UNRESOLVED_STACK_DEPTH = 6;
 function buildClassRegistry(tree) {
   const registry = /* @__PURE__ */ new Map();
+  let index = 0;
   for (const s of walk(tree)) {
     if (s.kind !== "class" || !s.name) continue;
     const initStmt = s.body.find((c) => c.kind === "def" && c.name === "__init__");
@@ -4913,12 +4883,15 @@ function buildClassRegistry(tree) {
         methods.set(c.name, c);
       }
     }
-    registry.set(s.name, { name: s.name, initStmt, forwardStmt, methods });
+    registry.set(s.name, { name: s.name, stmt: s, initStmt, forwardStmt, methods, index: index++ });
   }
   return registry;
 }
 function canExpandClass(className, ctx) {
   return ctx.registry.has(className) && ctx.depth < MAX_EXPAND_DEPTH && !ctx.expanding.has(className);
+}
+function normalizeNN(text) {
+  return text.replace(/\btorch\.nn\./g, "nn.");
 }
 function splitTopLevelArgs(s) {
   const parts = [];
@@ -4941,13 +4914,20 @@ function extractBalancedArgs(text, openIdx) {
   let depth = 0;
   for (let i = openIdx; i < text.length; i++) {
     const ch = text[i];
-    if (ch === "(") depth++;
-    else if (ch === ")") {
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
       depth--;
       if (depth === 0) return text.slice(openIdx + 1, i);
     }
   }
   return null;
+}
+function unwrapParens(text) {
+  let t = text.trim();
+  while (t.startsWith("(") && extractBalancedArgs(t, 0) === t.slice(1, -1)) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
 }
 function resolveNumExpr(expr, env) {
   const t = expr.trim();
@@ -4962,6 +4942,21 @@ function resolveNumExpr(expr, env) {
     return m[2] === "+" ? a + b : m[2] === "-" ? a - b : a * b;
   }
   return null;
+}
+function rangeCount(argsText, env) {
+  const parts = splitTopLevelArgs(argsText).map((p) => resolveNumExpr(p, env));
+  if (parts.length === 0 || parts.some((p) => p === null)) return null;
+  const [a, b, step] = parts;
+  if (parts.length === 1) return Math.max(0, Math.floor(a));
+  const s = parts.length === 3 ? step : 1;
+  if (s <= 0) return null;
+  return Math.max(0, Math.ceil((b - a) / s));
+}
+function loopCount(iter, env) {
+  const m = iter.match(/^\s*range\s*\(/);
+  if (!m) return 1;
+  const args = extractBalancedArgs(iter, m[0].length - 1);
+  return (args === null ? null : rangeCount(args, env)) ?? UNRESOLVED_STACK_DEPTH;
 }
 function bindCallArgs(defText, callArgsStr, callerEnv) {
   const env = {};
@@ -5018,181 +5013,369 @@ function expandClassInstance(className, callArgsStr, ctx, callerEnv) {
     methods: info.methods,
     env,
     depth: ctx.depth + 1,
-    expanding: /* @__PURE__ */ new Set([...ctx.expanding, className])
+    expanding: /* @__PURE__ */ new Set([...ctx.expanding, className]),
+    className
   };
-  const initLayers = parseInitLayers(
-    ctx.lines,
-    info.initStmt.startLine,
-    info.initStmt.endLine,
-    innerCtx
-  );
+  const initLayers = parseInitStmts(info.initStmt, innerCtx);
+  if (initLayers.length === 0) return [];
   const forwardCalls = info.forwardStmt ? parseForwardCalls(ctx.lines, info.forwardStmt.startLine, info.forwardStmt.endLine) : [];
   return orderLayersByForward(initLayers, forwardCalls).map((l) => ({
     name: l.pyName ?? l.type,
     type: l.type,
-    params: resolveParamsWithEnv(l.params, env)
+    params: resolveParamsWithEnv(l.params, env),
+    sourceLine: l.sourceLine,
+    sourceClass: l.sourceClass ?? className
   }));
 }
-var MODULELIST_COMP_RE = /\[\s*(\w+)\s*\(([^)]*)\)\s+for\s+\w+\s+in\s+range\s*\(([^)]+)\)/;
-function expandModuleListComp(compMatch, listName, initSigLine, ctx) {
-  const [, className, argsStr, nExpr] = compMatch;
-  let n = resolveNumExpr(nExpr, ctx?.env ?? {});
-  if (n === null) {
-    const defaultMatch = initSigLine.match(new RegExp(`\\b${nExpr.trim()}=(\\d+)`));
-    n = defaultMatch ? parseInt(defaultMatch[1], 10) : 6;
+function classItem(className, argsStr, ctx, env, line) {
+  if (canExpandClass(className, ctx)) {
+    const inner = expandClassInstance(className, argsStr, ctx, env);
+    if (inner.length > 0) return inner;
   }
-  n = Math.max(0, Math.floor(n));
-  const out = [];
   const mapped = mapCustomClassToComponent(className);
-  if (mapped) {
-    for (let j = 0; j < n; j++) {
-      out.push({ name: `${listName}_${j}`, type: mapped, params: {} });
-    }
-    return out;
-  }
-  if (ctx && canExpandClass(className, ctx)) {
-    const inner = expandClassInstance(className, argsStr, ctx, ctx.env);
-    for (let j = 0; j < n; j++) {
-      for (const il of inner) {
-        out.push({ name: `${listName}_${j}.${il.name}`, type: il.type, params: il.params });
+  if (mapped) return [{ name: "", type: mapped, params: {}, sourceLine: line, sourceClass: ctx.className }];
+  return null;
+}
+function scanContainerItems(text, ctx, env, line) {
+  const items = [];
+  const src = normalizeNN(text);
+  const re = /\b(?:nn\.(\w+)|(?<![\w.])([A-Z]\w*))\s*\(/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const openIdx = m.index + m[0].length - 1;
+    const args = extractBalancedArgs(src, openIdx);
+    if (args === null) continue;
+    const closeIdx = openIdx + args.length + 1;
+    if (m[1]) {
+      if (m[1] === "Sequential" || m[1] === "ModuleList") continue;
+      const parsed = parseLayerDefinition(`nn.${m[1]}(${args})`);
+      if (parsed?.type) {
+        items.push([{
+          name: "",
+          type: parsed.type,
+          params: resolveParamsWithEnv(parsed.params, env),
+          sourceLine: line,
+          sourceClass: ctx.className
+        }]);
+      }
+      re.lastIndex = closeIdx + 1;
+    } else if (m[2]) {
+      const item = classItem(m[2], args, ctx, env, line);
+      if (item) {
+        items.push(item);
+        re.lastIndex = closeIdx + 1;
       }
     }
+  }
+  return items;
+}
+function matchComprehension(argsText) {
+  const src = normalizeNN(argsText).trim().replace(/^\*\s*/, "");
+  const m = src.match(/^\[?\s*((?:nn\.)?\w+)\s*\(/);
+  if (!m) return null;
+  const openIdx = m[0].length - 1;
+  const args = extractBalancedArgs(src, openIdx);
+  if (args === null) return null;
+  const after = src.slice(openIdx + args.length + 2);
+  const f = after.match(/^\s*for\s+[\w\s,()]+?\s+in\s+(.+)$/);
+  if (!f) return null;
+  const iter = f[1].trim().replace(/\]\s*$/, "").trim();
+  return { callee: m[1], args, iter };
+}
+function expandComprehension(comp, listName, ctx, line) {
+  const n = loopCount(comp.iter, ctx.env);
+  const out = [];
+  const stamp = { sourceLine: line, sourceClass: ctx.className };
+  if (comp.callee.startsWith("nn.")) {
+    const parsed = parseLayerDefinition(`${comp.callee}(${comp.args})`);
+    if (!parsed?.type) return out;
+    const params = resolveParamsWithEnv(parsed.params, ctx.env);
+    for (let j = 0; j < n; j++) out.push({ name: `${listName}_${j}`, type: parsed.type, params, ...stamp });
+    return out;
+  }
+  if (canExpandClass(comp.callee, ctx)) {
+    const inner = expandClassInstance(comp.callee, comp.args, ctx, ctx.env);
+    if (inner.length > 0) {
+      for (let j = 0; j < n; j++) {
+        for (const il of inner) out.push({ ...il, name: `${listName}.${j}.${il.name}` });
+      }
+      return out;
+    }
+  }
+  const mapped = mapCustomClassToComponent(comp.callee);
+  if (mapped) {
+    for (let j = 0; j < n; j++) out.push({ name: `${listName}_${j}`, type: mapped, params: {}, ...stamp });
   }
   return out;
 }
-function scanInstantiations(text, registry) {
+function collectInitLeaves(stmts, env, repeat = 1) {
   const out = [];
-  const re = /\b(?:nn\.(\w+)|(?<![\w.])([A-Z]\w*))\s*\(/g;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const openIdx = m.index + m[0].length - 1;
-    const args = extractBalancedArgs(text, openIdx);
-    if (args === null) continue;
-    if (m[1]) {
-      if (m[1] !== "Sequential" && m[1] !== "ModuleList") {
-        out.push({ kind: "nn", name: m[1], args });
+  for (const s of stmts) {
+    if (s.kind === "def" || s.kind === "class") continue;
+    if (s.body.length > 0) {
+      let r = repeat;
+      if (s.kind === "for") {
+        const head = stmtCode(s.text);
+        const im = head.match(/\bin\s+(.+?):?\s*$/);
+        if (im) r = repeat * loopCount(im[1], env);
       }
-    } else if (m[2] && (registry.has(m[2]) || mapCustomClassToComponent(m[2]))) {
-      out.push({ kind: "class", name: m[2], args });
+      out.push(...collectInitLeaves(s.body, env, r));
+      continue;
     }
+    out.push({ code: stmtCode(s.text), line: s.startLine + 1, repeat });
   }
   return out;
 }
 function expandHelperMethod(methodStmt, callArgsStr, attrName, ctx) {
   const env = bindCallArgs(methodStmt.text, callArgsStr, ctx.env);
-  const collect = (stmts) => {
-    const insts = [];
-    for (const s of stmts) {
-      if (s.kind === "for" && s.body.length > 0) {
-        const rangeMatch = s.text.match(/\bin\s+range\s*\(([^)]+)\)/);
-        const count = rangeMatch ? Math.max(0, Math.floor(resolveNumExpr(rangeMatch[1], env) ?? 1)) : 1;
-        const inner = collect(s.body);
-        for (let r = 0; r < count; r++) insts.push(...inner);
-      } else if (s.body.length > 0) {
-        insts.push(...collect(s.body));
-      } else {
-        insts.push(...scanInstantiations(s.text, ctx.registry));
-      }
-    }
-    return insts;
-  };
+  const items = [];
+  for (const leaf of collectInitLeaves(methodStmt.body, env)) {
+    const found = scanContainerItems(leaf.code, ctx, env, leaf.line);
+    for (let r = 0; r < leaf.repeat; r++) items.push(...found);
+  }
+  return itemsToLayers(attrName, items, 0);
+}
+function itemsToLayers(name, items, base) {
   const out = [];
-  let k = 0;
-  for (const inst of collect(methodStmt.body)) {
-    if (inst.kind === "nn") {
-      const parsed = parseLayerDefinition(`nn.${inst.name}(${inst.args})`);
-      if (parsed?.type) {
-        out.push({
-          name: `${attrName}_${k}`,
-          type: parsed.type,
-          params: resolveParamsWithEnv(parsed.params, env)
-        });
-        k++;
+  items.forEach((item, k) => {
+    for (const il of item) {
+      out.push({ ...il, name: il.name ? `${name}_${k + base}.${il.name}` : `${name}_${k + base}` });
+    }
+  });
+  return out;
+}
+function parseInitStmts(initStmt, ctx) {
+  const layers = [];
+  let order = 0;
+  const push = (il) => {
+    layers.push({
+      name: il.name,
+      type: il.type,
+      params: il.params,
+      order: order++,
+      sourceLine: il.sourceLine,
+      sourceClass: il.sourceClass ?? ctx.className
+    });
+  };
+  const localLists = /* @__PURE__ */ new Map();
+  const appendCounters = /* @__PURE__ */ new Map();
+  const emitRhs = (name, rhsRaw, leaf) => {
+    const rhs = unwrapParens(normalizeNN(rhsRaw));
+    const stamp = { sourceLine: leaf.line, sourceClass: ctx.className };
+    if (/^nn\.(?:ModuleList|Sequential|ModuleDict)\s*\(\s*\)$/.test(rhs)) {
+      appendCounters.set(name, 0);
+      return;
+    }
+    const star = rhs.match(/^nn\.(ModuleList|Sequential)\s*\(\s*\*\s*(\w+)\s*\)$/);
+    if (star) {
+      const items = localLists.get(star[2]);
+      if (items) for (const il of itemsToLayers(name, items, star[1] === "Sequential" ? 1 : 0)) push(il);
+      return;
+    }
+    const md = rhs.match(/^nn\.ModuleDict\s*\(/);
+    if (md) {
+      let body = extractBalancedArgs(rhs, md[0].length - 1) ?? "";
+      const dictCall = body.trim().match(/^dict\s*\(/);
+      if (dictCall) body = extractBalancedArgs(body.trim(), dictCall[0].length - 1) ?? "";
+      else body = body.trim().replace(/^\{/, "").replace(/\}$/, "");
+      for (const part of splitTopLevelArgs(body)) {
+        const entry = part.trim().match(/^(?:['"](\w+)['"]\s*:|(\w+)\s*=)\s*(.+)$/);
+        if (entry) emitRhs(`${name}.${entry[1] ?? entry[2]}`, entry[3], leaf);
+      }
+      return;
+    }
+    const cont = rhs.match(/^nn\.(ModuleList|Sequential)\s*\(/);
+    if (cont) {
+      const args = extractBalancedArgs(rhs, cont[0].length - 1) ?? "";
+      const comp = matchComprehension(args);
+      if (comp) {
+        for (const il of expandComprehension(comp, name, ctx, leaf.line)) push(il);
+        return;
+      }
+      const items = scanContainerItems(args, ctx, ctx.env, leaf.line);
+      for (const il of itemsToLayers(name, items, cont[1] === "Sequential" ? 1 : 0)) push(il);
+      return;
+    }
+    const helper = rhs.match(/^self\.(\w+)\s*\(/);
+    if (helper) {
+      const methodStmt = ctx.methods.get(helper[1]);
+      if (methodStmt) {
+        const args = extractBalancedArgs(rhs, rhs.indexOf("(")) ?? "";
+        for (const il of expandHelperMethod(methodStmt, args, name, ctx)) push(il);
+      }
+      return;
+    }
+    const parsed = parseLayerDefinition(rhs);
+    if (parsed?.type) {
+      push({ name, type: parsed.type, params: parsed.params, ...stamp });
+      return;
+    }
+    const custom = rhs.match(/^(\w+)\s*\(/);
+    if (custom) {
+      const args = extractBalancedArgs(rhs, rhs.indexOf("(")) ?? "";
+      const item = classItem(custom[1], args, ctx, ctx.env, leaf.line);
+      if (item) for (const il of item) push({ ...il, name: il.name ? `${name}.${il.name}` : name });
+    }
+  };
+  for (const leaf of collectInitLeaves(initStmt.body, ctx.env)) {
+    const code = leaf.code;
+    if (!code) continue;
+    const asg = code.match(/^self\.(\w+)\s*=\s*(.+)$/);
+    if (asg) {
+      emitRhs(asg[1], asg[2], leaf);
+      continue;
+    }
+    const list = code.match(/^(\w+)\s*=\s*\[(.*)\]$/);
+    if (list) {
+      localLists.set(list[1], scanContainerItems(list[2], ctx, ctx.env, leaf.line));
+      continue;
+    }
+    const ap = code.match(/^(self\.\w+|\w+)\s*(?:\.(append|extend)\s*\((.*)\)|\+=\s*(.+))$/);
+    if (ap) {
+      const target = ap[1];
+      const argText = ap[3] ?? ap[4] ?? "";
+      const isSelf = target.startsWith("self.");
+      const attr = target.slice(5);
+      if (!isSelf && !localLists.has(target)) continue;
+      if (isSelf && !appendCounters.has(attr)) continue;
+      const items = scanContainerItems(argText, ctx, ctx.env, leaf.line);
+      for (let r = 0; r < leaf.repeat; r++) {
+        if (isSelf) {
+          let k = appendCounters.get(attr) ?? 0;
+          for (const item of items) {
+            for (const il of item) push({ ...il, name: il.name ? `${attr}_${k}.${il.name}` : `${attr}_${k}` });
+            k++;
+          }
+          appendCounters.set(attr, k);
+        } else {
+          localLists.get(target).push(...items);
+        }
       }
       continue;
     }
-    const mapped = mapCustomClassToComponent(inst.name);
-    if (mapped) {
-      out.push({ name: `${attrName}_${k}`, type: mapped, params: {} });
-      k++;
-    } else if (canExpandClass(inst.name, ctx)) {
-      const inner = expandClassInstance(inst.name, inst.args, ctx, env);
-      if (inner.length > 0) {
-        for (const il of inner) {
-          out.push({ name: `${attrName}_${k}.${il.name}`, type: il.type, params: il.params });
-        }
-        k++;
-      }
-    }
   }
-  return out;
+  return layers;
 }
 function orderLayersByForward(initLayers, forwardCalls) {
   const allLayers = [];
   const usedLayerNames = /* @__PURE__ */ new Set();
+  const toOrdered = (l) => ({
+    type: l.type,
+    params: l.params,
+    isFunctional: false,
+    pyName: l.name,
+    sourceLine: l.sourceLine,
+    sourceClass: l.sourceClass
+  });
   for (const call of forwardCalls) {
     if (call.isFunctional) {
       const componentType = mapFunctionalToComponent(call.layerName) ?? mapEinopsToComponent(call.layerName);
       if (componentType) {
-        allLayers.push({ type: componentType, params: {}, isFunctional: true, pyName: call.layerName });
+        allLayers.push({
+          type: componentType,
+          params: {},
+          isFunctional: true,
+          pyName: call.layerName,
+          sourceLine: call.line
+        });
       }
     } else {
       const matchingLayers = initLayers.filter(
-        (l) => l.name === call.layerName || l.name.startsWith(`${call.layerName}_`)
-        // Sequential
+        (l) => l.name === call.layerName || l.name.startsWith(`${call.layerName}_`) || l.name.startsWith(`${call.layerName}.`)
       );
       if (matchingLayers.length > 1) {
         for (const layer of matchingLayers) {
           if (layer.type && !usedLayerNames.has(layer.name)) {
-            allLayers.push({ type: layer.type, params: layer.params, isFunctional: false, pyName: layer.name });
+            allLayers.push(toOrdered(layer));
             usedLayerNames.add(layer.name);
           }
         }
       } else if (matchingLayers.length === 1) {
         const layer = matchingLayers[0];
-        if (layer.type) {
-          allLayers.push({ type: layer.type, params: layer.params, isFunctional: false, pyName: layer.name });
-        }
-      } else {
-        const layer = initLayers.find((l) => l.name === call.layerName);
-        if (layer && layer.type) {
-          allLayers.push({ type: layer.type, params: layer.params, isFunctional: false, pyName: layer.name });
-        }
+        if (layer.type) allLayers.push(toOrdered(layer));
       }
     }
   }
   if (allLayers.length === 0) {
     for (const layer of initLayers) {
-      if (layer.type) {
-        allLayers.push({ type: layer.type, params: layer.params, isFunctional: false, pyName: layer.name });
-      }
+      if (layer.type) allLayers.push(toOrdered(layer));
     }
   }
   return allLayers;
 }
-function parsePyTorchCode(code) {
+function parseClass(info, lines, registry) {
+  const ctx = {
+    lines,
+    registry,
+    methods: info.methods,
+    env: bindCallArgs(info.initStmt.text, "", {}),
+    depth: 0,
+    expanding: /* @__PURE__ */ new Set([info.name]),
+    className: info.name
+  };
+  const initLayers = parseInitStmts(info.initStmt, ctx);
+  const forwardCalls = info.forwardStmt ? parseForwardCalls(lines, info.forwardStmt.startLine, info.forwardStmt.endLine) : [];
+  const layerCount = initLayers.length === 0 ? 0 : orderLayersByForward(initLayers, forwardCalls).length;
+  return { info, initLayers, forwardCalls, layerCount };
+}
+function instantiatedClasses(registry) {
+  const names = [...registry.keys()];
+  const out = /* @__PURE__ */ new Set();
+  for (const info of registry.values()) {
+    const text = [...walk([info.stmt])].map((s) => stmtCode(s.text)).join("\n");
+    for (const other of names) {
+      if (other === info.name || out.has(other)) continue;
+      if (new RegExp(`(?<![\\w.])${other}\\s*\\(`).test(text)) out.add(other);
+    }
+  }
+  return out;
+}
+function normalizeStem(s) {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function selectRootClass(registry, lines, fileName) {
+  const all = [...registry.values()].filter((c) => c.forwardStmt);
+  if (all.length === 0) return null;
+  const instantiated = instantiatedClasses(registry);
+  const roots = all.filter((c) => !instantiated.has(c.name));
+  const stem = fileName ? normalizeStem(fileName.split(/[/\\:]/).pop().replace(/\.\w+$/, "")) : "";
+  const rank = (candidates) => {
+    let best = null;
+    for (const info of candidates) {
+      const parsed = parseClass(info, lines, registry);
+      if (!best || beats(parsed, best)) best = parsed;
+    }
+    return best;
+  };
+  const beats = (a, b) => {
+    if (a.layerCount !== b.layerCount) return a.layerCount > b.layerCount;
+    if (stem) {
+      const as = normalizeStem(a.info.name) === stem ? 1 : 0;
+      const bs = normalizeStem(b.info.name) === stem ? 1 : 0;
+      if (as !== bs) return as > bs;
+    }
+    const suffix = (n) => /(Model|ForCausalLM)$/.test(n) ? 1 : 0;
+    if (suffix(a.info.name) !== suffix(b.info.name)) return suffix(a.info.name) > suffix(b.info.name);
+    return a.info.index > b.info.index;
+  };
+  const fromRoots = roots.length > 0 ? rank(roots) : null;
+  if (fromRoots && fromRoots.layerCount > 0) return fromRoots;
+  return rank(all);
+}
+function parsePyTorchCode(code, opts = {}) {
   try {
     const lines = code.split("\n").map((l) => l.trim());
     const tree = parsePyStmts(code);
-    const mainClass = findMainClassRange(tree);
-    const initStart = mainClass?.initLine ?? 0;
-    const forwardStart = mainClass?.forwardLine ?? 0;
-    const classEnd = mainClass?.endLine ?? lines.length - 1;
     const registry = buildClassRegistry(tree);
-    const mainInfo = mainClass ? registry.get(mainClass.name) : void 0;
-    const ctx = {
-      lines,
-      registry,
-      methods: mainInfo?.methods ?? /* @__PURE__ */ new Map(),
-      env: mainInfo ? bindCallArgs(mainInfo.initStmt.text, "", {}) : {},
-      depth: 0,
-      expanding: new Set(mainClass ? [mainClass.name] : [])
-    };
-    const initLayers = parseInitLayers(lines, initStart, forwardStart - 1, ctx);
-    if (initLayers.length === 0) {
-      return null;
+    let pick = null;
+    if (opts.className) {
+      const info = registry.get(opts.className);
+      pick = info ? parseClass(info, lines, registry) : null;
+    } else {
+      pick = selectRootClass(registry, lines, opts.fileName);
     }
-    const forwardCalls = parseForwardCalls(lines, forwardStart, classEnd);
+    if (!pick || pick.initLayers.length === 0) return null;
+    const { initLayers, forwardCalls } = pick;
     const inputShape = parseInputShape(lines);
     const components = [];
     const connections = [];
@@ -5226,6 +5409,8 @@ function parsePyTorchCode(code) {
           component.name = layer.pyName;
         }
       }
+      if (layer.sourceLine !== void 0) component.sourceLine = layer.sourceLine;
+      component.sourceClass = layer.sourceClass ?? pick.info.name;
       components.push(component);
       const bestPorts = calculateBestPortsForVertical();
       const connection = {
@@ -5255,193 +5440,36 @@ function parsePyTorchCode(code) {
     return {
       components,
       connections,
-      inputShape
+      inputShape,
+      mainClass: pick.info.name
     };
   } catch (error) {
     console.error("Error parsing code:", error);
     return null;
   }
 }
-function parseInitLayers(lines, startLine, endLine, ctx) {
-  const layers = [];
-  let order = 0;
-  let sequentialContext = null;
-  let sequentialContent = [];
-  let moduleListName = null;
-  let moduleListBuffer = [];
-  let moduleListDepth = 0;
-  for (let i = startLine; i <= endLine; i++) {
-    const line = lines[i];
-    if (!line.trim() || line.trim().startsWith("#")) continue;
-    if (line.match(/def\s+__init__/)) continue;
-    if (line.match(/^\s*def\s+\w+/) && !line.match(/def\s+__init__/)) break;
-    if (moduleListName !== null) {
-      moduleListBuffer.push(line);
-      for (const ch of line) {
-        if (ch === "[") moduleListDepth++;
-        else if (ch === "]") moduleListDepth--;
-      }
-      if (moduleListDepth <= 0) {
-        const combined = moduleListBuffer.join(" ");
-        const compMatch = combined.match(MODULELIST_COMP_RE);
-        if (compMatch) {
-          for (const il of expandModuleListComp(compMatch, moduleListName, lines[startLine], ctx)) {
-            layers.push({ name: il.name, type: il.type, params: il.params, order: order++ });
-          }
-        }
-        moduleListName = null;
-        moduleListBuffer = [];
-        moduleListDepth = 0;
-      }
-      continue;
-    }
-    const moduleListMatch = line.match(/self\.(\w+)\s*=\s*nn\.ModuleList\s*\(\s*\[/);
-    if (moduleListMatch) {
-      const compMatch = line.match(MODULELIST_COMP_RE);
-      if (compMatch) {
-        for (const il of expandModuleListComp(compMatch, moduleListMatch[1], lines[startLine], ctx)) {
-          layers.push({ name: il.name, type: il.type, params: il.params, order: order++ });
-        }
-      } else {
-        moduleListName = moduleListMatch[1];
-        moduleListBuffer = [line];
-        for (const ch of line) {
-          if (ch === "[") moduleListDepth++;
-          else if (ch === "]") moduleListDepth--;
-        }
-      }
-      continue;
-    }
-    const sequentialMatch = line.match(/self\.(\w+)\s*=\s*nn\.Sequential\s*\(/);
-    if (sequentialMatch) {
-      if (sequentialContext) {
-        const seqLayers = parseSequentialContent(sequentialContent, sequentialContext.name, order);
-        layers.push(...seqLayers);
-        order += seqLayers.length;
-      }
-      sequentialContext = { name: sequentialMatch[1] };
-      sequentialContent = [];
-      if (line.includes(")")) {
-        const content = line.match(/nn\.Sequential\s*\(([^)]+)\)/)?.[1];
-        if (content) {
-          sequentialContent.push(content);
-          const seqLayers = parseSequentialContent(sequentialContent, sequentialContext.name, order);
-          layers.push(...seqLayers);
-          order += seqLayers.length;
-          sequentialContext = null;
-          sequentialContent = [];
-        }
-      }
-      continue;
-    }
-    if (sequentialContext) {
-      sequentialContent.push(line);
-      if (line.includes(")")) {
-        const seqLayers = parseSequentialContent(sequentialContent, sequentialContext.name, order);
-        layers.push(...seqLayers);
-        order += seqLayers.length;
-        sequentialContext = null;
-        sequentialContent = [];
-      }
-      continue;
-    }
-    if (line.startsWith("self.")) {
-      const match = line.match(/self\.(\w+)\s*=\s*(.+)/);
-      if (match) {
-        const [, name, layerDef] = match;
-        const helperMatch = layerDef.match(/^self\.(\w+)\s*\(/);
-        if (helperMatch) {
-          const methodStmt = ctx?.methods.get(helperMatch[1]);
-          if (ctx && methodStmt) {
-            const args = extractBalancedArgs(layerDef, layerDef.indexOf("(")) ?? "";
-            for (const il of expandHelperMethod(methodStmt, args, name, ctx)) {
-              layers.push({ name: il.name, type: il.type, params: il.params, order: order++ });
-            }
-          }
-          continue;
-        }
-        const parsed = parseLayerDefinition(layerDef.trim());
-        if (parsed) {
-          layers.push({ name, type: parsed.type, params: parsed.params, order: order++ });
-        } else {
-          const customMatch = layerDef.match(/^(\w+)\s*\(/);
-          if (customMatch) {
-            const componentType = mapCustomClassToComponent(customMatch[1]);
-            if (componentType) {
-              layers.push({ name, type: componentType, params: {}, order: order++ });
-            } else if (ctx && canExpandClass(customMatch[1], ctx)) {
-              const args = extractBalancedArgs(layerDef, layerDef.indexOf("(")) ?? "";
-              for (const il of expandClassInstance(customMatch[1], args, ctx, ctx.env)) {
-                layers.push({ name: `${name}.${il.name}`, type: il.type, params: il.params, order: order++ });
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  return layers;
+function nnArgs(layerDef, name) {
+  const re = typeof name === "string" ? new RegExp(`\\bnn\\.${name}\\s*\\(`) : name;
+  const m = layerDef.match(re);
+  if (!m || m.index === void 0) return null;
+  return extractBalancedArgs(layerDef, m.index + m[0].length - 1);
 }
-function parseSequentialContent(lines, sequentialName, startOrder) {
-  const layers = [];
-  let order = startOrder;
-  const cleanedLines = lines.map((line) => {
-    const commentIndex = line.indexOf("#");
-    if (commentIndex >= 0) {
-      const beforeComment = line.substring(0, commentIndex);
-      const openParens = (beforeComment.match(/\(/g) || []).length;
-      const closeParens = (beforeComment.match(/\)/g) || []).length;
-      if (openParens > closeParens) {
-        return line;
-      } else {
-        return beforeComment.trim();
-      }
-    }
-    return line.trim();
-  });
-  const fullText = cleanedLines.join("\n");
-  const layerPattern = /nn\.(\w+)\s*\([^)]*(?:\([^)]*\)[^)]*)*\)/g;
-  let match;
-  const matches = [];
-  while ((match = layerPattern.exec(fullText)) !== null) {
-    matches.push(match[0]);
-  }
-  if (matches.length === 0) {
-    for (const line of cleanedLines) {
-      const simpleMatch = line.match(/nn\.(\w+)\s*\(([^)]*)\)/);
-      if (simpleMatch) {
-        matches.push(simpleMatch[0]);
-      }
-    }
-  }
-  for (const layerDef of matches) {
-    const parsed = parseLayerDefinition(layerDef);
-    if (parsed && parsed.type) {
-      layers.push({
-        name: `${sequentialName}_${order - startOrder + 1}`,
-        type: parsed.type,
-        params: parsed.params,
-        order: order++
-      });
-    }
-  }
-  return layers;
-}
-function parseLayerDefinition(layerDef) {
+function parseLayerDefinition(layerDefRaw) {
   const params = {};
-  if (layerDef.includes("F.") || layerDef.includes("torch.")) {
+  const layerDef = normalizeNN(layerDefRaw);
+  if (/^(?:F|torch)\./.test(layerDef.trim())) {
     return null;
   }
-  const linearMatch = layerDef.match(/nn\.Linear\s*\(\s*([^,]+)\s*,\s*([^,)]+)/);
-  if (linearMatch) {
-    const [, inFeatures, outFeatures] = linearMatch;
-    params.inFeatures = parseNumberOrVariable(inFeatures);
-    params.outFeatures = parseNumberOrVariable(outFeatures);
+  const linearArgs = nnArgs(layerDef, "Linear");
+  if (linearArgs !== null) {
+    const args = parseArguments(linearArgs);
+    params.inFeatures = parseNumberOrVariable(args.in_features ?? args[0]);
+    params.outFeatures = parseNumberOrVariable(args.out_features ?? args[1]);
     return { type: "linear", params };
   }
-  const convT2dMatch = layerDef.match(/nn\.ConvTranspose2d\s*\(([^)]+)\)/);
-  if (convT2dMatch) {
-    const args = parseArguments(convT2dMatch[1]);
+  const convT2dMatch = nnArgs(layerDef, "ConvTranspose2d");
+  if (convT2dMatch !== null) {
+    const args = parseArguments(convT2dMatch);
     params.inChannels = parseNumberOrVariable(args.in_channels || args[0]);
     params.outChannels = parseNumberOrVariable(args[1] || args.out_channels || args[0]);
     params.kernelSize = parseNumberOrVariable(args.kernel_size || args[2] || "3");
@@ -5452,9 +5480,9 @@ function parseLayerDefinition(layerDef) {
     if (args.groups !== void 0) params.groups = parseNumberOrVariable(args.groups);
     return { type: "transposeConv2d", params };
   }
-  const conv2dMatch = layerDef.match(/nn\.Conv2d\s*\(([^)]+)\)/);
-  if (conv2dMatch) {
-    const args = parseArguments(conv2dMatch[1]);
+  const conv2dMatch = nnArgs(layerDef, "Conv2d");
+  if (conv2dMatch !== null) {
+    const args = parseArguments(conv2dMatch);
     const pk = parseNumberOrVariable(args.kernel_size || args[2] || "0");
     const ps = parseNumberOrVariable(args.stride || args[3] || "1");
     const pInC = parseNumberOrVariable(args.in_channels || args[0] || "3");
@@ -5474,9 +5502,9 @@ function parseLayerDefinition(layerDef) {
     if (args.groups !== void 0) params.groups = parseNumberOrVariable(args.groups);
     return { type: "conv2d", params };
   }
-  const conv1dMatch = layerDef.match(/nn\.Conv1d\s*\(([^)]+)\)/);
-  if (conv1dMatch) {
-    const args = parseArguments(conv1dMatch[1]);
+  const conv1dMatch = nnArgs(layerDef, "Conv1d");
+  if (conv1dMatch !== null) {
+    const args = parseArguments(conv1dMatch);
     params.inChannels = parseNumberOrVariable(args.in_channels || args[0]);
     params.outChannels = parseNumberOrVariable(args[1] || args.out_channels);
     params.kernelSize = parseNumberOrVariable(args.kernel_size || args[2] || "3");
@@ -5486,28 +5514,28 @@ function parseLayerDefinition(layerDef) {
     if (args.groups !== void 0) params.groups = parseNumberOrVariable(args.groups);
     return { type: "conv1d", params };
   }
-  const maxpoolMatch = layerDef.match(/nn\.MaxPool2d\s*\(([^)]*)\)/);
-  if (maxpoolMatch) {
-    const args = parseArguments(maxpoolMatch[1] || "");
+  const maxpoolMatch = nnArgs(layerDef, "MaxPool2d");
+  if (maxpoolMatch !== null) {
+    const args = parseArguments(maxpoolMatch);
     params.kernelSize = parseNumberOrVariable(args.kernel_size || args[0] || "2");
     params.stride = parseNumberOrVariable(args.stride || args[1] || args.kernel_size || "2");
     return { type: "maxpool2d", params };
   }
-  const avgpoolMatch = layerDef.match(/nn\.AvgPool2d\s*\(([^)]*)\)/);
-  if (avgpoolMatch) {
-    const args = parseArguments(avgpoolMatch[1] || "");
+  const avgpoolMatch = nnArgs(layerDef, "AvgPool2d");
+  if (avgpoolMatch !== null) {
+    const args = parseArguments(avgpoolMatch);
     params.kernelSize = parseNumberOrVariable(args.kernel_size || args[0] || "2");
     params.stride = parseNumberOrVariable(args.stride || args[1] || args.kernel_size || "2");
     return { type: "avgpool2d", params };
   }
-  const dropoutMatch = layerDef.match(/nn\.Dropout\s*\(([^)]*)\)/);
-  if (dropoutMatch) {
-    const args = parseArguments(dropoutMatch[1] || "");
+  const dropoutMatch = nnArgs(layerDef, "Dropout");
+  if (dropoutMatch !== null) {
+    const args = parseArguments(dropoutMatch);
     params.p = parseNumberOrVariable(args.p || args[0] || "0.5");
     return { type: "dropout", params };
   }
-  const batchNormMatch = layerDef.match(/nn\.BatchNorm(?:2d|3d)\s*\(([^)]*)\)/);
-  if (batchNormMatch) {
+  const batchNormMatch = nnArgs(layerDef, /\bnn\.BatchNorm(?:2d|3d)\s*\(/);
+  if (batchNormMatch !== null) {
     return { type: "batchNorm", params };
   }
   if (layerDef.match(/nn\.ReLU\s*\(/)) {
@@ -5519,53 +5547,53 @@ function parseLayerDefinition(layerDef) {
   if (layerDef.match(/nn\.SiLU\s*\(/)) return { type: "swish", params: {} };
   if (layerDef.match(/nn\.Swish\s*\(/)) return { type: "swish", params: {} };
   if (layerDef.match(/nn\.Softmax\s*\(/)) return { type: "softmax", params: {} };
-  const leakyReluMatch = layerDef.match(/nn\.LeakyReLU\s*\(([^)]*)\)/);
-  if (leakyReluMatch) {
-    const args = parseArguments(leakyReluMatch[1] || "");
+  const leakyReluMatch = nnArgs(layerDef, "LeakyReLU");
+  if (leakyReluMatch !== null) {
+    const args = parseArguments(leakyReluMatch);
     params.negativeSlope = parseNumberOrVariable(args.negative_slope || args[0] || "0.01");
     return { type: "leakyRelu", params };
   }
-  const layerNormMatch = layerDef.match(/nn\.LayerNorm\s*\(([^)]+)\)/);
-  if (layerNormMatch) {
-    const args = parseArguments(layerNormMatch[1]);
+  const layerNormMatch = nnArgs(layerDef, "LayerNorm");
+  if (layerNormMatch !== null) {
+    const args = parseArguments(layerNormMatch);
     params.normalizedShape = parseNumberOrVariable(args.normalized_shape || args[0] || "768");
     return { type: "layerNorm", params };
   }
-  const rmsNormMatch = layerDef.match(/nn\.RMSNorm\s*\(([^)]+)\)/);
-  if (rmsNormMatch) {
-    const args = parseArguments(rmsNormMatch[1]);
+  const rmsNormMatch = nnArgs(layerDef, "RMSNorm");
+  if (rmsNormMatch !== null) {
+    const args = parseArguments(rmsNormMatch);
     params.normalizedShape = parseNumberOrVariable(args.normalized_shape || args[0] || "768");
     return { type: "rmsNorm", params };
   }
-  const groupNormMatch = layerDef.match(/nn\.GroupNorm\s*\(([^)]+)\)/);
-  if (groupNormMatch) {
-    const args = parseArguments(groupNormMatch[1]);
+  const groupNormMatch = nnArgs(layerDef, "GroupNorm");
+  if (groupNormMatch !== null) {
+    const args = parseArguments(groupNormMatch);
     params.numGroups = parseNumberOrVariable(args.num_groups || args[0] || "32");
     params.numChannels = parseNumberOrVariable(args.num_channels || args[1]);
     return { type: "groupNorm", params };
   }
-  const batchNorm1dMatch = layerDef.match(/nn\.BatchNorm1d\s*\(([^)]*)\)/);
-  if (batchNorm1dMatch) {
+  const batchNorm1dMatch = nnArgs(layerDef, "BatchNorm1d");
+  if (batchNorm1dMatch !== null) {
     return { type: "batchNorm", params };
   }
-  const embeddingMatch = layerDef.match(/nn\.Embedding\s*\(([^)]+)\)/);
-  if (embeddingMatch) {
-    const args = parseArguments(embeddingMatch[1]);
+  const embeddingMatch = nnArgs(layerDef, "Embedding");
+  if (embeddingMatch !== null) {
+    const args = parseArguments(embeddingMatch);
     params.vocabSize = parseNumberOrVariable(args.num_embeddings || args[0] || "10000");
     params.embeddingDim = parseNumberOrVariable(args.embedding_dim || args[1] || "128");
     return { type: "embedding", params };
   }
-  const telMatch = layerDef.match(/nn\.TransformerEncoderLayer\s*\(([^)]+)\)/);
-  if (telMatch) {
-    const args = parseArguments(telMatch[1]);
+  const telMatch = nnArgs(layerDef, "TransformerEncoderLayer");
+  if (telMatch !== null) {
+    const args = parseArguments(telMatch);
     params.embedDim = parseNumberOrVariable(args.d_model || args[0] || "512");
     params.numHeads = parseNumberOrVariable(args.nhead || args[1] || "8");
     params.ffDim = parseNumberOrVariable(args.dim_feedforward || args[2] || "2048");
     return { type: "transformerBlock", params };
   }
-  const mhaMatch = layerDef.match(/nn\.MultiheadAttention\s*\(([^)]+)\)/);
-  if (mhaMatch) {
-    const args = parseArguments(mhaMatch[1]);
+  const mhaMatch = nnArgs(layerDef, "MultiheadAttention");
+  if (mhaMatch !== null) {
+    const args = parseArguments(mhaMatch);
     params.hiddenDim = parseNumberOrVariable(args.embed_dim || args[0] || "512");
     params.numHeads = parseNumberOrVariable(args.num_heads || args[1] || "8");
     return { type: "multiHeadAttention", params };
@@ -5577,25 +5605,25 @@ function parseLayerDefinition(layerDef) {
       params.bidirectional = args.bidirectional === "True" || args.bidirectional === true;
     }
   };
-  const lstmMatch = layerDef.match(/nn\.LSTM\s*\(([^)]+)\)/);
-  if (lstmMatch) {
-    const args = parseArguments(lstmMatch[1]);
+  const lstmMatch = nnArgs(layerDef, "LSTM");
+  if (lstmMatch !== null) {
+    const args = parseArguments(lstmMatch);
     params.inputSize = parseNumberOrVariable(args.input_size || args[0] || "128");
     params.hiddenSize = parseNumberOrVariable(args.hidden_size || args[1] || "128");
     captureRecurrentExtras(args);
     return { type: "lstm", params };
   }
-  const gruMatch = layerDef.match(/nn\.GRU\s*\(([^)]+)\)/);
-  if (gruMatch) {
-    const args = parseArguments(gruMatch[1]);
+  const gruMatch = nnArgs(layerDef, "GRU");
+  if (gruMatch !== null) {
+    const args = parseArguments(gruMatch);
     params.inputSize = parseNumberOrVariable(args.input_size || args[0] || "128");
     params.hiddenSize = parseNumberOrVariable(args.hidden_size || args[1] || "128");
     captureRecurrentExtras(args);
     return { type: "gru", params };
   }
-  const rnnMatch = layerDef.match(/nn\.RNN\s*\(([^)]+)\)/);
-  if (rnnMatch) {
-    const args = parseArguments(rnnMatch[1]);
+  const rnnMatch = nnArgs(layerDef, "RNN");
+  if (rnnMatch !== null) {
+    const args = parseArguments(rnnMatch);
     params.inputSize = parseNumberOrVariable(args.input_size || args[0] || "128");
     params.hiddenSize = parseNumberOrVariable(args.hidden_size || args[1] || "128");
     captureRecurrentExtras(args);
@@ -5604,9 +5632,9 @@ function parseLayerDefinition(layerDef) {
   if (layerDef.match(/nn\.Flatten\s*\(/)) {
     return { type: "flatten", params: {} };
   }
-  const adaptiveAvgMatch = layerDef.match(/nn\.AdaptiveAvgPool2d\s*\(([^)]*)\)/);
-  if (adaptiveAvgMatch) {
-    const inner = adaptiveAvgMatch[1].trim().replace(/^\(+/, "").replace(/\)+$/, "");
+  const adaptiveAvgMatch = nnArgs(layerDef, "AdaptiveAvgPool2d");
+  if (adaptiveAvgMatch !== null) {
+    const inner = adaptiveAvgMatch.trim().replace(/^\(+/, "").replace(/\)+$/, "");
     const nums = inner.split(",").map((t) => Number(t.trim())).filter((n) => Number.isFinite(n));
     if (nums.length === 0 || nums.every((n) => n === 1)) {
       return { type: "globalAvgPool2d", params: {} };
@@ -5614,9 +5642,9 @@ function parseLayerDefinition(layerDef) {
     params.outputSize = nums.length === 1 ? nums[0] : nums;
     return { type: "adaptiveAvgPool2d", params };
   }
-  const upsampleMatch = layerDef.match(/nn\.Upsample\s*\(([^)]+)\)/);
-  if (upsampleMatch) {
-    const args = parseArguments(upsampleMatch[1]);
+  const upsampleMatch = nnArgs(layerDef, "Upsample");
+  if (upsampleMatch !== null) {
+    const args = parseArguments(upsampleMatch);
     params.scaleFactor = parseNumberOrVariable(args.scale_factor || args[0] || "2");
     return { type: "upsample", params };
   }
@@ -5626,11 +5654,11 @@ function parseArguments(argsStr) {
   const result = {};
   const positional = [];
   if (!argsStr.trim()) return result;
-  const parts = argsStr.split(",").map((p) => p.trim());
-  for (const part of parts) {
-    if (part.includes("=")) {
-      const [key, value] = part.split("=").map((p) => p.trim());
-      result[key] = parseNumberOrVariable(value);
+  for (const part of splitTopLevelArgs(argsStr).map((p) => p.trim())) {
+    if (!part) continue;
+    const eq = part.indexOf("=");
+    if (eq > 0 && /^\w+$/.test(part.slice(0, eq).trim())) {
+      result[part.slice(0, eq).trim()] = parseNumberOrVariable(part.slice(eq + 1).trim());
     } else {
       positional.push(parseNumberOrVariable(part));
       result[positional.length - 1] = parseNumberOrVariable(part);
@@ -5644,6 +5672,11 @@ function parseNumberOrVariable(value) {
   if (!isNaN(num)) {
     return num;
   }
+  const tuple = value.match(/^\(\s*(\d+)\s*(?:,\s*(\d+)\s*)*,?\s*\)$/);
+  if (tuple) {
+    const nums = value.slice(1, -1).split(",").map((t) => t.trim()).filter(Boolean);
+    if (nums.every((n) => n === nums[0])) return Number(nums[0]);
+  }
   return value;
 }
 function parseForwardCalls(lines, startLine, endLine) {
@@ -5654,31 +5687,38 @@ function parseForwardCalls(lines, startLine, endLine) {
     if (!line.trim() || line.trim().startsWith("#")) continue;
     if (line.match(/def\s+forward/)) continue;
     if (line.match(/^\s*def\s+\w+/) || line.match(/^class\s+/)) break;
-    const forLoopMatch = line.match(/^\s*for\s+\w+\s+in\s+self\.(\w+)/);
+    const forLoopMatch = line.match(/^\s*for\s+.+?\s+in\s+(.+)$/);
     if (forLoopMatch) {
-      const layerName = forLoopMatch[1];
-      if (!seenForLoop.has(layerName)) {
-        calls.push({ layerName, isFunctional: false });
-        seenForLoop.add(layerName);
+      for (const m of forLoopMatch[1].matchAll(/self\.([\w.]+)\b(?!\s*\()/g)) {
+        if (!seenForLoop.has(m[1])) {
+          calls.push({ layerName: m[1], isFunctional: false, line: i + 1 });
+          seenForLoop.add(m[1]);
+        }
       }
       continue;
     }
-    const selfCalls = [...line.matchAll(/self\.(\w+)\s*\(/g)].map((m) => m[1]);
+    const selfCalls = [...line.matchAll(/self\.([\w.]+)\s*\(/g)].map((m) => m[1]);
     for (const name of [...selfCalls].reverse()) {
-      calls.push({ layerName: name, isFunctional: false });
+      calls.push({ layerName: name, isFunctional: false, line: i + 1 });
+    }
+    for (const m of line.matchAll(/self\.([\w.]+)\s*\[/g)) {
+      if (!seenForLoop.has(m[1])) {
+        calls.push({ layerName: m[1], isFunctional: false, line: i + 1 });
+        seenForLoop.add(m[1]);
+      }
     }
     for (const m of line.matchAll(/(?:F\.|torch\.)(\w+)\s*\(/g)) {
       const funcName = m[1];
       const componentType = mapFunctionalToComponent(funcName);
       if (componentType) {
-        calls.push({ layerName: funcName, isFunctional: true });
+        calls.push({ layerName: funcName, isFunctional: true, line: i + 1 });
       }
     }
     for (const m of line.matchAll(/(?:einops\.)?(rearrange|repeat|reduce)\s*\(/g)) {
       const funcName = m[1];
       const componentType = mapEinopsToComponent(funcName);
       if (componentType) {
-        calls.push({ layerName: funcName, isFunctional: true });
+        calls.push({ layerName: funcName, isFunctional: true, line: i + 1 });
       }
     }
   }
@@ -7371,9 +7411,9 @@ function lintModelGraph(model) {
 }
 
 // src/utils/lintEngine.ts
-function graphFromPyTorchSource(code, name = "model") {
+function graphFromPyTorchSource(code, name = "model", opts = {}) {
   try {
-    const parsed = parsePyTorchCode(code);
+    const parsed = parsePyTorchCode(code, { className: opts.className, fileName: name });
     if (!parsed || parsed.components.length === 0) return null;
     const realLayers = parsed.components.filter((c) => c.type !== "input" && c.type !== "output");
     if (realLayers.length === 0) return null;

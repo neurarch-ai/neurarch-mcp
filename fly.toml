@@ -10,13 +10,24 @@ primary_region = "sjc"
 [processes]
   app = "--http --host=0.0.0.0 --hf --tools=core"
 
+# The hosted instance is our own infrastructure and already sees the model
+# text a client sends (docs/HOSTED.md, "What the hosted server sees"), so it
+# reports the anonymous structure+verdict row the local server only sends
+# under an explicit opt-in. Same payload, same policy, stated in HOSTED.md
+# and the README privacy section. A local `npx neurarch-mcp` is unaffected.
+[env]
+  NEURARCH_REPORT = "1"
+
 [http_service]
   internal_port = 8787
   processes = ["app"]
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # One machine stays warm. Measured 2026-09-02: a cold start answered the
+  # first initialize in 7.5s, which most MCP clients read as a timeout; warm
+  # it is 77ms. A shared-cpu-1x at 512MB is about two dollars a month.
+  min_machines_running = 1
 
   [[http_service.checks]]
     interval = "30s"

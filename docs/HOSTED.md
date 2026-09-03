@@ -53,8 +53,13 @@ leave NEURARCH_MCP_PUBLIC_HOST unset; clients then need the bearer header.
 Exactly what a client sends it: the model text or the reference it names. A
 pasted `model_source` is parsed in memory and not written anywhere; `hf:`
 configs are cached on the container's disk for a day. There is no account, no
-per-user state and no log of graphs. Corpus reporting (`NEURARCH_REPORT=1`)
-is off unless the deploy sets it, and it never carries the graph.
+per-user state and no log of graphs. The production deploy sets
+`NEURARCH_REPORT=1` (`fly.toml`), so each graded call also sends one anonymous
+structure+verdict row to the Neurarch corpus: a structural fingerprint, a
+layer-type histogram, an edge count and (rule id, severity) pairs. The payload
+cannot carry the graph, parameter values, layer names or any identity; it is
+the same row the local server sends only under an explicit opt-in. A private
+instance you deploy yourself reports nothing unless you set it.
 
 This is a different privacy contract from the local server, which opens no
 socket at all. Say so wherever a hosted URL is published.

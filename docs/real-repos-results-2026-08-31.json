@@ -1,0 +1,4786 @@
+{
+  "summary": {
+    "date": "2026-08-31",
+    "engine": {
+      "firstLine": "var __create = Object.create;",
+      "bytes": 444458,
+      "sha256": "fba96901cdeced2da9ee60667a2c591f6f0d945a12011bb84c34d0f5b60426c3"
+    },
+    "command": "node scripts/lint-real-repos.mjs --repos-dir <dir>",
+    "repos": 59,
+    "reposAttempted": 59,
+    "reposWithAtLeastOneParsedFile": 44,
+    "filesListed": 116,
+    "filesAttempted": 116,
+    "filesParsed": 73,
+    "filesByStatus": {
+      "parsed": 73,
+      "no-model": 40,
+      "no-model-class": 3
+    },
+    "parsedGraphsWithBlock": 1,
+    "parsedGraphsWithAnyFinding": 63,
+    "totalLayers": 450,
+    "layersPerParsedFile": {
+      "min": 1,
+      "median": 2,
+      "max": 141
+    },
+    "thinParses": 48,
+    "substantialParses": 9,
+    "parsedFilesWithUnresolvedParams": 60,
+    "nnCallsInParsedFiles": 794,
+    "unparsedByCause": {
+      "sub-modules are instances of classes from other files, or are passed in through __init__": 13,
+      "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)": 13,
+      "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)": 6,
+      "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)": 3,
+      "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))": 3,
+      "the last class in the file is a norm or utility holding only nn.Parameter": 2,
+      "torch.nn.X fully-qualified prefix instead of nn.X": 2,
+      "a triple-quoted string spanning lines inside a call in __init__ (a raise ValueError with a triple-quoted message) aborts the parse of the whole file": 1
+    },
+    "findingsBySeverity": {
+      "info": 26,
+      "warn": 76,
+      "block": 1
+    },
+    "findingsByRule": {
+      "consecutive-linear-no-activation": {
+        "severity": "info",
+        "count": 14,
+        "measured": false,
+        "real": 0,
+        "artefact": 13,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "invalid-output-shape": {
+        "severity": "warn",
+        "count": 54,
+        "measured": true,
+        "real": 0,
+        "artefact": 54,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "attention-no-pe": {
+        "severity": "warn",
+        "count": 6,
+        "measured": false,
+        "real": 0,
+        "artefact": 3,
+        "notABug": 3,
+        "unjudged": 0
+      },
+      "dropout-before-bn": {
+        "severity": "info",
+        "count": 2,
+        "measured": false,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "bn-at-output": {
+        "severity": "warn",
+        "count": 4,
+        "measured": false,
+        "real": 0,
+        "artefact": 3,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "dropout-at-output": {
+        "severity": "warn",
+        "count": 5,
+        "measured": false,
+        "real": 0,
+        "artefact": 5,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "bn-after-activation": {
+        "severity": "warn",
+        "count": 1,
+        "measured": false,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "deep-attention-default-init": {
+        "severity": "info",
+        "count": 1,
+        "measured": false,
+        "real": 0,
+        "artefact": 0,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "deep-no-norm": {
+        "severity": "info",
+        "count": 6,
+        "measured": true,
+        "real": 0,
+        "artefact": 2,
+        "notABug": 4,
+        "unjudged": 0
+      },
+      "double-norm": {
+        "severity": "info",
+        "count": 2,
+        "measured": false,
+        "real": 0,
+        "artefact": 2,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "redundant-activation": {
+        "severity": "warn",
+        "count": 2,
+        "measured": false,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "pool-into-linear-no-flatten": {
+        "severity": "warn",
+        "count": 3,
+        "measured": false,
+        "real": 0,
+        "artefact": 3,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "duplicate-positional-encoding": {
+        "severity": "info",
+        "count": 1,
+        "measured": false,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "output-activation": {
+        "severity": "info",
+        "count": 1,
+        "measured": false,
+        "real": 0,
+        "artefact": 0,
+        "notABug": 1,
+        "unjudged": 0
+      },
+      "linear-after-conv-no-flatten": {
+        "severity": "block",
+        "count": 1,
+        "measured": false,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 0,
+        "unjudged": 0
+      }
+    },
+    "handJudged": {
+      "block": {
+        "total": 1,
+        "real": 0,
+        "artefact": 1,
+        "notABug": 0,
+        "unjudged": 0
+      },
+      "warn": {
+        "total": 76,
+        "real": 0,
+        "artefact": 70,
+        "notABug": 6,
+        "unjudged": 0
+      },
+      "info": {
+        "total": 26,
+        "real": 0,
+        "artefact": 19,
+        "notABug": 7,
+        "unjudged": 0
+      }
+    },
+    "wallMs": 207
+  },
+  "results": [
+    {
+      "repo": "karpathy/nanoGPT",
+      "file": "model.py",
+      "status": "parsed",
+      "lines": 331,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "GPT",
+          "bases": "nn.Module",
+          "line": 118,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 12,
+      "parseMs": 4.5,
+      "mainClass": "GPT",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 4,
+      "coverage": 0.17,
+      "layerTypes": {
+        "linear": 2
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "\"lm_head\" feeds directly into \"lm_head\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "lm_head appears twice in the graph: the weight-tying line self.transformer.wte.weight = self.lm_head.weight (line 138) was read as a second definition, so the node feeds into its own duplicate"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "karpathy/minGPT",
+      "file": "mingpt/model.py",
+      "status": "parsed",
+      "lines": 311,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "GPT",
+          "bases": "nn.Module",
+          "line": 95,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 14,
+      "parseMs": 0.8,
+      "mainClass": "GPT",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.07,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "karpathy/nanochat",
+      "file": "nanochat/gpt.py",
+      "status": "parsed",
+      "lines": 556,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "GPT",
+          "bases": "nn.Module",
+          "line": 156,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 2.6,
+      "mainClass": "GPT",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 0,
+      "coverage": 1,
+      "layerTypes": {
+        "causalAttention": 1,
+        "feedForward": 1
+      },
+      "findings": [
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "attn",
+          "componentType": "causalAttention",
+          "message": "1 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "nanochat uses rotary embeddings applied functionally (apply_rotary_emb, line 101) with cos/sin precomputed in GPT; no nn.Module carries the PE, so the parser cannot see it"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "Lightning-AI/litgpt",
+      "file": "litgpt/model.py",
+      "status": "no-model",
+      "lines": 1326,
+      "classes": {
+        "total": 11,
+        "nnModuleSubclasses": 10,
+        "withInitAndForward": 10,
+        "mainClass": {
+          "name": "RMSNorm",
+          "bases": "torch.nn.Module",
+          "line": 1301,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 10
+      },
+      "nnCallsInFile": 15,
+      "parseMs": 4.8,
+      "cause": "the last class in the file is a norm or utility holding only nn.Parameter",
+      "reason": "main class RMSNorm (line 1301) yielded zero layers"
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/llama/modeling_llama.py",
+      "status": "parsed",
+      "lines": 513,
+      "classes": {
+        "total": 9,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "LlamaForCausalLM",
+          "bases": "LlamaPreTrainedModel, GenerationMixin",
+          "line": 421,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 9
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 1.5,
+      "mainClass": "LlamaForCausalLM",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.09,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/bert/modeling_bert.py",
+      "status": "parsed",
+      "lines": 1391,
+      "classes": {
+        "total": 26,
+        "nnModuleSubclasses": 14,
+        "withInitAndForward": 24,
+        "mainClass": {
+          "name": "BertForQuestionAnswering",
+          "bases": "BertPreTrainedModel",
+          "line": 1311,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 26
+      },
+      "nnCallsInFile": 36,
+      "parseMs": 4,
+      "mainClass": "BertForQuestionAnswering",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 2,
+      "coverage": 0.06,
+      "layerTypes": {
+        "dropout": 1,
+        "linear": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/gpt2/modeling_gpt2.py",
+      "status": "parsed",
+      "lines": 1136,
+      "classes": {
+        "total": 12,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 10,
+        "mainClass": {
+          "name": "GPT2ForQuestionAnswering",
+          "bases": "GPT2PreTrainedModel",
+          "line": 1048,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 19,
+      "parseMs": 2.9,
+      "mainClass": "GPT2ForQuestionAnswering",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 8,
+      "coverage": 0.26,
+      "layerTypes": {
+        "embedding": 3,
+        "dropout": 1,
+        "layerNorm": 1
+      },
+      "findings": [
+        {
+          "rule": "dropout-before-bn",
+          "severity": "info",
+          "component": "drop",
+          "componentType": "dropout",
+          "message": "\"drop\" → \"ln_f\": BatchNorm re-normalizes the random zeros introduced by Dropout, nullifying most of its regularization effect. Fix: Reorder to Conv → BN → Activation → Dropout.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "the twelve GPT2Block layers between drop and ln_f live in a ModuleList built in a loop and were not expanded"
+        },
+        {
+          "rule": "bn-at-output",
+          "severity": "warn",
+          "component": "ln_f",
+          "componentType": "layerNorm",
+          "message": "\"ln_f\" (layerNorm) is the last layer before Output. Normalizing the raw logits constrains the output range and breaks standard loss functions. Fix: Move normalization before the final Linear/Conv layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "main class is GPT2ForQuestionAnswering; its qa_outputs Linear(config.hidden_size, 2) after the transformer was dropped (config.* unresolved), so the GPT2Model ln_f became the last node"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "wte",
+          "componentType": "embedding",
+          "message": "embedding 'wte': computed output shape [1,28,28,self.embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"self.embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 1
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/vit/modeling_vit.py",
+      "status": "parsed",
+      "lines": 576,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 9,
+        "mainClass": {
+          "name": "ViTForImageClassification",
+          "bases": "ViTPreTrainedModel",
+          "line": 522,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 10
+      },
+      "nnCallsInFile": 16,
+      "parseMs": 1.4,
+      "mainClass": "ViTForImageClassification",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.06,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "classifier",
+          "componentType": "linear",
+          "message": "linear 'classifier': computed output shape [1,28,config.num_labels] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.num_labels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/whisper/modeling_whisper.py",
+      "status": "parsed",
+      "lines": 1407,
+      "classes": {
+        "total": 12,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 11,
+        "mainClass": {
+          "name": "WhisperForAudioClassification",
+          "bases": "WhisperPreTrainedModel",
+          "line": 1288,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 23,
+      "parseMs": 3,
+      "mainClass": "WhisperForAudioClassification",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 3,
+      "coverage": 0.13,
+      "layerTypes": {
+        "embedding": 1,
+        "reshape": 1,
+        "layerNorm": 1
+      },
+      "findings": [
+        {
+          "rule": "bn-at-output",
+          "severity": "warn",
+          "component": "layer_norm",
+          "componentType": "layerNorm",
+          "message": "\"layer_norm\" (layerNorm) is the last layer before Output. Normalizing the raw logits constrains the output range and breaks standard loss functions. Fix: Move normalization before the final Linear/Conv layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "WhisperForAudioClassification has projector and classifier Linears after the encoder; both were dropped on config.* dims, leaving the encoder layer_norm as the last node"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "embed_tokens",
+          "componentType": "embedding",
+          "message": "embedding 'embed_tokens': computed output shape [1,28,28,config.d_model] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/qwen2/modeling_qwen2.py",
+      "status": "parsed",
+      "lines": 501,
+      "classes": {
+        "total": 11,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "Qwen2ForCausalLM",
+          "bases": "Qwen2PreTrainedModel, GenerationMixin",
+          "line": 406,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 11
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 1.1,
+      "mainClass": "Qwen2ForCausalLM",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.09,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/mistral/modeling_mistral.py",
+      "status": "parsed",
+      "lines": 487,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "MistralForCausalLM",
+          "bases": "MistralPreTrainedModel, GenerationMixin",
+          "line": 394,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 10
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 1,
+      "mainClass": "MistralForCausalLM",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.09,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/mixtral/modeling_mixtral.py",
+      "status": "parsed",
+      "lines": 678,
+      "classes": {
+        "total": 13,
+        "nnModuleSubclasses": 6,
+        "withInitAndForward": 9,
+        "mainClass": {
+          "name": "MixtralForCausalLM",
+          "bases": "MixtralPreTrainedModel, GenerationMixin",
+          "line": 555,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 13
+      },
+      "nnCallsInFile": 8,
+      "parseMs": 1.4,
+      "mainClass": "MixtralForCausalLM",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.13,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/gemma/modeling_gemma.py",
+      "status": "parsed",
+      "lines": 532,
+      "classes": {
+        "total": 11,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 8,
+        "mainClass": {
+          "name": "GemmaForCausalLM",
+          "bases": "GemmaPreTrainedModel, GenerationMixin",
+          "line": 443,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 11
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 1.1,
+      "mainClass": "GemmaForCausalLM",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.09,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,config.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"config.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/transformers",
+      "file": "src/transformers/models/clip/modeling_clip.py",
+      "status": "no-model",
+      "lines": 1020,
+      "classes": {
+        "total": 16,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 12,
+        "mainClass": {
+          "name": "CLIPForImageClassification",
+          "bases": "CLIPPreTrainedModel",
+          "line": 957,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 16
+      },
+      "nnCallsInFile": 22,
+      "parseMs": 1.3,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class CLIPForImageClassification (line 957) yielded zero layers"
+    },
+    {
+      "repo": "huggingface/pytorch-image-models",
+      "file": "timm/models/vision_transformer.py",
+      "status": "parsed",
+      "lines": 5048,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 6,
+        "withInitAndForward": 6,
+        "mainClass": {
+          "name": "VisionTransformer",
+          "bases": "nn.Module",
+          "line": 714,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 6
+      },
+      "nnCallsInFile": 14,
+      "parseMs": 8.7,
+      "mainClass": "VisionTransformer",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 4,
+      "coverage": 0.21,
+      "layerTypes": {
+        "dropout": 2,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "head",
+          "componentType": "linear",
+          "message": "linear 'head': computed output shape [1,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/pytorch-image-models",
+      "file": "timm/models/resnet.py",
+      "status": "parsed",
+      "lines": 2270,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "ResNet",
+          "bases": "nn.Module",
+          "line": 437,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 14,
+      "parseMs": 3.9,
+      "mainClass": "ResNet",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 6,
+      "coverage": 0.36,
+      "layerTypes": {
+        "conv2d": 3,
+        "maxpool2d": 2
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv1_1",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv1_1': computed output shape [stem_chs[0],14,14] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"stem_chs[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/pytorch-image-models",
+      "file": "timm/models/efficientnet.py",
+      "status": "no-model",
+      "lines": 2977,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "EfficientNetFeatures",
+          "bases": "nn.Module",
+          "line": 356,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 1,
+      "parseMs": 4,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class EfficientNetFeatures (line 356) yielded zero layers"
+    },
+    {
+      "repo": "huggingface/pytorch-image-models",
+      "file": "timm/models/convnext.py",
+      "status": "parsed",
+      "lines": 1440,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "ConvNeXt",
+          "bases": "nn.Module",
+          "line": 339,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 3,
+      "parseMs": 1.9,
+      "mainClass": "ConvNeXt",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 6,
+      "coverage": 0.67,
+      "layerTypes": {
+        "conv2d": 2
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "stem_1",
+          "componentType": "conv2d",
+          "message": "conv2d 'stem_1': computed output shape [dims[0],26,26] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"dims[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/pytorch-image-models",
+      "file": "timm/models/swin_transformer.py",
+      "status": "no-model",
+      "lines": 1257,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "SwinTransformer",
+          "bases": "nn.Module",
+          "line": 675,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 1.8,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class SwinTransformer (line 675) yielded zero layers"
+    },
+    {
+      "repo": "pytorch/vision",
+      "file": "torchvision/models/resnet.py",
+      "status": "parsed",
+      "lines": 986,
+      "classes": {
+        "total": 13,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "ResNet",
+          "bases": "nn.Module",
+          "line": 166,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 9,
+      "parseMs": 1.5,
+      "mainClass": "ResNet",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 3,
+      "coverage": 0.56,
+      "layerTypes": {
+        "conv2d": 1,
+        "relu": 1,
+        "maxpool2d": 1,
+        "globalAvgPool2d": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv1",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv1': computed output shape [self.inplanes,14,14] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"self.inplanes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/vision",
+      "file": "torchvision/models/vgg.py",
+      "status": "parsed",
+      "lines": 512,
+      "classes": {
+        "total": 9,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "VGG",
+          "bases": "nn.Module",
+          "line": 35,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 13,
+      "parseMs": 0.8,
+      "mainClass": "VGG",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 1,
+      "coverage": 0.23,
+      "layerTypes": {
+        "adaptiveAvgPool2d": 1,
+        "flatten": 1,
+        "linear": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/vision",
+      "file": "torchvision/models/densenet.py",
+      "status": "parsed",
+      "lines": 449,
+      "classes": {
+        "total": 8,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "DenseNet",
+          "bases": "nn.Module",
+          "line": 136,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 16,
+      "parseMs": 0.6,
+      "mainClass": "DenseNet",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 3,
+      "coverage": 0.31,
+      "layerTypes": {
+        "conv2d": 1,
+        "relu": 1,
+        "globalAvgPool2d": 1,
+        "flatten": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "features_1",
+          "componentType": "conv2d",
+          "message": "conv2d 'features_1': computed output shape [num_init_features,14,14] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_init_features\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/vision",
+      "file": "torchvision/models/mobilenetv2.py",
+      "status": "parsed",
+      "lines": 261,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "MobileNetV2",
+          "bases": "nn.Module",
+          "line": 67,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 3,
+      "parseMs": 0.4,
+      "mainClass": "MobileNetV2",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 1,
+      "coverage": 0.33,
+      "layerTypes": {
+        "dropout": 1
+      },
+      "findings": [
+        {
+          "rule": "dropout-at-output",
+          "severity": "warn",
+          "component": "classifier_1",
+          "componentType": "dropout",
+          "message": "\"classifier_1\" (Dropout) is the last layer before Output. In training it randomly zeroes the final logits themselves, injecting noise straight into the loss; at eval it is a no-op, so train and eval behaviour diverge. Dropout belongs before the final projection, not after it. Fix: Move the Dropout before the final Linear/Conv that produces the logits.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "classifier is Sequential(Dropout, Linear(self.last_channel, num_classes)) at line 145; the Linear was dropped (self.last_channel unresolved), leaving Dropout as the last node"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/vision",
+      "file": "torchvision/models/vision_transformer.py",
+      "status": "parsed",
+      "lines": 865,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "VisionTransformer",
+          "bases": "nn.Module",
+          "line": 160,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 10,
+      "parseMs": 1.1,
+      "mainClass": "VisionTransformer",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 1,
+      "coverage": 0.1,
+      "layerTypes": {
+        "dropout": 1
+      },
+      "findings": [
+        {
+          "rule": "dropout-at-output",
+          "severity": "warn",
+          "component": "dropout",
+          "componentType": "dropout",
+          "message": "\"dropout\" (Dropout) is the last layer before Output. In training it randomly zeroes the final logits themselves, injecting noise straight into the loss; at eval it is a no-op, so train and eval behaviour diverge. Dropout belongs before the final projection, not after it. Fix: Move the Dropout before the final Linear/Conv that produces the logits.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "the Encoder (layers built in a loop into an OrderedDict) and the heads Sequential were not parsed; this dropout is the first op of Encoder.forward, not the last op of the model"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "facebookresearch/DiT",
+      "file": "models.py",
+      "status": "parsed",
+      "lines": 371,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "DiT",
+          "bases": "nn.Module",
+          "line": 145,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 14,
+      "parseMs": 0.9,
+      "mainClass": "DiT",
+      "layers": 141,
+      "connections": 142,
+      "unresolvedParams": 0,
+      "coverage": 10.07,
+      "layerTypes": {
+        "layerNorm": 56,
+        "swish": 28,
+        "attention": 28,
+        "feedForward": 28,
+        "patchEmbed": 1
+      },
+      "findings": [
+        {
+          "rule": "bn-after-activation",
+          "severity": "warn",
+          "component": "adaLN_modulation_1",
+          "componentType": "swish",
+          "message": "\"norm1\" (layerNorm) follows \"adaLN_modulation_1\" (activation). The standard pre-activation order is Conv/Linear → Norm → Activation. Normalizing post-activation limits expressivity. Fix: Move the normalization layer before the activation function.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "adaLN_modulation is Sequential(SiLU, Linear(hidden_size, 6*hidden_size)) (lines 113-116); the Linear was dropped and the branch produces modulation vectors, it does not feed norm1"
+        },
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "attn",
+          "componentType": "attention",
+          "message": "28 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "pos_embed is an nn.Parameter (line 174) added to x in forward; the parser only turns nn.Module constructors into nodes"
+        },
+        {
+          "rule": "deep-attention-default-init",
+          "severity": "info",
+          "component": "attn",
+          "componentType": "attention",
+          "message": "At 28 stacked attention layers, residual-branch outputs add up; unscaled init lets activation variance grow with depth. GPT-2/LLaMA-family models scale the residual projections by depth (N(0, 0.02 / √(2L))). Fix: Scale residual output projections by depth: nn.init.normal_(w, std=0.02 / math.sqrt(2 * n_layers))",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "DiT.initialize_weights zero-inits every adaLN modulation and the final layer (lines 209-210), which is its own depth-scaling scheme"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 1
+    },
+    {
+      "repo": "facebookresearch/dinov2",
+      "file": "dinov2/models/vision_transformer.py",
+      "status": "no-model",
+      "lines": 429,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "DinoVisionTransformer",
+          "bases": "nn.Module",
+          "line": 45,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.6,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class DinoVisionTransformer (line 45) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/mae",
+      "file": "models_mae.py",
+      "status": "parsed",
+      "lines": 251,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "MaskedAutoencoderViT",
+          "bases": "nn.Module",
+          "line": 22,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 3,
+      "parseMs": 0.4,
+      "mainClass": "MaskedAutoencoderViT",
+      "layers": 35,
+      "connections": 36,
+      "unresolvedParams": 4,
+      "coverage": 11.67,
+      "layerTypes": {
+        "transformerBlock": 32,
+        "linear": 2,
+        "patchEmbed": 1
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "info",
+          "component": null,
+          "componentType": null,
+          "message": "35 layers with no BatchNorm, LayerNorm, or GroupNorm. Without normalization, activations can explode or vanish across layers, causing slow or unstable training. Fix: Add BatchNorm after Conv2d (CV tasks), LayerNorm after attention/FFN (NLP/LLM), or GroupNorm for small batch sizes.",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "the 32 Block nodes are timm Blocks that each hold two LayerNorms, and self.norm / decoder_norm are built through the norm_layer partial (lines 42, 57); the norms are inside opaque blocks or factory callables"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "decoder_embed",
+          "componentType": "linear",
+          "message": "linear 'decoder_embed': computed output shape [1,decoder_embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"decoder_embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "facebookresearch/mae",
+      "file": "models_vit.py",
+      "status": "no-model-class",
+      "lines": 74,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 0,
+        "mainClass": null,
+        "moduleClasses": 0
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)",
+      "reason": "no class defines both __init__ and forward"
+    },
+    {
+      "repo": "facebookresearch/detr",
+      "file": "models/detr.py",
+      "status": "parsed",
+      "lines": 360,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "MLP",
+          "bases": "nn.Module",
+          "line": 289,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 0.7,
+      "mainClass": "MLP",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 0,
+      "coverage": 0.25,
+      "layerTypes": {
+        "relu": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "facebookresearch/detr",
+      "file": "models/transformer.py",
+      "status": "parsed",
+      "lines": 298,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "TransformerDecoderLayer",
+          "bases": "nn.Module",
+          "line": 187,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 21,
+      "parseMs": 0.5,
+      "mainClass": "TransformerDecoderLayer",
+      "layers": 11,
+      "connections": 12,
+      "unresolvedParams": 15,
+      "coverage": 0.52,
+      "layerTypes": {
+        "dropout": 4,
+        "layerNorm": 3,
+        "multiHeadAttention": 2,
+        "linear": 2
+      },
+      "findings": [
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "self_attn",
+          "componentType": "multiHeadAttention",
+          "message": "2 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "DETR feeds positional encodings in through forward (pos, query_pos) from position_encoding.py; this file is the layer stack, and the fact that it holds no PE module is true and intended"
+        },
+        {
+          "rule": "dropout-at-output",
+          "severity": "warn",
+          "component": "dropout3",
+          "componentType": "dropout",
+          "message": "\"dropout3\" (Dropout) is the last layer before Output. In training it randomly zeroes the final logits themselves, injecting noise straight into the loss; at eval it is a no-op, so train and eval behaviour diverge. Dropout belongs before the final projection, not after it. Fix: Move the Dropout before the final Linear/Conv that produces the logits.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "forward dispatches to forward_post / forward_pre (line 265); in forward_post norm3 follows dropout3 (lines 231-232); the parser did not follow the dispatch and ordered by __init__"
+        },
+        {
+          "rule": "double-norm",
+          "severity": "info",
+          "component": "norm1",
+          "componentType": "layerNorm",
+          "message": "\"norm1\" (layerNorm) feeds directly into \"norm2\" (layerNorm). Normalizing an already-normalized tensor is redundant, the second layer mostly re-centres/re-scales what the first produced and just burns its own learnable parameters. Fix: Keep a single normalization layer here, or move one of them next to the layer whose activations it should stabilize.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "attention and dropout sit between norm1 and norm2 in forward_post; the parser ordered by init after failing to follow the forward dispatch"
+        },
+        {
+          "rule": "double-norm",
+          "severity": "info",
+          "component": "norm2",
+          "componentType": "layerNorm",
+          "message": "\"norm2\" (layerNorm) feeds directly into \"norm3\" (layerNorm). Normalizing an already-normalized tensor is redundant, the second layer mostly re-centres/re-scales what the first produced and just burns its own learnable parameters. Fix: Keep a single normalization layer here, or move one of them next to the layer whose activations it should stabilize.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "cross-attention and dropout sit between norm2 and norm3 in forward_post; same ordering artefact"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear1",
+          "componentType": "linear",
+          "message": "linear 'linear1': computed output shape [1,28,dim_feedforward] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"dim_feedforward\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 3,
+      "infos": 2
+    },
+    {
+      "repo": "facebookresearch/detr",
+      "file": "models/backbone.py",
+      "status": "no-model",
+      "lines": 120,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "Joiner",
+          "bases": "nn.Sequential",
+          "line": 96,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.2,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class Joiner (line 96) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/segment-anything",
+      "file": "segment_anything/modeling/image_encoder.py",
+      "status": "no-model",
+      "lines": 396,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "PatchEmbed",
+          "bases": "nn.Module",
+          "line": 364,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 5,
+      "parseMs": 0.5,
+      "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))",
+      "reason": "main class PatchEmbed (line 364) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/segment-anything",
+      "file": "segment_anything/modeling/sam.py",
+      "status": "no-model",
+      "lines": 175,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Sam",
+          "bases": "nn.Module",
+          "line": 18,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.2,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class Sam (line 18) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/segment-anything",
+      "file": "segment_anything/modeling/mask_decoder.py",
+      "status": "no-model",
+      "lines": 177,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "MLP",
+          "bases": "nn.Module",
+          "line": 154,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 5,
+      "parseMs": 0.2,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class MLP (line 154) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/ConvNeXt",
+      "file": "models/convnext.py",
+      "status": "no-model",
+      "lines": 203,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "LayerNorm",
+          "bases": "nn.Module",
+          "line": 119,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 8,
+      "parseMs": 0.3,
+      "cause": "the last class in the file is a norm or utility holding only nn.Parameter",
+      "reason": "main class LayerNorm (line 119) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/deit",
+      "file": "models.py",
+      "status": "parsed",
+      "lines": 180,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "DistilledVisionTransformer",
+          "bases": "VisionTransformer",
+          "line": 20,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 1,
+      "parseMs": 0.2,
+      "mainClass": "DistilledVisionTransformer",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 4,
+      "coverage": 2,
+      "layerTypes": {
+        "linear": 2
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "head_dist",
+          "componentType": "linear",
+          "message": "\"head_dist\" feeds directly into \"head_dist\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "head_dist is duplicated in the graph (conditional constructor on line 26 plus self.head_dist.apply on line 30); the finding says the node feeds into itself"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "head_dist",
+          "componentType": "linear",
+          "message": "linear 'head_dist': computed output shape [1,28,self.num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"self.num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "lucidrains/vit-pytorch",
+      "file": "vit_pytorch/vit.py",
+      "status": "parsed",
+      "lines": 139,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "ViT",
+          "bases": "Module",
+          "line": 85,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 18,
+      "parseMs": 0.2,
+      "mainClass": "ViT",
+      "layers": 4,
+      "connections": 5,
+      "unresolvedParams": 3,
+      "coverage": 0.22,
+      "layerTypes": {
+        "reshape": 1,
+        "dropout": 1,
+        "transformerBlock": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "mlp_head",
+          "componentType": "linear",
+          "message": "linear 'mlp_head': computed output shape [num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "lucidrains/vit-pytorch",
+      "file": "vit_pytorch/simple_vit.py",
+      "status": "parsed",
+      "lines": 121,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "SimpleViT",
+          "bases": "nn.Module",
+          "line": 80,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 13,
+      "parseMs": 0.3,
+      "mainClass": "SimpleViT",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 2,
+      "coverage": 0.15,
+      "layerTypes": {
+        "transformerBlock": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear_head",
+          "componentType": "linear",
+          "message": "linear 'linear_head': computed output shape [1,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "lucidrains/x-transformers",
+      "file": "x_transformers/x_transformers.py",
+      "status": "parsed",
+      "lines": 4682,
+      "classes": {
+        "total": 55,
+        "nnModuleSubclasses": 46,
+        "withInitAndForward": 46,
+        "mainClass": {
+          "name": "XTransformer",
+          "bases": "Module",
+          "line": 4620,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 51
+      },
+      "nnCallsInFile": 49,
+      "parseMs": 6.6,
+      "mainClass": "XTransformer",
+      "layers": 14,
+      "connections": 15,
+      "unresolvedParams": 6,
+      "coverage": 0.29,
+      "layerTypes": {
+        "reshape": 8,
+        "dropout": 2,
+        "linear": 2,
+        "pad": 2
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "info",
+          "component": null,
+          "componentType": null,
+          "message": "14 layers with no BatchNorm, LayerNorm, or GroupNorm. Without normalization, activations can explode or vanish across layers, causing slow or unstable training. Fix: Add BatchNorm after Conv2d (CV tasks), LayerNorm after attention/FFN (NLP/LLM), or GroupNorm for small batch sizes.",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "all norms live inside AttentionLayers, a custom class assembled from keyword config that the parser did not expand"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "project_emb",
+          "componentType": "linear",
+          "message": "linear 'project_emb': computed output shape [1,28,dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "lucidrains/denoising-diffusion-pytorch",
+      "file": "denoising_diffusion_pytorch/denoising_diffusion_pytorch.py",
+      "status": "no-model",
+      "lines": 1115,
+      "classes": {
+        "total": 11,
+        "nnModuleSubclasses": 9,
+        "withInitAndForward": 9,
+        "mainClass": {
+          "name": "GaussianDiffusion",
+          "bases": "Module",
+          "line": 478,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 9
+      },
+      "nnCallsInFile": 20,
+      "parseMs": 1.5,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class GaussianDiffusion (line 478) yielded zero layers"
+    },
+    {
+      "repo": "lucidrains/PaLM-pytorch",
+      "file": "palm_pytorch/palm_pytorch.py",
+      "status": "parsed",
+      "lines": 190,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "ParallelTransformerBlock",
+          "bases": "nn.Module",
+          "line": 71,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 5,
+      "parseMs": 0.3,
+      "mainClass": "ParallelTransformerBlock",
+      "layers": 4,
+      "connections": 5,
+      "unresolvedParams": 4,
+      "coverage": 0.8,
+      "layerTypes": {
+        "linear": 2,
+        "reshape": 2
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "fused_attn_ff_proj",
+          "componentType": "linear",
+          "message": "linear 'fused_attn_ff_proj': computed output shape [1,28,sum(self.fused_dims] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"sum(self.fused_dims\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "attn_out",
+          "componentType": "linear",
+          "message": "linear 'attn_out': computed output shape [dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "openai/whisper",
+      "file": "whisper/model.py",
+      "status": "parsed",
+      "lines": 353,
+      "classes": {
+        "total": 9,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "Whisper",
+          "bases": "nn.Module",
+          "line": 259,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 6
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 0.6,
+      "mainClass": "Whisper",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 2,
+      "coverage": 1.5,
+      "layerTypes": {
+        "gelu": 2,
+        "embedding": 1
+      },
+      "findings": [
+        {
+          "rule": "redundant-activation",
+          "severity": "warn",
+          "component": "gelu",
+          "componentType": "gelu",
+          "message": "\"gelu\" and \"gelu\" are both gelu. Applying the same activation twice adds compute but no expressivity, almost always a duplicated line. Fix: Remove one activation, or insert the Linear/Conv/Norm layer that belongs between them.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "AudioEncoder does F.gelu(self.conv1(x)); F.gelu(self.conv2(x)) (lines 200-201); both Conv1d nodes were dropped (n_state unresolved), which made the two gelus adjacent"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "token_embedding",
+          "componentType": "embedding",
+          "message": "embedding 'token_embedding': computed output shape [1,28,28,n_state] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"n_state\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "openai/CLIP",
+      "file": "clip/model.py",
+      "status": "parsed",
+      "lines": 437,
+      "classes": {
+        "total": 9,
+        "nnModuleSubclasses": 8,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "CLIP",
+          "bases": "nn.Module",
+          "line": 243,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 9
+      },
+      "nnCallsInFile": 32,
+      "parseMs": 0.9,
+      "mainClass": "CLIP",
+      "layers": 25,
+      "connections": 26,
+      "unresolvedParams": 13,
+      "coverage": 0.78,
+      "layerTypes": {
+        "residual": 8,
+        "linear": 4,
+        "conv2d": 3,
+        "batchNorm": 3,
+        "relu": 3,
+        "transformerBlock": 2,
+        "avgpool2d": 1,
+        "embedding": 1
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "k_proj",
+          "componentType": "linear",
+          "message": "\"k_proj\" feeds directly into \"q_proj\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "k_proj, q_proj, v_proj are parallel projections passed to F.multi_head_attention_forward (lines 76-80), not a chain"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "q_proj",
+          "componentType": "linear",
+          "message": "\"q_proj\" feeds directly into \"v_proj\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "parallel q/k/v projections chained in init order"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "v_proj",
+          "componentType": "linear",
+          "message": "\"v_proj\" feeds directly into \"c_proj\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "v_proj and c_proj are joined by the attention op, which the parser did not place between them"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv1",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv1': computed output shape [width // 2,14,14] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"width // 2\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "k_proj",
+          "componentType": "linear",
+          "message": "linear 'k_proj': computed output shape [64,7,embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 3
+    },
+    {
+      "repo": "openai/guided-diffusion",
+      "file": "guided_diffusion/unet.py",
+      "status": "parsed",
+      "lines": 895,
+      "classes": {
+        "total": 12,
+        "nnModuleSubclasses": 9,
+        "withInitAndForward": 10,
+        "mainClass": {
+          "name": "EncoderUNetModel",
+          "bases": "nn.Module",
+          "line": 683,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 18,
+      "parseMs": 1.3,
+      "mainClass": "EncoderUNetModel",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 1,
+      "coverage": 0.06,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "state-spaces/mamba",
+      "file": "mamba_ssm/modules/mamba_simple.py",
+      "status": "parsed",
+      "lines": 295,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Mamba",
+          "bases": "nn.Module",
+          "line": 31,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 0.6,
+      "mainClass": "Mamba",
+      "layers": 12,
+      "connections": 13,
+      "unresolvedParams": 2,
+      "coverage": 2,
+      "layerTypes": {
+        "reshape": 9,
+        "pad": 1,
+        "swish": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "info",
+          "component": null,
+          "componentType": null,
+          "message": "12 layers with no BatchNorm, LayerNorm, or GroupNorm. Without normalization, activations can explode or vanish across layers, causing slow or unstable training. Fix: Add BatchNorm after Conv2d (CV tasks), LayerNorm after attention/FFN (NLP/LLM), or GroupNorm for small batch sizes.",
+          "measured": true,
+          "verdict": "not-a-bug",
+          "reason": "Mamba is the mixer; RMSNorm wraps it in Block (mamba_ssm/modules/block.py) by design, so a mixer with no norm is the intended split"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "out_proj",
+          "componentType": "linear",
+          "message": "linear 'out_proj': computed output shape [self.d_model] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"self.d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "state-spaces/mamba",
+      "file": "mamba_ssm/models/mixer_seq_simple.py",
+      "status": "parsed",
+      "lines": 316,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "MambaLMHeadModel",
+          "bases": "nn.Module, GenerationMixin",
+          "line": 221,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 0.5,
+      "mainClass": "MambaLMHeadModel",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.5,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "lm_head",
+          "componentType": "linear",
+          "message": "linear 'lm_head': computed output shape [1,28,vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "BlinkDL/RWKV-LM",
+      "file": "RWKV-v4neo/src/model.py",
+      "status": "parsed",
+      "lines": 982,
+      "classes": {
+        "total": 8,
+        "nnModuleSubclasses": 7,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "RWKV",
+          "bases": "pl.LightningModule",
+          "line": 717,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 46,
+      "parseMs": 1.6,
+      "mainClass": "RWKV",
+      "layers": 14,
+      "connections": 15,
+      "unresolvedParams": 14,
+      "coverage": 0.3,
+      "layerTypes": {
+        "transformerBlock": 6,
+        "linear": 5,
+        "embedding": 1,
+        "dropout": 1,
+        "layerNorm": 1
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "head_q",
+          "componentType": "linear",
+          "message": "\"head_q\" feeds directly into \"head_k\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "head_q and head_k are the optional copy-head projections (args.head_qk > 0) used in parallel with head; the parser chained them in init order"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "head_k",
+          "componentType": "linear",
+          "message": "\"head_k\" feeds directly into \"head\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "parallel copy-head projection chained in init order"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "head",
+          "componentType": "linear",
+          "message": "\"head\" feeds directly into \"head_q\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "head is the LM head; the graph shows it feeding head_q, which only exists because init order was taken as data flow"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "emb",
+          "componentType": "embedding",
+          "message": "embedding 'emb': computed output shape [1,28,28,args.n_embd] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"args.n_embd\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 3
+    },
+    {
+      "repo": "BlinkDL/RWKV-LM",
+      "file": "RWKV-v7/rwkv_v7_demo.py",
+      "status": "parsed",
+      "lines": 437,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "RWKV",
+          "bases": "nn.Module",
+          "line": 349,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 15,
+      "parseMs": 0.7,
+      "mainClass": "RWKV",
+      "layers": 9,
+      "connections": 10,
+      "unresolvedParams": 5,
+      "coverage": 0.6,
+      "layerTypes": {
+        "transformerBlock": 6,
+        "embedding": 1,
+        "layerNorm": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "emb",
+          "componentType": "embedding",
+          "message": "embedding 'emb': computed output shape [1,28,28,args.n_embd] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"args.n_embd\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "deepseek-ai/DeepSeek-V3",
+      "file": "inference/model.py",
+      "status": "parsed",
+      "lines": 809,
+      "classes": {
+        "total": 13,
+        "nnModuleSubclasses": 10,
+        "withInitAndForward": 12,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "nn.Module",
+          "line": 738,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 1.4,
+      "mainClass": "Transformer",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "reshape": 1,
+        "rmsNorm": 1
+      },
+      "findings": [
+        {
+          "rule": "bn-at-output",
+          "severity": "warn",
+          "component": "rms_norm",
+          "componentType": "rmsNorm",
+          "message": "\"rms_norm\" (rmsNorm) is the last layer before Output. Normalizing the raw logits constrains the output range and breaks standard loss functions. Fix: Move normalization before the final Linear/Conv layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "Transformer.forward applies self.head (ColumnParallelLinear, a custom class in the same file) after the norm; the custom linear is not mapped to a node"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "mistralai/mistral-inference",
+      "file": "src/mistral_inference/transformer.py",
+      "status": "parsed",
+      "lines": 339,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "ModelBase, LoRALoaderMixin",
+          "line": 33,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 0.6,
+      "mainClass": "Transformer",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.5,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "output",
+          "componentType": "linear",
+          "message": "linear 'output': computed output shape [1,28,args.vocab_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"args.vocab_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "meta-llama/llama",
+      "file": "llama/model.py",
+      "status": "no-model",
+      "lines": 496,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "nn.Module",
+          "line": 413,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.8,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class Transformer (line 413) yielded zero layers"
+    },
+    {
+      "repo": "meta-llama/llama3",
+      "file": "llama/model.py",
+      "status": "no-model",
+      "lines": 303,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "nn.Module",
+          "line": 251,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.4,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class Transformer (line 251) yielded zero layers"
+    },
+    {
+      "repo": "EleutherAI/gpt-neox",
+      "file": "megatron/model/gpt2_model.py",
+      "status": "no-model-class",
+      "lines": 414,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 0,
+        "mainClass": null,
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.6,
+      "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)",
+      "reason": "no class defines both __init__ and forward"
+    },
+    {
+      "repo": "EleutherAI/gpt-neox",
+      "file": "megatron/model/transformer.py",
+      "status": "no-model",
+      "lines": 1249,
+      "classes": {
+        "total": 8,
+        "nnModuleSubclasses": 6,
+        "withInitAndForward": 6,
+        "mainClass": {
+          "name": "NormPipe",
+          "bases": "nn.Module",
+          "line": 1204,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 1,
+      "parseMs": 1.5,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class NormPipe (line 1204) yielded zero layers"
+    },
+    {
+      "repo": "jzhang38/TinyLlama",
+      "file": "lit_gpt/model.py",
+      "status": "parsed",
+      "lines": 357,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "LLaMAMLP",
+          "bases": "nn.Module",
+          "line": 306,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 9,
+      "parseMs": 0.6,
+      "mainClass": "LLaMAMLP",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 0,
+      "coverage": 0.11,
+      "layerTypes": {
+        "swiglu": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "CompVis/stable-diffusion",
+      "file": "ldm/modules/diffusionmodules/openaimodel.py",
+      "status": "parsed",
+      "lines": 962,
+      "classes": {
+        "total": 12,
+        "nnModuleSubclasses": 10,
+        "withInitAndForward": 10,
+        "mainClass": {
+          "name": "EncoderUNetModel",
+          "bases": "nn.Module",
+          "line": 745,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 20,
+      "parseMs": 1.4,
+      "mainClass": "EncoderUNetModel",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 1,
+      "coverage": 0.05,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "CompVis/stable-diffusion",
+      "file": "ldm/modules/attention.py",
+      "status": "no-model",
+      "lines": 261,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 7,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "SpatialTransformer",
+          "bases": "nn.Module",
+          "line": 218,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 22,
+      "parseMs": 0.3,
+      "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))",
+      "reason": "main class SpatialTransformer (line 218) yielded zero layers"
+    },
+    {
+      "repo": "lllyasviel/ControlNet",
+      "file": "cldm/cldm.py",
+      "status": "no-model",
+      "lines": 436,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "ControlNet",
+          "bases": "nn.Module",
+          "line": 48,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 8,
+      "parseMs": 0.9,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class ControlNet (line 48) yielded zero layers"
+    },
+    {
+      "repo": "ultralytics/ultralytics",
+      "file": "ultralytics/nn/tasks.py",
+      "status": "no-model",
+      "lines": 2285,
+      "classes": {
+        "total": 14,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Ensemble",
+          "bases": "torch.nn.ModuleList",
+          "line": 1502,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 13
+      },
+      "nnCallsInFile": 7,
+      "parseMs": 3.5,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class Ensemble (line 1502) yielded zero layers"
+    },
+    {
+      "repo": "ultralytics/ultralytics",
+      "file": "ultralytics/nn/modules/block.py",
+      "status": "no-model",
+      "lines": 2081,
+      "classes": {
+        "total": 54,
+        "nnModuleSubclasses": 43,
+        "withInitAndForward": 43,
+        "mainClass": {
+          "name": "Proto26",
+          "bases": "Proto",
+          "line": 1988,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 44
+      },
+      "nnCallsInFile": 53,
+      "parseMs": 3.1,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class Proto26 (line 1988) yielded zero layers"
+    },
+    {
+      "repo": "WongKinYiu/yolov7",
+      "file": "models/yolo.py",
+      "status": "no-model",
+      "lines": 844,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 6,
+        "withInitAndForward": 6,
+        "mainClass": {
+          "name": "Model",
+          "bases": "nn.Module",
+          "line": 508,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 6
+      },
+      "nnCallsInFile": 8,
+      "parseMs": 1.2,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class Model (line 508) yielded zero layers"
+    },
+    {
+      "repo": "WongKinYiu/yolov7",
+      "file": "models/common.py",
+      "status": "no-model",
+      "lines": 2020,
+      "classes": {
+        "total": 75,
+        "nnModuleSubclasses": 50,
+        "withInitAndForward": 50,
+        "mainClass": {
+          "name": "ST2CSPC",
+          "bases": "nn.Module",
+          "line": 2001,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 50
+      },
+      "nnCallsInFile": 59,
+      "parseMs": 2.8,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class ST2CSPC (line 2001) yielded zero layers"
+    },
+    {
+      "repo": "milesial/Pytorch-UNet",
+      "file": "unet/unet_model.py",
+      "status": "no-model",
+      "lines": 48,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "UNet",
+          "bases": "nn.Module",
+          "line": 6,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class UNet (line 6) yielded zero layers"
+    },
+    {
+      "repo": "milesial/Pytorch-UNet",
+      "file": "unet/unet_parts.py",
+      "status": "parsed",
+      "lines": 78,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "OutConv",
+          "bases": "nn.Module",
+          "line": 71,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 10,
+      "parseMs": 0.1,
+      "mainClass": "OutConv",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.1,
+      "layerTypes": {
+        "conv2d": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv': computed output shape [out_channels,28,28] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"out_channels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "kuangliu/pytorch-cifar",
+      "file": "models/resnet.py",
+      "status": "parsed",
+      "lines": 133,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "ResNet",
+          "bases": "nn.Module",
+          "line": 73,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 17,
+      "parseMs": 0.2,
+      "mainClass": "ResNet",
+      "layers": 4,
+      "connections": 5,
+      "unresolvedParams": 2,
+      "coverage": 0.24,
+      "layerTypes": {
+        "batchNorm": 1,
+        "relu": 1,
+        "avgpool2d": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "pool-into-linear-no-flatten",
+          "severity": "warn",
+          "component": "avg_pool2d",
+          "componentType": "avgpool2d",
+          "message": "\"avg_pool2d\" (avgpool2d) still carries [channels, …spatial] dims, but \"linear\" (Linear) expects a flat [batch, features] tensor. At runtime this raises a shape error. Fix: Insert a Flatten (keep spatial info) or a Global Average Pool (collapse spatial dims) between the pooling and the Linear layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "out = out.view(out.size(0), -1) sits between F.avg_pool2d and self.linear; .view is invisible to the parser"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear",
+          "componentType": "linear",
+          "message": "linear 'linear': computed output shape [1,26,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "kuangliu/pytorch-cifar",
+      "file": "models/vgg.py",
+      "status": "parsed",
+      "lines": 48,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "VGG",
+          "bases": "nn.Module",
+          "line": 14,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 0.1,
+      "mainClass": "VGG",
+      "layers": 6,
+      "connections": 7,
+      "unresolvedParams": 2,
+      "coverage": 1,
+      "layerTypes": {
+        "maxpool2d": 1,
+        "conv2d": 1,
+        "batchNorm": 1,
+        "relu": 1,
+        "avgpool2d": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "pool-into-linear-no-flatten",
+          "severity": "warn",
+          "component": "features_4",
+          "componentType": "avgpool2d",
+          "message": "\"features_4\" (avgpool2d) still carries [channels, …spatial] dims, but \"classifier\" (Linear) expects a flat [batch, features] tensor. At runtime this raises a shape error. Fix: Insert a Flatten (keep spatial info) or a Global Average Pool (collapse spatial dims) between the pooling and the Linear layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "out = out.view(out.size(0), -1) sits between self.features and self.classifier; .view is invisible to the parser"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "features_1",
+          "componentType": "conv2d",
+          "message": "conv2d 'features_1': computed output shape [x,14,14] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"x\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "kuangliu/pytorch-cifar",
+      "file": "models/densenet.py",
+      "status": "parsed",
+      "lines": 108,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "DenseNet",
+          "bases": "nn.Module",
+          "line": 36,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 9,
+      "parseMs": 0.3,
+      "mainClass": "DenseNet",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 3,
+      "coverage": 0.56,
+      "layerTypes": {
+        "conv2d": 1,
+        "batchNorm": 1,
+        "avgpool2d": 1,
+        "relu": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv1",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv1': computed output shape [num_planes,28,28] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_planes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "kuangliu/pytorch-cifar",
+      "file": "models/mobilenetv2.py",
+      "status": "parsed",
+      "lines": 87,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "MobileNetV2",
+          "bases": "nn.Module",
+          "line": 40,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 13,
+      "parseMs": 0.2,
+      "mainClass": "MobileNetV2",
+      "layers": 9,
+      "connections": 10,
+      "unresolvedParams": 1,
+      "coverage": 0.69,
+      "layerTypes": {
+        "conv2d": 2,
+        "batchNorm": 2,
+        "relu": 2,
+        "transformerBlock": 1,
+        "avgpool2d": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "pool-into-linear-no-flatten",
+          "severity": "warn",
+          "component": "avg_pool2d",
+          "componentType": "avgpool2d",
+          "message": "\"avg_pool2d\" (avgpool2d) still carries [channels, …spatial] dims, but \"linear\" (Linear) expects a flat [batch, features] tensor. At runtime this raises a shape error. Fix: Insert a Flatten (keep spatial info) or a Global Average Pool (collapse spatial dims) between the pooling and the Linear layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "out = out.view(out.size(0), -1) sits between F.avg_pool2d and self.linear; .view is invisible to the parser"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear",
+          "componentType": "linear",
+          "message": "linear 'linear': computed output shape [1280,26,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/examples",
+      "file": "mnist/main.py",
+      "status": "parsed",
+      "lines": 142,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Net",
+          "bases": "nn.Module",
+          "line": 10,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 0.3,
+      "mainClass": "Net",
+      "layers": 11,
+      "connections": 12,
+      "unresolvedParams": 0,
+      "coverage": 1.83,
+      "layerTypes": {
+        "relu": 3,
+        "conv2d": 2,
+        "dropout": 2,
+        "linear": 2,
+        "maxpool2d": 1,
+        "flatten": 1
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "info",
+          "component": null,
+          "componentType": null,
+          "message": "11 layers with no BatchNorm, LayerNorm, or GroupNorm. Without normalization, activations can explode or vanish across layers, causing slow or unstable training. Fix: Add BatchNorm after Conv2d (CV tasks), LayerNorm after attention/FFN (NLP/LLM), or GroupNorm for small batch sizes.",
+          "measured": true,
+          "verdict": "not-a-bug",
+          "reason": "the MNIST example is 2 conv + 2 fc and trains to about 99% without normalization; the 11-layer count includes relu, dropout, pool and flatten nodes"
+        }
+      ],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 1
+    },
+    {
+      "repo": "pytorch/examples",
+      "file": "word_language_model/model.py",
+      "status": "no-model",
+      "lines": 145,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "TransformerModel",
+          "bases": "nn.Transformer",
+          "line": 107,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 7,
+      "parseMs": 0.2,
+      "cause": "a triple-quoted string spanning lines inside a call in __init__ (a raise ValueError with a triple-quoted message) aborts the parse of the whole file",
+      "reason": "main class TransformerModel (line 107) yielded zero layers"
+    },
+    {
+      "repo": "jadore801120/attention-is-all-you-need-pytorch",
+      "file": "transformer/Models.py",
+      "status": "parsed",
+      "lines": 199,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "nn.Module",
+          "line": 128,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 7,
+      "parseMs": 0.4,
+      "mainClass": "Transformer",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.14,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "trg_word_prj",
+          "componentType": "linear",
+          "message": "linear 'trg_word_prj': computed output shape [1,28,n_trg_vocab] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"n_trg_vocab\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "jadore801120/attention-is-all-you-need-pytorch",
+      "file": "transformer/SubLayers.py",
+      "status": "parsed",
+      "lines": 83,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "PositionwiseFeedForward",
+          "bases": "nn.Module",
+          "line": 62,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 10,
+      "parseMs": 0.1,
+      "mainClass": "PositionwiseFeedForward",
+      "layers": 5,
+      "connections": 6,
+      "unresolvedParams": 6,
+      "coverage": 0.5,
+      "layerTypes": {
+        "linear": 2,
+        "relu": 1,
+        "dropout": 1,
+        "layerNorm": 1
+      },
+      "findings": [
+        {
+          "rule": "dropout-before-bn",
+          "severity": "info",
+          "component": "dropout",
+          "componentType": "dropout",
+          "message": "\"dropout\" → \"layer_norm\": BatchNorm re-normalizes the random zeros introduced by Dropout, nullifying most of its regularization effect. Fix: Reorder to Conv → BN → Activation → Dropout.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "dropout, residual add, LayerNorm is the standard post-norm Transformer sublayer; the finding also mislabels LayerNorm as BatchNorm in its text"
+        },
+        {
+          "rule": "bn-at-output",
+          "severity": "warn",
+          "component": "layer_norm",
+          "componentType": "layerNorm",
+          "message": "\"layer_norm\" (layerNorm) is the last layer before Output. Normalizing the raw logits constrains the output range and breaks standard loss functions. Fix: Move normalization before the final Linear/Conv layer.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "PositionwiseFeedForward is a post-norm sublayer that ends in LayerNorm by design (original Transformer); the parser read a sublayer as if it were the whole model"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "w_1",
+          "componentType": "linear",
+          "message": "\"w_1\" feeds directly into \"w_2\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "self.w_2(F.relu(self.w_1(x))) (line 76) has a functional ReLU between the two linears; the parser found the relu but did not place it inside the nested call"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "w_1",
+          "componentType": "linear",
+          "message": "linear 'w_1': computed output shape [1,28,d_hid] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"d_hid\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 2
+    },
+    {
+      "repo": "jadore801120/attention-is-all-you-need-pytorch",
+      "file": "transformer/Layers.py",
+      "status": "parsed",
+      "lines": 43,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "DecoderLayer",
+          "bases": "nn.Module",
+          "line": 25,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "mainClass": "DecoderLayer",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "multiHeadAttention": 2
+      },
+      "findings": [
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "slf_attn",
+          "componentType": "multiHeadAttention",
+          "message": "2 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "PositionalEncoding is applied in Models.py Encoder/Decoder before these layers; Layers.py legitimately has attention and no PE"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "hyunwoongko/transformer",
+      "file": "models/model/transformer.py",
+      "status": "no-model",
+      "lines": 56,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Transformer",
+          "bases": "nn.Module",
+          "line": 13,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class Transformer (line 13) yielded zero layers"
+    },
+    {
+      "repo": "hyunwoongko/transformer",
+      "file": "models/model/encoder.py",
+      "status": "parsed",
+      "lines": 34,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Encoder",
+          "bases": "nn.Module",
+          "line": 12,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "mainClass": "Encoder",
+      "layers": 6,
+      "connections": 7,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "transformerBlock": 6
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "hyunwoongko/transformer",
+      "file": "models/blocks/encoder_layer.py",
+      "status": "parsed",
+      "lines": 42,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "EncoderLayer",
+          "bases": "nn.Module",
+          "line": 13,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 0.1,
+      "mainClass": "EncoderLayer",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 2,
+      "coverage": 1.5,
+      "layerTypes": {
+        "dropout": 2,
+        "multiHeadAttention": 1
+      },
+      "findings": [
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "attention",
+          "componentType": "multiHeadAttention",
+          "message": "1 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "TransformerEmbedding (models/embedding) adds PE in Encoder before the layer stack; the layer file holding no PE is a true fact of the split, not a defect"
+        },
+        {
+          "rule": "dropout-at-output",
+          "severity": "warn",
+          "component": "dropout2",
+          "componentType": "dropout",
+          "message": "\"dropout2\" (Dropout) is the last layer before Output. In training it randomly zeroes the final logits themselves, injecting noise straight into the loss; at eval it is a no-op, so train and eval behaviour diverge. Dropout belongs before the final projection, not after it. Fix: Move the Dropout before the final Linear/Conv that produces the logits.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "norm2 follows dropout2 at line 40, but norm2 is the repo-local LayerNorm class from another file and was dropped, so dropout2 became the last node"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "hyunwoongko/transformer",
+      "file": "models/layers/multi_head_attention.py",
+      "status": "parsed",
+      "lines": 68,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "MultiHeadAttention",
+          "bases": "nn.Module",
+          "line": 11,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 0.1,
+      "mainClass": "MultiHeadAttention",
+      "layers": 4,
+      "connections": 5,
+      "unresolvedParams": 8,
+      "coverage": 1,
+      "layerTypes": {
+        "linear": 4
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "w_v",
+          "componentType": "linear",
+          "message": "\"w_v\" feeds directly into \"w_k\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "w_q, w_k, w_v are parallel projections of the same input; chained in init order"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "w_k",
+          "componentType": "linear",
+          "message": "\"w_k\" feeds directly into \"w_q\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "parallel projection chained in init order"
+        },
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "w_q",
+          "componentType": "linear",
+          "message": "\"w_q\" feeds directly into \"w_concat\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "w_q feeds the attention op, not w_concat directly; the attention op was not placed between them"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "w_v",
+          "componentType": "linear",
+          "message": "linear 'w_v': computed output shape [1,28,d_model] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"d_model\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 3
+    },
+    {
+      "repo": "kyegomez/BitNet",
+      "file": "bitnet/bit_transformer.py",
+      "status": "parsed",
+      "lines": 149,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "BitNetTransformer",
+          "bases": "nn.Module",
+          "line": 92,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 0.2,
+      "mainClass": "BitNetTransformer",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 3,
+      "coverage": 0.75,
+      "layerTypes": {
+        "embedding": 1,
+        "layerNorm": 1,
+        "transformerBlock": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "emb",
+          "componentType": "embedding",
+          "message": "embedding 'emb': computed output shape [1,28,28,dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "kyegomez/BitNet",
+      "file": "bitnet/bitlinear.py",
+      "status": "no-model-class",
+      "lines": 61,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 0,
+        "mainClass": null,
+        "moduleClasses": 0
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 0.1,
+      "cause": "no class defines both __init__ and forward (subclass overriding forward only, or pipeline module)",
+      "reason": "no class defines both __init__ and forward"
+    },
+    {
+      "repo": "Dao-AILab/flash-attention",
+      "file": "flash_attn/models/gpt.py",
+      "status": "parsed",
+      "lines": 1081,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "GPTLMHeadModel",
+          "bases": "GPTPreTrainedModel, GenerationMixin",
+          "line": 577,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 3,
+      "parseMs": 1.9,
+      "mainClass": "GPTLMHeadModel",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 4,
+      "coverage": 1,
+      "layerTypes": {
+        "linear": 2,
+        "reshape": 1
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "project_out",
+          "componentType": "linear",
+          "message": "\"project_out\" feeds directly into \"lm_head\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "project_out exists only when embed_dim != n_embd (muP width projection, line 593) and feeds lm_head directly; two stacked linears with no activation is the intended design there"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "project_out",
+          "componentType": "linear",
+          "message": "linear 'project_out': computed output shape [1,28,embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "Dao-AILab/flash-attention",
+      "file": "flash_attn/modules/mha.py",
+      "status": "parsed",
+      "lines": 994,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 6,
+        "withInitAndForward": 6,
+        "mainClass": {
+          "name": "ParallelMHA",
+          "bases": "nn.Module",
+          "line": 707,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 6
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 1.6,
+      "mainClass": "ParallelMHA",
+      "layers": 8,
+      "connections": 9,
+      "unresolvedParams": 0,
+      "coverage": 0.73,
+      "layerTypes": {
+        "reshape": 6,
+        "rope": 2
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "info",
+          "component": null,
+          "componentType": null,
+          "message": "8 layers with no BatchNorm, LayerNorm, or GroupNorm. Without normalization, activations can explode or vanish across layers, causing slow or unstable training. Fix: Add BatchNorm after Conv2d (CV tasks), LayerNorm after attention/FFN (NLP/LLM), or GroupNorm for small batch sizes.",
+          "measured": true,
+          "verdict": "not-a-bug",
+          "reason": "an attention module has no norm by construction; the norm sits in the Block that wraps it"
+        },
+        {
+          "rule": "duplicate-positional-encoding",
+          "severity": "info",
+          "component": "rotary_emb",
+          "componentType": "rope",
+          "message": "\"rotary_emb\" (rope) and \"rotary_emb\" (rope) both add position to the same tensor. Stacking absolute + rotary, or two of the same, double-counts position and tends to hurt more than help. Separate towers with one each (a vision and a text branch, an encoder and a decoder) are not this. Fix: Keep a single positional scheme on this path: sinusoidal OR learned OR RoPE / ALiBi.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "self.rotary_emb = RotaryEmbedding(...) appears once in MHA (line 440) and once in ParallelMHA (line 779); the parser merged init lines from two classes into one graph"
+        }
+      ],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 2
+    },
+    {
+      "repo": "NVIDIA/Megatron-LM",
+      "file": "megatron/core/models/gpt/gpt_model.py",
+      "status": "parsed",
+      "lines": 959,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "GPTModel",
+          "bases": "LanguageModule, GraphableMegatronModule",
+          "line": 52,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 1.7,
+      "mainClass": "GPTModel",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "transformerBlock": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "NVIDIA/Megatron-LM",
+      "file": "megatron/core/transformer/transformer_layer.py",
+      "status": "no-model",
+      "lines": 2331,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "TransformerLayer",
+          "bases": "GraphableMegatronModule, BaseTransformerLayer",
+          "line": 318,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 4.3,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class TransformerLayer (line 318) yielded zero layers"
+    },
+    {
+      "repo": "NVIDIA/Megatron-LM",
+      "file": "megatron/core/transformer/attention.py",
+      "status": "no-model",
+      "lines": 2199,
+      "classes": {
+        "total": 13,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Attention",
+          "bases": "MegatronModule, ABC",
+          "line": 289,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 3.3,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class Attention (line 289) yielded zero layers"
+    },
+    {
+      "repo": "microsoft/LoRA",
+      "file": "loralib/layers.py",
+      "status": "no-model",
+      "lines": 312,
+      "classes": {
+        "total": 8,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "ConvLoRA",
+          "bases": "nn.Module, LoRALayer",
+          "line": 246,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 1,
+      "parseMs": 0.5,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class ConvLoRA (line 246) yielded zero layers"
+    },
+    {
+      "repo": "ashawkey/stable-dreamfusion",
+      "file": "nerf/network.py",
+      "status": "parsed",
+      "lines": 241,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "NeRFNetwork",
+          "bases": "NeRFRenderer",
+          "line": 89,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 7,
+      "parseMs": 0.4,
+      "mainClass": "NeRFNetwork",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 0,
+      "coverage": 0.14,
+      "layerTypes": {
+        "reshape": 1
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "ashawkey/stable-dreamfusion",
+      "file": "nerf/renderer.py",
+      "status": "no-model",
+      "lines": 1191,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "NeRFRenderer",
+          "bases": "nn.Module",
+          "line": 257,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 1.7,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class NeRFRenderer (line 257) yielded zero layers"
+    },
+    {
+      "repo": "huggingface/diffusers",
+      "file": "src/diffusers/models/unets/unet_2d.py",
+      "status": "parsed",
+      "lines": 354,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "UNet2DModel",
+          "bases": "ModelMixin, ConfigMixin",
+          "line": 39,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 0.7,
+      "mainClass": "UNet2DModel",
+      "layers": 7,
+      "connections": 8,
+      "unresolvedParams": 13,
+      "coverage": 1.17,
+      "layerTypes": {
+        "embedding": 3,
+        "conv2d": 2,
+        "groupNorm": 1,
+        "swish": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "time_proj",
+          "componentType": "embedding",
+          "message": "embedding 'time_proj': computed output shape [1,28,28,block_out_channels[0]] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"block_out_channels[0]\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "huggingface/diffusers",
+      "file": "src/diffusers/models/attention.py",
+      "status": "no-model",
+      "lines": 1743,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 8,
+        "withInitAndForward": 8,
+        "mainClass": {
+          "name": "FeedForward",
+          "bases": "nn.Module",
+          "line": 1682,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 8
+      },
+      "nnCallsInFile": 26,
+      "parseMs": 2.9,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class FeedForward (line 1682) yielded zero layers"
+    },
+    {
+      "repo": "huggingface/diffusers",
+      "file": "src/diffusers/models/unets/unet_2d_condition.py",
+      "status": "no-model",
+      "lines": 1236,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "UNet2DConditionModel",
+          "bases": "",
+          "line": 76,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 2.4,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class UNet2DConditionModel (line 76) yielded zero layers"
+    },
+    {
+      "repo": "open-mmlab/mmdetection",
+      "file": "mmdet/models/backbones/resnet.py",
+      "status": "no-model",
+      "lines": 673,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "ResNet",
+          "bases": "BaseModule",
+          "line": 306,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 7,
+      "parseMs": 0.9,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class ResNet (line 306) yielded zero layers"
+    },
+    {
+      "repo": "open-mmlab/mmdetection",
+      "file": "mmdet/models/backbones/swin.py",
+      "status": "parsed",
+      "lines": 820,
+      "classes": {
+        "total": 5,
+        "nnModuleSubclasses": 5,
+        "withInitAndForward": 5,
+        "mainClass": {
+          "name": "SwinTransformer",
+          "bases": "BaseModule",
+          "line": 468,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 5
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 1.2,
+      "mainClass": "SwinTransformer",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 1,
+      "coverage": 0.33,
+      "layerTypes": {
+        "patchEmbed": 1,
+        "dropout": 1
+      },
+      "findings": [
+        {
+          "rule": "dropout-at-output",
+          "severity": "warn",
+          "component": "drop_after_pos",
+          "componentType": "dropout",
+          "message": "\"drop_after_pos\" (Dropout) is the last layer before Output. In training it randomly zeroes the final logits themselves, injecting noise straight into the loss; at eval it is a no-op, so train and eval behaviour diverge. Dropout belongs before the final projection, not after it. Fix: Move the Dropout before the final Linear/Conv that produces the logits.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "drop_after_pos (line 596) is followed by self.stages, a ModuleList of SwinBlockSequence built in a loop from config dicts, which the parser did not expand"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "pytorch/audio",
+      "file": "src/torchaudio/models/wav2vec2/model.py",
+      "status": "no-model",
+      "lines": 1580,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "HuBERTPretrainModel",
+          "bases": "Module",
+          "line": 123,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 2,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class HuBERTPretrainModel (line 123) yielded zero layers"
+    },
+    {
+      "repo": "pytorch/audio",
+      "file": "src/torchaudio/models/wav2vec2/components.py",
+      "status": "no-model",
+      "lines": 1168,
+      "classes": {
+        "total": 13,
+        "nnModuleSubclasses": 11,
+        "withInitAndForward": 11,
+        "mainClass": {
+          "name": "LogitGenerator",
+          "bases": "Module",
+          "line": 1104,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 20,
+      "parseMs": 1.6,
+      "cause": "torch.nn.X fully-qualified prefix instead of nn.X",
+      "reason": "main class LogitGenerator (line 1104) yielded zero layers"
+    },
+    {
+      "repo": "pytorch/audio",
+      "file": "src/torchaudio/models/conformer.py",
+      "status": "no-model",
+      "lines": 294,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 4,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "Conformer",
+          "bases": "torch.nn.Module",
+          "line": 215,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 19,
+      "parseMs": 0.3,
+      "cause": "torch.nn.X fully-qualified prefix instead of nn.X",
+      "reason": "main class Conformer (line 215) yielded zero layers"
+    },
+    {
+      "repo": "speechbrain/speechbrain",
+      "file": "speechbrain/lobes/models/transformer/Transformer.py",
+      "status": "no-model",
+      "lines": 1101,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 7,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "NormalizedEmbedding",
+          "bases": "nn.Module",
+          "line": 966,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 1.3,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class NormalizedEmbedding (line 966) yielded zero layers"
+    },
+    {
+      "repo": "speechbrain/speechbrain",
+      "file": "speechbrain/nnet/attention.py",
+      "status": "parsed",
+      "lines": 1441,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 9,
+        "withInitAndForward": 8,
+        "mainClass": {
+          "name": "RoPEMHA",
+          "bases": "nn.Module",
+          "line": 1191,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 9
+      },
+      "nnCallsInFile": 24,
+      "parseMs": 2.2,
+      "mainClass": "RoPEMHA",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 2,
+      "coverage": 0.08,
+      "layerTypes": {
+        "attention": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "attention-no-pe",
+          "severity": "warn",
+          "component": "scaled_dot_product_attention",
+          "componentType": "attention",
+          "message": "1 attention layer(s) present but no positional encoding found. Attention is permutation-invariant, without position information the model cannot distinguish token order. Fix: Add a PositionalEncoding (sinusoidal) or RoPE layer before the first attention layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "the class is RoPEMHA: rotary position is applied functionally inside forward, so the one attention module the parser found is the one that carries its own PE"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "out_proj",
+          "componentType": "linear",
+          "message": "linear 'out_proj': computed output shape [1,28,embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "rwightman/gen-efficientnet-pytorch",
+      "file": "geffnet/gen_efficientnet.py",
+      "status": "parsed",
+      "lines": 1451,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "GenEfficientNet",
+          "bases": "nn.Module",
+          "line": 215,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 1.7,
+      "mainClass": "GenEfficientNet",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 2,
+      "coverage": 0.75,
+      "layerTypes": {
+        "globalAvgPool2d": 1,
+        "dropout": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "classifier",
+          "componentType": "linear",
+          "message": "linear 'classifier': computed output shape [num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "rwightman/gen-efficientnet-pytorch",
+      "file": "geffnet/mobilenetv3.py",
+      "status": "parsed",
+      "lines": 365,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "MobileNetV3",
+          "bases": "nn.Module",
+          "line": 48,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 5,
+      "parseMs": 0.5,
+      "mainClass": "MobileNetV3",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 2,
+      "coverage": 0.4,
+      "layerTypes": {
+        "dropout": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "classifier",
+          "componentType": "linear",
+          "message": "linear 'classifier': computed output shape [1,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "xinntao/ESRGAN",
+      "file": "RRDBNet_arch.py",
+      "status": "parsed",
+      "lines": 79,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "RRDBNet",
+          "bases": "nn.Module",
+          "line": 53,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 13,
+      "parseMs": 0.2,
+      "mainClass": "RRDBNet",
+      "layers": 11,
+      "connections": 12,
+      "unresolvedParams": 12,
+      "coverage": 0.85,
+      "layerTypes": {
+        "conv2d": 6,
+        "leakyRelu": 3,
+        "interpolate": 2
+      },
+      "findings": [
+        {
+          "rule": "deep-no-norm",
+          "severity": "warn",
+          "component": "conv_first",
+          "componentType": "conv2d",
+          "message": "A conv stack this deep with no normalization between the layers trains poorly on realistic budgets. Measured in our production training corpus: designs with a run of 6 reached 15-27% of the reference accuracy on the same budget; shallower or normalized stacks reached 93-100%. Fix: Insert BatchNorm every 2-3 conv layers (or GroupNorm for small batches), and downsample with pooling or strides as depth grows.",
+          "measured": true,
+          "verdict": "not-a-bug",
+          "reason": "ESRGAN removes BatchNorm on purpose (stated design choice of the paper for super-resolution); the RRDB trunk built by make_layer (line 59) was also not expanded, but the no-norm fact is real and intentional"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "conv_first",
+          "componentType": "conv2d",
+          "message": "conv2d 'conv_first': computed output shape [nf,28,28] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"nf\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 2,
+      "infos": 0
+    },
+    {
+      "repo": "NVlabs/stylegan2-ada-pytorch",
+      "file": "training/networks.py",
+      "status": "parsed",
+      "lines": 730,
+      "classes": {
+        "total": 12,
+        "nnModuleSubclasses": 12,
+        "withInitAndForward": 12,
+        "mainClass": {
+          "name": "Discriminator",
+          "bases": "torch.nn.Module",
+          "line": 673,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 12
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 1.5,
+      "mainClass": "Discriminator",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "reshape": 2
+      },
+      "findings": [],
+      "blocks": 0,
+      "warns": 0,
+      "infos": 0
+    },
+    {
+      "repo": "facebookresearch/fairseq",
+      "file": "fairseq/models/transformer/transformer_encoder.py",
+      "status": "no-model",
+      "lines": 363,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "TransformerEncoderBase",
+          "bases": "FairseqEncoder",
+          "line": 37,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 1,
+      "parseMs": 0.5,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class TransformerEncoderBase (line 37) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/fairseq",
+      "file": "fairseq/modules/multihead_attention.py",
+      "status": "no-model",
+      "lines": 911,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "MultiheadAttention",
+          "bases": "FairseqIncrementalDecoder",
+          "line": 63,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 1.4,
+      "cause": "constructor call split across lines (black-formatted nn.Conv2d(\\n ...))",
+      "reason": "main class MultiheadAttention (line 63) yielded zero layers"
+    },
+    {
+      "repo": "facebookresearch/fairseq",
+      "file": "fairseq/models/roberta/model.py",
+      "status": "parsed",
+      "lines": 701,
+      "classes": {
+        "total": 4,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 4,
+        "mainClass": {
+          "name": "RobertaEncoder",
+          "bases": "FairseqEncoder",
+          "line": 536,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 6,
+      "parseMs": 0.9,
+      "mainClass": "RobertaEncoder",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.17,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "dense",
+          "componentType": "linear",
+          "message": "linear 'dense': computed output shape [1,28,embed_dim] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"embed_dim\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "ultralytics/yolov5",
+      "file": "models/yolo.py",
+      "status": "no-model",
+      "lines": 494,
+      "classes": {
+        "total": 6,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "DetectionModel",
+          "bases": "BaseModel",
+          "line": 215,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 6
+      },
+      "nnCallsInFile": 3,
+      "parseMs": 0.7,
+      "cause": "sub-modules built by factory or builder calls (create_conv2d, builder(), get_down_block, build_module, parse_model(yaml), build_conv_layer, norm_class(), conv_module(), embed_layer(), block_fn)",
+      "reason": "main class DetectionModel (line 215) yielded zero layers"
+    },
+    {
+      "repo": "ultralytics/yolov5",
+      "file": "models/common.py",
+      "status": "parsed",
+      "lines": 1141,
+      "classes": {
+        "total": 26,
+        "nnModuleSubclasses": 19,
+        "withInitAndForward": 19,
+        "mainClass": {
+          "name": "Classify",
+          "bases": "nn.Module",
+          "line": 1120,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 19
+      },
+      "nnCallsInFile": 20,
+      "parseMs": 1.9,
+      "mainClass": "Classify",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 3,
+      "coverage": 0.15,
+      "layerTypes": {
+        "globalAvgPool2d": 1,
+        "dropout": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear",
+          "componentType": "linear",
+          "message": "linear 'linear': computed output shape [c2] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"c2\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "microsoft/Swin-Transformer",
+      "file": "models/swin_transformer.py",
+      "status": "parsed",
+      "lines": 615,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 7,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "SwinTransformer",
+          "bases": "nn.Module",
+          "line": 485,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 13,
+      "parseMs": 1,
+      "mainClass": "SwinTransformer",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.08,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "head",
+          "componentType": "linear",
+          "message": "linear 'head': computed output shape [1,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "google/gemma_pytorch",
+      "file": "gemma/model.py",
+      "status": "parsed",
+      "lines": 756,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 10,
+        "withInitAndForward": 10,
+        "mainClass": {
+          "name": "GemmaForCausalLM",
+          "bases": "nn.Module",
+          "line": 509,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 10
+      },
+      "nnCallsInFile": 0,
+      "parseMs": 1.3,
+      "mainClass": "GemmaForCausalLM",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 0,
+      "coverage": null,
+      "layerTypes": {
+        "tanh": 1,
+        "softmax": 1
+      },
+      "findings": [
+        {
+          "rule": "output-activation",
+          "severity": "info",
+          "component": "softmax",
+          "componentType": "softmax",
+          "message": "\"softmax\" feeds directly into Output. PyTorch's nn.CrossEntropyLoss already applies log-softmax internally, an explicit Softmax causes double-application and degrades training stability. Fix: Remove Softmax/Sigmoid for training. Restore it in a separate inference wrapper or ONNX export.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "this is the inference Sampler; softmax produces sampling probabilities and no loss is computed on them"
+        },
+        {
+          "rule": "redundant-activation",
+          "severity": "warn",
+          "component": "tanh",
+          "componentType": "tanh",
+          "message": "\"tanh\" (tanh) feeds straight into \"softmax\" (softmax). Stacking two activations with no Linear/Conv between them is rarely intended, e.g. a ReLU before a Softmax clips logits to ≥ 0 and distorts the output distribution. Fix: Remove one activation, or insert the Linear/Conv/Norm layer that belongs between them.",
+          "measured": false,
+          "verdict": "not-a-bug",
+          "reason": "Sampler applies final-logit soft-capping tanh(logits/cap)*cap (lines 53-56) and then softmax for sampling (line 65); two activations with no linear between them is the intended Gemma 2 design"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "black-forest-labs/flux",
+      "file": "src/flux/model.py",
+      "status": "parsed",
+      "lines": 144,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "Flux",
+          "bases": "nn.Module",
+          "line": 34,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 2,
+      "parseMs": 0.2,
+      "mainClass": "Flux",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 4,
+      "coverage": 1,
+      "layerTypes": {
+        "linear": 2
+      },
+      "findings": [
+        {
+          "rule": "consecutive-linear-no-activation",
+          "severity": "info",
+          "component": "img_in",
+          "componentType": "linear",
+          "message": "\"img_in\" feeds directly into \"txt_in\" with no activation between them. Two stacked linear maps collapse into one (W₂·W₁), so the extra layer costs parameters but adds no representational power. Fix: Add a non-linearity (ReLU/GELU) between them. If this is a deliberate low-rank / factorized projection (down-proj → up-proj), this hint is safe to ignore.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "img_in projects image tokens and txt_in projects text tokens (lines 55, 61); they are two parallel streams, not a chain"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "img_in",
+          "componentType": "linear",
+          "message": "linear 'img_in': computed output shape [1,28,self.hidden_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"self.hidden_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 1
+    },
+    {
+      "repo": "black-forest-labs/flux",
+      "file": "src/flux/modules/layers.py",
+      "status": "parsed",
+      "lines": 254,
+      "classes": {
+        "total": 10,
+        "nnModuleSubclasses": 9,
+        "withInitAndForward": 9,
+        "mainClass": {
+          "name": "LastLayer",
+          "bases": "nn.Module",
+          "line": 242,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 9
+      },
+      "nnCallsInFile": 24,
+      "parseMs": 0.4,
+      "mainClass": "LastLayer",
+      "layers": 2,
+      "connections": 3,
+      "unresolvedParams": 3,
+      "coverage": 0.08,
+      "layerTypes": {
+        "layerNorm": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "linear",
+          "componentType": "linear",
+          "message": "linear 'linear': computed output shape [1,28,patch_size * patch_size * out_channels] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"patch_size * patch_size * out_channels\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "mosaicml/llm-foundry",
+      "file": "llmfoundry/models/mpt/modeling_mpt.py",
+      "status": "no-model",
+      "lines": 1619,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 0,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "ComposerMPTCausalLM",
+          "bases": "HuggingFaceModel",
+          "line": 1454,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 4
+      },
+      "nnCallsInFile": 4,
+      "parseMs": 1.6,
+      "cause": "sub-modules are instances of classes from other files, or are passed in through __init__",
+      "reason": "main class ComposerMPTCausalLM (line 1454) yielded zero layers"
+    },
+    {
+      "repo": "eriklindernoren/PyTorch-GAN",
+      "file": "implementations/dcgan/dcgan.py",
+      "status": "no-model",
+      "lines": 193,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "Discriminator",
+          "bases": "nn.Module",
+          "line": 73,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 19,
+      "parseMs": 0.2,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class Discriminator (line 73) yielded zero layers"
+    },
+    {
+      "repo": "eriklindernoren/PyTorch-GAN",
+      "file": "implementations/cyclegan/models.py",
+      "status": "no-model",
+      "lines": 123,
+      "classes": {
+        "total": 3,
+        "nnModuleSubclasses": 3,
+        "withInitAndForward": 3,
+        "mainClass": {
+          "name": "Discriminator",
+          "bases": "nn.Module",
+          "line": 95,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 3
+      },
+      "nnCallsInFile": 26,
+      "parseMs": 0.2,
+      "cause": "container built imperatively (ModuleList().append in a loop, nn.Sequential(*list), generator over zip)",
+      "reason": "main class Discriminator (line 95) yielded zero layers"
+    },
+    {
+      "repo": "yunjey/pytorch-tutorial",
+      "file": "tutorials/02-intermediate/convolutional_neural_network/main.py",
+      "status": "parsed",
+      "lines": 100,
+      "classes": {
+        "total": 1,
+        "nnModuleSubclasses": 1,
+        "withInitAndForward": 1,
+        "mainClass": {
+          "name": "ConvNet",
+          "bases": "nn.Module",
+          "line": 36,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 1
+      },
+      "nnCallsInFile": 10,
+      "parseMs": 0.2,
+      "mainClass": "ConvNet",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 2,
+      "coverage": 0.3,
+      "layerTypes": {
+        "conv2d": 2,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "linear-after-conv-no-flatten",
+          "severity": "block",
+          "component": "layer2_1",
+          "componentType": "conv2d",
+          "message": "\"layer2_1\" (conv2d) outputs a multi-dimensional feature map but connects straight into \"fc\" (Linear), which expects a flat [batch, features] tensor. At runtime this raises a shape error (or silently mis-multiplies the spatial dims). Fix: Insert a Flatten (keep spatial info) or a Global Average Pool (collapse spatial dims) between the convolution and the Linear layer.",
+          "measured": false,
+          "verdict": "artefact",
+          "reason": "forward does out.reshape(out.size(0), -1) at line 54 before self.fc; tensor-method reshapes in forward are invisible to the parser, so the flatten is missing from the graph"
+        },
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "fc",
+          "componentType": "linear",
+          "message": "linear 'fc': computed output shape [32,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 1,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "yunjey/pytorch-tutorial",
+      "file": "tutorials/03-advanced/image_captioning/model.py",
+      "status": "parsed",
+      "lines": 56,
+      "classes": {
+        "total": 2,
+        "nnModuleSubclasses": 2,
+        "withInitAndForward": 2,
+        "mainClass": {
+          "name": "DecoderRNN",
+          "bases": "nn.Module",
+          "line": 26,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 2
+      },
+      "nnCallsInFile": 5,
+      "parseMs": 0.2,
+      "mainClass": "DecoderRNN",
+      "layers": 3,
+      "connections": 4,
+      "unresolvedParams": 7,
+      "coverage": 0.6,
+      "layerTypes": {
+        "embedding": 1,
+        "lstm": 1,
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "embed",
+          "componentType": "embedding",
+          "message": "embedding 'embed': computed output shape [1,28,28,embed_size] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"embed_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    },
+    {
+      "repo": "microsoft/unilm",
+      "file": "beit/modeling_finetune.py",
+      "status": "parsed",
+      "lines": 421,
+      "classes": {
+        "total": 7,
+        "nnModuleSubclasses": 7,
+        "withInitAndForward": 7,
+        "mainClass": {
+          "name": "VisionTransformer",
+          "bases": "nn.Module",
+          "line": 248,
+          "init": true,
+          "forward": true
+        },
+        "moduleClasses": 7
+      },
+      "nnCallsInFile": 11,
+      "parseMs": 0.7,
+      "mainClass": "VisionTransformer",
+      "layers": 1,
+      "connections": 2,
+      "unresolvedParams": 2,
+      "coverage": 0.09,
+      "layerTypes": {
+        "linear": 1
+      },
+      "findings": [
+        {
+          "rule": "invalid-output-shape",
+          "severity": "warn",
+          "component": "head",
+          "componentType": "linear",
+          "message": "linear 'head': computed output shape [1,28,num_classes] contains a non-positive or non-finite dim",
+          "measured": true,
+          "verdict": "artefact",
+          "reason": "shape carries the unresolved source text \"num_classes\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+        }
+      ],
+      "blocks": 0,
+      "warns": 1,
+      "infos": 0
+    }
+  ]
+}
