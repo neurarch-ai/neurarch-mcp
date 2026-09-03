@@ -1,13 +1,15 @@
 /**
  * How much of a graph that came out of Python source is actually numbers.
  *
- * docs/REAL_REPOS_STUDY.md measured the static parser against 116 files from
- * 59 popular repositories: it returned a graph for 63% of them, a graph a
- * person would recognise as the model for 8%, and every finding it raised on
- * the result was its own artefact or a design choice. The biggest single
- * cause was a dimension the parser could not evaluate (`config.hidden_size`,
+ * docs/REAL_REPOS_STUDY.md measures the static parser against 116 files from
+ * 59 popular repositories. August 2026: a graph for 63% of them, a recognisable
+ * one for 8%, and every finding an artefact or a design choice, the biggest
+ * cause being a dimension the parser could not evaluate (`config.hidden_size`,
  * `dims[0]`) stored as text where a number belongs, then propagated as if it
- * were one: 54 of 76 warnings, all `invalid-output-shape`, all false.
+ * were one: 54 of 76 warnings, all `invalid-output-shape`, all false. September
+ * 2026, with the #128 parser and this filter applied: 86% and 41%, 91 dimension
+ * findings held back, and still zero real defects among the 92 block/warn
+ * findings that remain, now all from construction order read as data flow.
  *
  * So a graph from source carries a quality note, and the rules that depend
  * on a resolved dimension are held back on layers that do not have one. The
