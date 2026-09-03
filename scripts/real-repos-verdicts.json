@@ -539,5 +539,329 @@
   "yunjey/pytorch-tutorial|tutorials/03-advanced/image_captioning/model.py|invalid-output-shape|embed": {
     "verdict": "artefact",
     "reason": "shape carries the unresolved source text \"embed_size\" against the parser default input [1,28,28]; the dimension is a constructor argument, config field or expression the static parser could not evaluate"
+  },
+  "karpathy/nanoGPT|model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (3 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "karpathy/minGPT|mingpt/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (3 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "karpathy/nanochat|nanochat/gpt.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (14 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "Lightning-AI/litgpt|litgpt/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (12 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/llama/modeling_llama.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (5 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/bert/modeling_bert.py|attention-no-pe|attention": {
+    "verdict": "artefact",
+    "reason": "a positional encoding is present (55 mentions: a Parameter, an nn.Embedding, or pos passed into forward) but is not a layer type the parser maps to a PE node"
+  },
+  "huggingface/transformers|src/transformers/models/gpt2/modeling_gpt2.py|dropout-at-output|last_dropout": {
+    "verdict": "artefact",
+    "reason": "the dropout is followed in forward() by the block stack or the head; the graph ends there because the parser did not follow the ModuleList loop after it"
+  },
+  "huggingface/transformers|src/transformers/models/vit/modeling_vit.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (9 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/whisper/modeling_whisper.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (12 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/qwen2/modeling_qwen2.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (5 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/mistral/modeling_mistral.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (5 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/mixtral/modeling_mixtral.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (11 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/gemma/modeling_gemma.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (5 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/transformers|src/transformers/models/clip/modeling_clip.py|bn-at-output|post_layernorm": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "huggingface/transformers|src/transformers/models/clip/modeling_clip.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (7 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "huggingface/pytorch-image-models|timm/models/vision_transformer.py|attention-no-pe|scaled_dot_product_attention": {
+    "verdict": "artefact",
+    "reason": "a positional encoding is present (102 mentions: a Parameter, an nn.Embedding, or pos passed into forward) but is not a layer type the parser maps to a PE node"
+  },
+  "huggingface/pytorch-image-models|timm/models/resnet.py|deep-no-norm|conv1_1": {
+    "verdict": "artefact",
+    "reason": "norms are constructed through the norm_layer factory (default nn.BatchNorm2d), which the parser does not resolve to a norm node"
+  },
+  "facebookresearch/DiT|models.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (2 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "facebookresearch/detr|models/detr.py|linear-after-conv-no-flatten|input_proj": {
+    "verdict": "artefact",
+    "reason": "forward() runs transformer(input_proj(src)) and applies class_embed to the transformer output (lines 65-67); the conv and the head are not adjacent"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/mask_decoder.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (1 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/mask_decoder.py|linear-after-conv-no-flatten|output_upscaling_2": {
+    "verdict": "artefact",
+    "reason": "output_upscaling feeds the mask prediction and the hypernetwork MLPs take mask tokens (lines 138-141); parallel branches chained by construction order"
+  },
+  "facebookresearch/segment-anything|segment_anything/modeling/mask_decoder.py|redundant-activation|relu": {
+    "verdict": "artefact",
+    "reason": "the last Linear sits between the relu and the sigmoid (lines 173-175); the parser chained the two activations"
+  },
+  "openai/whisper|whisper/model.py|bn-after-activation|gelu": {
+    "verdict": "artefact",
+    "reason": "the residual attention blocks between conv2's gelu and ln_post are iterated as self.blocks in forward(); the parser chained around them"
+  },
+  "openai/whisper|whisper/model.py|bn-at-output|ln": {
+    "verdict": "artefact",
+    "reason": "the LM head is a matmul against the embedding weight in forward(), not a module, so the graph ends at the final norm"
+  },
+  "openai/CLIP|clip/model.py|bn-at-output|ln_final": {
+    "verdict": "artefact",
+    "reason": "the LM head is a matmul against the embedding weight in forward(), not a module, so the graph ends at the final norm"
+  },
+  "openai/CLIP|clip/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (10 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "openai/CLIP|clip/model.py|non-spatial-into-conv|c_proj": {
+    "verdict": "artefact",
+    "reason": "c_proj belongs to AttentionPool2d and conv1 to the next class; adjacent by construction order only"
+  },
+  "openai/CLIP|clip/model.py|invalid-output-shape|avgpool": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "openai/guided-diffusion|guided_diffusion/unet.py|attention-no-pe|attention": {
+    "verdict": "not-a-bug",
+    "reason": "attention over spatial positions inside a convolutional UNet, or torchaudio Conformer, has no positional encoding by design"
+  },
+  "openai/guided-diffusion|guided_diffusion/unet.py|redundant-activation|time_embed_1": {
+    "verdict": "artefact",
+    "reason": "two SiLU modules in different heads (time embedding, output head) chained by construction order; never consecutive in forward()"
+  },
+  "openai/guided-diffusion|guided_diffusion/unet.py|flatten-into-attention|out_3": {
+    "verdict": "artefact",
+    "reason": "the Flatten head and AttentionPool2d are alternative pooling heads selected by config, chained by construction order and never both used"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v4neo/src/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (9 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v7/rwkv_v7_demo.py|bn-after-activation|sigmoid": {
+    "verdict": "not-a-bug",
+    "reason": "RWKV-7 applies GroupNorm (ln_x) to the WKV output after the gating nonlinearity by design (line 285)"
+  },
+  "BlinkDL/RWKV-LM|RWKV-v7/rwkv_v7_demo.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (12 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "deepseek-ai/DeepSeek-V3|inference/model.py|bn-after-activation|silu": {
+    "verdict": "artefact",
+    "reason": "the silu closes block i's MLP and the norm opens block i+1 after a residual add the parser never sees; adjacent by inlining order, not by data flow"
+  },
+  "deepseek-ai/DeepSeek-V3|inference/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (8 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "deepseek-ai/DeepSeek-V3|inference/model.py|invalid-output-shape|wq": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "meta-llama/llama|llama/model.py|bn-after-activation|silu": {
+    "verdict": "artefact",
+    "reason": "the silu closes block i's MLP and the norm opens block i+1 after a residual add the parser never sees; adjacent by inlining order, not by data flow"
+  },
+  "meta-llama/llama|llama/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (1 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "meta-llama/llama|llama/model.py|invalid-output-shape|wv": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "meta-llama/llama3|llama/model.py|bn-after-activation|silu": {
+    "verdict": "artefact",
+    "reason": "the silu closes block i's MLP and the norm opens block i+1 after a residual add the parser never sees; adjacent by inlining order, not by data flow"
+  },
+  "meta-llama/llama3|llama/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (1 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "meta-llama/llama3|llama/model.py|invalid-output-shape|wv": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "EleutherAI/gpt-neox|megatron/model/transformer.py|invalid-output-shape|query_key_value": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "jzhang38/TinyLlama|lit_gpt/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (5 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "CompVis/stable-diffusion|ldm/modules/diffusionmodules/openaimodel.py|attention-no-pe|attention": {
+    "verdict": "not-a-bug",
+    "reason": "attention over spatial positions inside a convolutional UNet, or torchaudio Conformer, has no positional encoding by design"
+  },
+  "CompVis/stable-diffusion|ldm/modules/diffusionmodules/openaimodel.py|redundant-activation|time_embed_1": {
+    "verdict": "artefact",
+    "reason": "two SiLU modules in different heads (time embedding, output head) chained by construction order; never consecutive in forward()"
+  },
+  "CompVis/stable-diffusion|ldm/modules/diffusionmodules/openaimodel.py|flatten-into-attention|out_3": {
+    "verdict": "artefact",
+    "reason": "the Flatten head and AttentionPool2d are alternative pooling heads selected by config, chained by construction order and never both used"
+  },
+  "CompVis/stable-diffusion|ldm/modules/attention.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (0 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "lllyasviel/ControlNet|cldm/cldm.py|redundant-activation|time_embed_1": {
+    "verdict": "artefact",
+    "reason": "two SiLU modules in different heads (time embedding, output head) chained by construction order; never consecutive in forward()"
+  },
+  "WongKinYiu/yolov7|models/common.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (172 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "WongKinYiu/yolov7|models/common.py|redundant-activation|sigmoid": {
+    "verdict": "artefact",
+    "reason": "common.py is a file of building blocks; the sigmoid and softmax belong to different blocks chained by construction order"
+  },
+  "jadore801120/attention-is-all-you-need-pytorch|transformer/SubLayers.py|attention-no-pe|attention": {
+    "verdict": "not-a-bug",
+    "reason": "this file is one layer of a stack; the positional encoding is applied in the file that stacks it"
+  },
+  "hyunwoongko/transformer|models/blocks/encoder_layer.py|bn-at-output|norm2": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "hyunwoongko/transformer|models/layers/multi_head_attention.py|attention-no-pe|attention": {
+    "verdict": "not-a-bug",
+    "reason": "this file is one layer of a stack; the positional encoding is applied in the file that stacks it"
+  },
+  "kyegomez/BitNet|bitnet/bit_transformer.py|bn-at-output|norm": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "Dao-AILab/flash-attention|flash_attn/modules/mha.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (9 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "pytorch/audio|src/torchaudio/models/wav2vec2/components.py|bn-at-output|final_layer_norm": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "pytorch/audio|src/torchaudio/models/conformer.py|bn-at-output|final_layer_norm": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "pytorch/audio|src/torchaudio/models/conformer.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (9 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "pytorch/audio|src/torchaudio/models/conformer.py|attention-no-pe|self_attn": {
+    "verdict": "not-a-bug",
+    "reason": "attention over spatial positions inside a convolutional UNet, or torchaudio Conformer, has no positional encoding by design"
+  },
+  "speechbrain/speechbrain|speechbrain/lobes/models/transformer/Transformer.py|dropout-at-output|dropout3": {
+    "verdict": "artefact",
+    "reason": "the dropout is followed in forward() by the block stack or the head; the graph ends there because the parser did not follow the ModuleList loop after it"
+  },
+  "speechbrain/speechbrain|speechbrain/nnet/attention.py|linear-after-conv-no-flatten|conv_loc": {
+    "verdict": "not-a-bug",
+    "reason": "mlp_loc is applied over the channel dim after transpose(1, 2) (line 232); a Linear on a 3-D tensor is legal and no flatten is intended"
+  },
+  "speechbrain/speechbrain|speechbrain/nnet/attention.py|redundant-activation|tanh": {
+    "verdict": "artefact",
+    "reason": "mlp_attn (a Linear) sits between the tanh and the softmax (lines 105-110)"
+  },
+  "speechbrain/speechbrain|speechbrain/nnet/attention.py|non-spatial-into-conv|mlp_enc": {
+    "verdict": "artefact",
+    "reason": "mlp_enc and conv_loc are parallel inputs to the attention energy (lines 220, 230), not a chain"
+  },
+  "xinntao/ESRGAN|RRDBNet_arch.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (1 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "xinntao/ESRGAN|RRDBNet_arch.py|deep-no-norm|conv1": {
+    "verdict": "not-a-bug",
+    "reason": "ESRGAN removes BatchNorm on purpose; the paper says so"
+  },
+  "NVlabs/stylegan2-ada-pytorch|training/networks.py|linear-after-conv-no-flatten|conv": {
+    "verdict": "artefact",
+    "reason": "forward() flattens between them: x = self.fc(x.flatten(1)) (line 659)"
+  },
+  "NVlabs/stylegan2-ada-pytorch|training/networks.py|invalid-output-shape|embed": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "NVlabs/stylegan2-ada-pytorch|training/networks.py|invalid-output-shape|fc": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "facebookresearch/fairseq|fairseq/models/transformer/transformer_encoder.py|bn-at-output|layer_norm": {
+    "verdict": "not-a-bug",
+    "reason": "the module's output is normalized hidden states, not logits; a final norm in a pre-norm transformer encoder is standard"
+  },
+  "facebookresearch/fairseq|fairseq/modules/multihead_attention.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (2 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "ultralytics/yolov5|models/common.py|bn-at-output|bn": {
+    "verdict": "artefact",
+    "reason": "common.py is a file of building blocks; the root class chosen is a Conv block whose bn is followed by its activation in forward()"
+  },
+  "google/gemma_pytorch|gemma/model.py|bn-at-output|norm": {
+    "verdict": "artefact",
+    "reason": "the LM head is a matmul against the embedding weight in forward(), not a module, so the graph ends at the final norm"
+  },
+  "google/gemma_pytorch|gemma/model.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (12 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "google/gemma_pytorch|gemma/model.py|invalid-output-shape|qkv_proj": {
+    "verdict": "artefact",
+    "reason": "the layer's own dimension resolved but the graph input is the parser's placeholder shape; the propagated shape is a placeholder judged as data"
+  },
+  "black-forest-labs/flux|src/flux/modules/layers.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (4 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "mosaicml/llm-foundry|llmfoundry/models/mpt/modeling_mpt.py|dropout-at-output|emb_drop": {
+    "verdict": "artefact",
+    "reason": "the dropout is followed in forward() by the block stack or the head; the graph ends there because the parser did not follow the ModuleList loop after it"
+  },
+  "eriklindernoren/PyTorch-GAN|implementations/cyclegan/models.py|deep-no-residual|": {
+    "verdict": "artefact",
+    "reason": "residual adds are functional in forward() (6 add/residual sites in the file); the parser records module construction and never sees `x = x + f(x)`"
+  },
+  "eriklindernoren/PyTorch-GAN|implementations/cyclegan/models.py|deep-no-norm|model_1": {
+    "verdict": "artefact",
+    "reason": "nn.InstanceNorm2d is present between the convs and is not mapped to a norm node"
+  },
+  "yunjey/pytorch-tutorial|tutorials/02-intermediate/convolutional_neural_network/main.py|pool-into-linear-no-flatten|layer2_4": {
+    "verdict": "artefact",
+    "reason": "out = out.reshape(out.size(0), -1) sits between the pool and fc (line 54); same artefact as 2026-08-31 under the new component name"
   }
 }

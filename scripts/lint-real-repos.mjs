@@ -23,6 +23,11 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { graphFromPyTorchSource, lintModelGraph } from '../src/vendor/engine.bundle.mjs';
 import { provenanceFor } from '../src/vendor/verifier.bundle.mjs';
+// The filter the MCP applies before an agent sees a finding (src/tools.ts,
+// lint_model): a dimension rule on a layer whose dimension is still source text
+// is the parser judging its own placeholder. The study reports what the agent
+// gets, and counts what was held back, so the raw engine is still visible.
+import { DIMENSION_RULES, unresolvedParamsOf } from '../src/lib/parseQuality.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -208,7 +213,10 @@ for (const entry of manifest) {
     rec.layerTypes = Object.fromEntries(Object.entries(hist).sort((a, b) => b[1] - a[1]));
     let findings = [];
     try {
-      findings = lintModelGraph(model);
+      const rawFindings = lintModelGraph(model);
+      const unresolvedByName = new Map(model.components.map((c) => [c.name, unresolvedParamsOf(c)]));
+      findings = rawFindings.filter((f) => !(DIMENSION_RULES.has(f.rule) && f.componentName && (unresolvedByName.get(f.componentName)?.length ?? 0) > 0));
+      rec.suppressedDimensionFindings = rawFindings.length - findings.length;
     } catch (e) {
       rec.status = 'lint-error';
       rec.reason = e?.message ?? String(e);
