@@ -6,6 +6,15 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **neurarch-trace 0.1.2: `--plan` and `--share`** (`python/neurarch-trace`).
+  One command from a `.py` file to a plan card in the terminal, and with
+  `--share` a public link on the last line. The CLI POSTs the traced graph to
+  `/api/v1/plan` (the endpoint ships separately in the neurarch app) and prints
+  the server's fixed-width `text` verbatim; `--base` sends a second graph to
+  diff against, `--fail-on-block` exits 2 on a blocker, `NEURARCH_API_KEY` and
+  `NEURARCH_API` are honoured. Nothing is sent without one of the two flags.
+
 ### Changed
 - Vendored engine bundle rebuilt from neurarch `main` (60eae74). It carries
   neurarch #128, the parser pass for real model files (same-file classes

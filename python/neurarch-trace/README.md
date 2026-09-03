@@ -1,5 +1,55 @@
 # neurarch-trace
 
+## One command, one card
+
+```
+pip install neurarch-trace
+neurarch-trace models/resnet.py:ResNet18 --input 1,3,224,224 --plan --share
+```
+
+The trace runs locally and writes `ResNet18.neurarch.json` as always. `--plan`
+then sends that graph to `POST https://www.neurarch.com/api/v1/plan` and prints
+the card the server renders: what the model is, its parameter count, whether it
+will run, which GPU it fits, what a training run costs, and every blocker the
+verifier found. `--share` (which implies `--plan`) also stores the graph at a
+public unguessable URL and prints it on the last line. Illustrative output (the
+numbers below are made up; the server prints its own):
+
+```
++------------------------------------------------------------------+
+| ResNet18                                       models/resnet.py  |
+| 18 layers, 11.7M params, 1.8 GFLOPs at 3x224x224                 |
++------------------------------------------------------------------+
+| Runs            yes, shapes propagate end to end                 |
+| GPU fit         T4 16 GB at batch 64 fp16 (5.1 GB peak)          |
+| Training cost   ~$0.60 per epoch of ImageNet-1k on a T4          |
+| Blockers        none                                             |
+| Warnings        1: no dropout before the classifier              |
++------------------------------------------------------------------+
+Share: https://www.neurarch.com/p/3f9k2q
+```
+
+stdout carries only the card and the `Share:` line, so the whole thing pastes
+into a PR or a chat as is. Everything else (the "wrote ..." line, the notice that
+the graph is being sent) goes to stderr.
+
+Privacy: nothing leaves the machine unless you pass `--plan` or `--share`.
+`--plan` sends the graph (layer types, shapes and hyperparameters, no weights, no
+source) and the target string you typed, and the server keeps nothing addressable
+by anyone. `--share` stores the graph at a public unguessable URL; anyone with the
+link can open it, so do not pass it for a design you cannot show.
+
+More flags on the same path: `--base other.neurarch.json` sends a second graph and
+the card includes a diff against it, the design you are changing from.
+`--fail-on-block` exits 2 when the card reports a blocker (a graph that would not
+forward-pass), for CI; by default the exit code is 0 once the card printed.
+`NEURARCH_API_KEY` (sent as a bearer token) lifts the per-IP rate limit, and
+`NEURARCH_API` points the CLI at another deployment. The HTTP timeout is 30
+seconds. On a network failure, a rate limit, or a server error the CLI prints one
+line to stderr, exits 1, and the `.neurarch.json` is still on disk.
+
+## What it does
+
 Run one forward pass over a PyTorch model and write a `.neurarch.json` graph with
 the real input and output shape of every layer. Point
 [neurarch-mcp](https://github.com/neurarch-ai/neurarch-mcp) at that file and every
@@ -56,9 +106,11 @@ input. Random tensors are used, `torch.randn` for float dtypes and
 `torch.randint(0, 1000, ...)` for integer ones.
 
 Other flags: `--name` sets the graph name (default: the attribute or repo name),
-`-o -` writes to stdout, `--depth N` stops descending at module depth N and
-records the modules there as single nodes, `--verbose` shows the traceback on a
-failure (otherwise a failure is one line on stderr and exit code 1).
+`-o -` writes to stdout (not combinable with `--plan`), `--depth N` stops
+descending at module depth N and records the modules there as single nodes,
+`--verbose` shows the traceback on a failure (otherwise a failure is one line on
+stderr and exit code 1). `--plan`, `--share`, `--base` and `--fail-on-block` are
+described under "One command, one card" above.
 
 ## The shape convention
 

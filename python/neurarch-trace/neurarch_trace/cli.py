@@ -1,7 +1,8 @@
-"""`neurarch-trace <target> --input 1,3,224,224 [-o out.neurarch.json]`."""
+"""`neurarch-trace <target> --input 1,3,224,224 [-o out.neurarch.json] [--plan] [--share]`."""
 import argparse
 import importlib
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -11,6 +12,7 @@ import torch
 import torch.nn as nn
 
 from . import __version__
+from .plan import PlanError, api_base, api_host, build_source, has_blocker, print_plan, request_plan
 from .tracer import trace
 from .writer import build_graph, write_graph
 
@@ -111,7 +113,20 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--depth", type=int, default=None, help="stop descending at this module depth (default: leaf modules)")
     p.add_argument("--verbose", action="store_true", help="show the full traceback on failure")
     p.add_argument("--version", action="version", version="neurarch-trace " + __version__)
+    plan = p.add_argument_group(
+        "plan", "send the graph to neurarch.com and print a plan card (nothing is sent without these)")
+    plan.add_argument("--plan", action="store_true",
+                      help="print the plan: what the model is, params, whether it runs, GPU fit, cost, blockers")
+    plan.add_argument("--share", action="store_true",
+                      help="implies --plan; also store the graph at a public unguessable URL and print it")
+    plan.add_argument("--base", default=None, metavar="FILE.neurarch.json",
+                      help="a second graph to diff the plan against (the design you are changing from)")
+    plan.add_argument("--fail-on-block", action="store_true",
+                      help="exit 2 when the plan reports a blocker (default: exit 0 once the plan printed)")
     args = p.parse_args(argv)
+    want_plan = args.plan or args.share
+    if want_plan and args.output == "-":
+        raise TraceError("--plan cannot be combined with -o - (the graph and the plan would both go to stdout)")
 
     is_hf = args.target.startswith("hf:")
     specs = args.input or (["1,16"] if is_hf else [])
@@ -134,9 +149,54 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     graph = build_graph(nodes, name, description)
     out = args.output or ("./%s.neurarch.json" % name)
     write_graph(graph, out)
+    layers = sum(1 for c in graph["components"] if c["type"] not in ("input", "output"))
     if out != "-":
-        layers = sum(1 for c in graph["components"] if c["type"] not in ("input", "output"))
-        print("wrote %s (%d layers, %d connections)" % (out, layers, len(graph["connections"])))
+        # In plan mode stdout carries the plan and nothing else, so this goes to stderr.
+        print("wrote %s (%d layers, %d connections)" % (out, layers, len(graph["connections"])),
+              file=sys.stderr if want_plan else sys.stdout)
+    if not want_plan:
+        return 0
+    return run_plan(args, graph, out, layers, specs)
+
+
+def load_base(path: str) -> dict:
+    if not os.path.isfile(path):
+        raise TraceError("--base: no such file: %s" % path)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            base = json.load(f)
+    except ValueError as e:
+        raise TraceError("--base: %s is not valid JSON (%s)" % (path, e))
+    if not isinstance(base, dict) or not isinstance(base.get("components"), list):
+        raise TraceError("--base: %s is not a .neurarch.json graph (no components list)" % path)
+    return base
+
+
+def run_plan(args, graph: dict, out: str, layers: int, specs: Sequence[str]) -> int:
+    """`--plan` / `--share`: the only path on which anything leaves the machine."""
+    base = load_base(args.base) if args.base else None
+    api = api_base()
+    host = api_host(api)
+    if args.share:
+        print("Sending the graph (%d layers) to %s for the plan and a public link." % (layers, host),
+              file=sys.stderr)
+    else:
+        print("Sending the graph (%d layers) to %s for the plan; add --share for a public link." % (layers, host),
+              file=sys.stderr)
+    try:
+        response = request_plan(
+            graph,
+            build_source(args.target, specs, __version__),
+            share=args.share,
+            base=base,
+            api=api,
+            api_key=os.environ.get("NEURARCH_API_KEY") or None,
+        )
+    except PlanError as e:
+        raise TraceError("%s; the graph was still written to %s" % (e, out))
+    print_plan(response, share=args.share)
+    if args.fail_on_block and has_blocker(response):
+        return 2
     return 0
 
 
