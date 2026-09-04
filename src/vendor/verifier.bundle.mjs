@@ -3173,6 +3173,233 @@ function runAdvisorRules(model, opts = {}) {
   return issues.filter((i) => !drop.has(i.id));
 }
 
+// packages/graph-core/src/schema.ts
+var COMPONENT_TYPES = [
+  // Basic
+  "input",
+  "output",
+  "linear",
+  "flatten",
+  // CV - Computer Vision
+  "conv2d",
+  "conv3d",
+  "depthwiseConv2d",
+  "separableConv2d",
+  "transposeConv2d",
+  "maxpool2d",
+  "avgpool2d",
+  "adaptiveAvgPool2d",
+  "adaptiveMaxPool2d",
+  "globalAvgPool2d",
+  "globalMaxPool2d",
+  "dilatedConv2d",
+  "roiAlign",
+  "maxpool3d",
+  "avgpool3d",
+  "upsample",
+  "pixelShuffle",
+  // NLP - Natural Language Processing
+  "conv1d",
+  "maxpool1d",
+  "avgpool1d",
+  "embedding",
+  "segmentEmbedding",
+  "lstm",
+  "gru",
+  "rnn",
+  "bidirectionalLSTM",
+  "bidirectionalGRU",
+  "attention",
+  "selfAttention",
+  "crossAttention",
+  "globalAvgPool1d",
+  // LLM - Large Language Models
+  "multiHeadAttention",
+  "groupedQueryAttention",
+  "causalAttention",
+  "transformerBlock",
+  "positionalEncoding",
+  "feedForward",
+  "rope",
+  "lmHead",
+  "timeEmbedding",
+  "mamba",
+  "relativePositionBias",
+  "learnedPositionalEmbedding",
+  "localAttention",
+  "linearAttention",
+  // Audio
+  "melSpectrogram",
+  "mfcc",
+  "stft",
+  "audioConv",
+  "conformerBlock",
+  "depthwiseConv1d",
+  // Tabular
+  "featureInteraction",
+  "embeddingBag",
+  "tabnet",
+  // Reinforcement Learning
+  "dqnHead",
+  "actorHead",
+  "criticHead",
+  "policyNetwork",
+  "valueNetwork",
+  // Graph ML
+  "graphConv",
+  "graphAttention",
+  "graphSAGE",
+  "gcn",
+  "gat",
+  "gin",
+  "edgeConv",
+  // Multimodal
+  "crossModalAttention",
+  "fusion",
+  "projection",
+  "coAttention",
+  // Activation
+  "relu",
+  "relu6",
+  "leakyRelu",
+  "elu",
+  "prelu",
+  "gelu",
+  "swish",
+  "selu",
+  "mish",
+  "hardSwish",
+  "hardSigmoid",
+  "logSoftmax",
+  "glu",
+  "softplus",
+  "sigmoid",
+  "tanh",
+  "softmax",
+  "gumbelSoftmax",
+  // Normalization
+  "batchNorm",
+  "layerNorm",
+  "instanceNorm",
+  "groupNorm",
+  "rmsNorm",
+  "adaIN",
+  "spectralNorm",
+  "pixelNorm",
+  "weightNorm",
+  "localResponseNorm",
+  // LLM extras
+  "swiglu",
+  "moeLayer",
+  "alibi",
+  // CV extras
+  "seBlock",
+  "patchEmbed",
+  "windowAttention",
+  "fpn",
+  "invResidualBlock",
+  "deformableConv2d",
+  "interpolate",
+  "channelShuffle",
+  "gridSample",
+  "spatialPyramidPool",
+  // Frontier architectures (2024-2025)
+  "mla",
+  "mamba2",
+  "qkNorm",
+  "multiTokenPrediction",
+  "xlstm",
+  "differentialAttention",
+  "rgLru",
+  "retention",
+  "hyena",
+  "rwkv",
+  "kan",
+  "mixtureOfDepths",
+  "tttLayer",
+  "geglu",
+  "grn",
+  "titansMemory",
+  "deltaNet",
+  "gatedDeltaNet",
+  "sharedExpertMoE",
+  "ditBlock",
+  "vectorQuantizer",
+  "perceiverLatent",
+  "convNeXtBlock",
+  "gatedLinearAttention",
+  "s4Layer",
+  "dyt",
+  "nativeSparseAttention",
+  "film",
+  "residualVQ",
+  "crossNetworkDCN",
+  "ftTransformerBlock",
+  "deformableAttention",
+  "attentionPool",
+  // Time-series / 3D / Video (2024-2025)
+  "revIN",
+  "seriesDecomp",
+  "setAbstraction",
+  "sparseConv3d",
+  "nerfPositionalEncoding",
+  "dividedSpaceTimeAttention",
+  "tubeletEmbed",
+  // Utility
+  "dropout",
+  "reshape",
+  "residual",
+  "skipConnection",
+  "concatenate",
+  "add",
+  "multiply",
+  "dropPath",
+  "layerScale",
+  "split",
+  "permute",
+  "customModule",
+  "stickyNote",
+  "squeeze",
+  "unsqueeze",
+  "pad",
+  "mean",
+  "matmul",
+  "clamp",
+  "norm",
+  "vaeBottleneck",
+  "miniBatchStdDev",
+  "topK",
+  "gather",
+  "scatter",
+  "stack",
+  "einsum"
+];
+var KNOWN_TYPES = new Set(COMPONENT_TYPES);
+var stripped = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+var STRIPPED_TYPES = COMPONENT_TYPES.map((t) => [t, stripped(t)]);
+function resolveComponentType(raw) {
+  if (KNOWN_TYPES.has(raw)) return raw;
+  const lcc = raw.charAt(0).toLowerCase() + raw.slice(1);
+  if (KNOWN_TYPES.has(lcc)) return lcc;
+  const camel = raw.replace(/[-_](.)/g, (_, c) => c.toUpperCase());
+  const camelLc = camel.charAt(0).toLowerCase() + camel.slice(1);
+  if (KNOWN_TYPES.has(camelLc)) return camelLc;
+  const rawStripped = stripped(raw);
+  if (rawStripped.length === 0) return null;
+  const exact = STRIPPED_TYPES.find(([, t]) => t === rawStripped);
+  if (exact) return exact[0];
+  const sub = STRIPPED_TYPES.filter(([, t]) => t.includes(rawStripped) || rawStripped.includes(t)).sort((a, b) => Math.abs(a[1].length - rawStripped.length) - Math.abs(b[1].length - rawStripped.length))[0];
+  return sub ? sub[0] : null;
+}
+
+// src/utils/executorResolve.ts
+function normalizeComponentType(raw) {
+  const resolved = resolveComponentType(raw);
+  if (resolved && resolved in componentRegistry) return resolved;
+  if (raw in componentRegistry) return raw;
+  return raw;
+}
+
 // src/utils/shapeInference.ts
 var ELEMENTWISE_MERGE = /* @__PURE__ */ new Set(["add", "multiply", "mean"]);
 var CONCAT_MERGE = /* @__PURE__ */ new Set(["concatenate"]);
@@ -3463,12 +3690,14 @@ function propagateShapes(model) {
             parentOuts.length > 1 ? parentOuts : void 0
           );
         } else {
+          const alias = normalizeComponentType(c.type);
+          const resolvable = alias !== c.type && alias in componentRegistry;
           issues.push({
             componentId: c.id,
             componentName: c.name,
             componentType: c.type,
             kind: "unknown-layer-type",
-            message: `'${c.name}': "${c.type}" is not a known layer type; nothing downstream of it can be verified and the trainer would drop it`
+            message: resolvable ? `'${c.name}': "${c.type}" is not a known layer type. Did you mean "${alias}"? As submitted, nothing downstream of it can be verified and the trainer would drop it.` : `'${c.name}': "${c.type}" is not a known layer type; nothing downstream of it can be verified and the trainer would drop it`
           });
         }
       } catch (err) {
