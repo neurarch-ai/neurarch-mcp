@@ -6540,8 +6540,18 @@ function ensureComponentIds(graph) {
     components: components.map((c, i) => c && typeof c === "object" ? { ...c, id: `n${i}` } : c)
   };
 }
+function ensureComponentParams(graph) {
+  const g = graph;
+  if (!g || typeof g !== "object" || !Array.isArray(g.components)) return graph;
+  const components = g.components;
+  if (components.every((c) => !c || typeof c !== "object" || c.params)) return graph;
+  return {
+    ...g,
+    components: components.map((c) => c && typeof c === "object" && !c.params ? { ...c, params: {} } : c)
+  };
+}
 function normalizeGraphForVerification(graph) {
-  return normalizeGraphConnections(ensureComponentIds(graph));
+  return normalizeGraphConnections(ensureComponentParams(ensureComponentIds(graph)));
 }
 export {
   OUTCOME_RULE_IDS,
