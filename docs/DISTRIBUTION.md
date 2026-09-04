@@ -76,3 +76,40 @@ with descriptions, not the 8 headline ones, is the cheap next step.
 3. Claim / resubmit the directories above.
 4. Post: the real-repos study (`docs/REAL_REPOS_STUDY.md`) is the hook, the GIF is the visual, the tiny-vit.py planted bug is the reproducible demo.
 5. Every outbound link carries `?utm_source=<channel>` to `https://www.neurarch.com/mcp`, so the channel that actually brings people is measurable.
+
+## Refreshing the vendored bundles
+
+`src/vendor/engine.bundle.mjs` and `src/vendor/verifier.bundle.mjs` are built in
+the neurarch repo and copied here by hand. Nothing in this repo noticed when the
+copy went stale: 30 test files and 265 assertions passed for four commits while
+`check_design` was returning findings with no `ruleId` and a pre-flight stage
+with no memory numbers, because every one of those assertions was about a field
+that had not moved.
+
+Two gates now exist, and they cover different halves:
+
+- `npm run check:mcp-vendor` **in the neurarch repo** rebuilds both bundles and
+  compares digests (banner normalised, so a rebuild timestamp cannot cause a
+  false stale). It is advisory in that repo's pre-push hook.
+- `src/lib/vendorContract.test.ts` **here** asserts the fields a caller reads and
+  can get nowhere else. It is the one that fails in CI, so it is the one that
+  matters.
+
+To refresh:
+
+```bash
+cd ~/Projects/neurarch            # a worktree on origin/main, never a feature branch
+git fetch origin && git reset --hard origin/main
+npm run build:mcp-engine && npm run build:mcp-verifier
+cp dist-mcp/*.bundle.mjs ~/Projects/neurarch-mcp/src/vendor/
+cd ~/Projects/neurarch-mcp && npm test
+```
+
+Build from a checkout on `origin/main`. A feature branch bakes unreleased
+behaviour into a published package, and a stale one faked a verifier bug for an
+hour on 2026-09-02.
+
+**Before adding an assertion to `vendorContract.test.ts`, check it out on the
+bundle it replaces and watch it fail.** Both assertions in that file were written
+against a fresh bundle first, and the first draft of one of them asserted
+something that had never been true.
