@@ -39,6 +39,16 @@ import type { ModelArchitecture } from './types.js';
 export interface DesignCheckFinding {
   stage: string;
   severity: 'block' | 'warn';
+  /**
+   * The check that raised this, where the finding is a check.
+   *
+   * This is what makes `provenanceForRules` reachable from a verdict: without
+   * it an agent holds our sentence about a blocker and no way to look up the
+   * measurement behind it. Absent on findings that are not checks, and most of
+   * the later stages are not: "no test cases" and "never trained" are states of
+   * a workflow rather than verdicts on the graph.
+   */
+  ruleId?: string;
   title: string;
   detail?: string;
   fix?: string;

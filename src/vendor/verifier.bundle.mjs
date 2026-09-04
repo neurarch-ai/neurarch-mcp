@@ -4637,6 +4637,9 @@ function buildPreflightReport(model, opts) {
   for (const s of shapeIssues) {
     findings.push({
       id: `shape-${s.kind}-${s.componentId}`,
+      // `kind` is the stable rule id the lint engine and lib/ruleProvenance.ts
+      // both key on; the `id` above bakes in a component and cannot join.
+      ruleId: s.kind,
       category: s.kind === "no-input-shape" ? "data" : "shapes",
       // A shape that can't compute means the model literally won't run.
       severity: "block",
@@ -4653,6 +4656,7 @@ function buildPreflightReport(model, opts) {
   for (const a of advisorIssues) {
     findings.push({
       id: `adv-${a.id}`,
+      ruleId: a.ruleId,
       category: categoryForAdvisor(a.category),
       severity: a.severity === "error" ? "block" : a.severity === "warning" ? "warn" : "info",
       title: a.title,
@@ -5599,6 +5603,7 @@ function runPreflightStage(model) {
   });
   const notes = report.findings.filter((f) => f.severity !== "pass").map((f) => ({
     severity: f.severity === "block" ? "block" : f.severity === "warn" ? "warn" : "info",
+    ruleId: f.ruleId ?? f.id,
     title: f.title,
     detail: f.detail,
     fix: f.fix,
@@ -5638,7 +5643,14 @@ function runPreflightStage(model) {
       flops: m.flops,
       gpu: m.fitsGpu,
       estCostUsd: m.estCostUsd,
-      estTrainSec: m.estTrainSec
+      estTrainSec: m.estTrainSec,
+      // The memory numbers and the "was the sample count a guess" flag were
+      // already computed here and thrown away at the stage boundary. Autopilot
+      // shows the arithmetic beside each candidate, and a footprint with no
+      // provenance is the half of that which makes it a claim again.
+      weightBytes: m.weightBytes,
+      trainFootprintBytes: m.trainFootprintBytes,
+      samplesAssumed: m.samplesAssumed
     },
     evidence: evidenceFor("preflight")
   };
@@ -5983,7 +5995,7 @@ function checkDesign(model) {
   for (const r of report.results) {
     for (const n2 of r.notes) {
       if (n2.severity !== "block" && n2.severity !== "warn") continue;
-      findings.push({ stage: r.stage, severity: n2.severity, title: n2.title, detail: n2.detail, fix: n2.fix });
+      findings.push({ stage: r.stage, severity: n2.severity, ruleId: n2.ruleId, title: n2.title, detail: n2.detail, fix: n2.fix });
     }
   }
   findings.sort((a, b) => (a.severity === "block" ? 0 : 1) - (b.severity === "block" ? 0 : 1));
