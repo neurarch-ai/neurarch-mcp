@@ -11,7 +11,9 @@
 [![smithery badge](https://smithery.ai/badge/neurarch-ai/neurarch-mcp)](https://smithery.ai/servers/neurarch-ai/neurarch-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 
-Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead, plus the verifier: **the design rules, the full readiness / cost / deployment verdict, and which of several candidate designs is worth the GPU time.** Point it at a PyTorch `.py`, a saved graph, or a Hugging Face repo. Everything runs on your machine, with no API key, no account, and no network call unless you turn one on.
+Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead, plus the verifier: **the design rules, the full readiness / cost / deployment verdict, and which of several candidate designs is worth the GPU time.** Trace the model to get real shapes, or point it at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account.
+
+The two that do not are the point of the other half of this README. A frontier model can read your architecture and reason about it; what it structurally cannot do is tell you **what happened the last time this exact structure trained here**. That is not in the weights and not in the repository. `plan` and `history` read it from your organisation's ledger, and they are the only tools in this package that open a socket.
 
 [![neurarch-mcp answering a model-structure question, every number from a tool call](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo.gif)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
 
@@ -60,15 +62,17 @@ block  head-dim-divisibility [attn:multiHeadAttention]: embed dim (258) must be
 
 That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run. The rules are measured (the crash rules: 96 of 96 blocked graphs crashed PyTorch forward, 80 of 80 passes ran); the static parser in front of them is the weaker half, and [we measured that too](#what-the-static-parser-can-read).
 
-## Three ways in
+## Three ways in, in order of how well they work
 
 | Input | What the agent gets | How |
 |---|---|---|
-| **A self-contained PyTorch `.py` file** | Layers, types, hyperparameters and wiring, when the file builds its own layers with literal sizes. Shapes and FLOPs are unknown, because the source never says what goes in, and are reported as unknown rather than as zero. **On real repositories this is the weak path**: see [what the parser can read](#what-the-static-parser-can-read). | `npx -y neurarch-mcp model.py` |
-| **A traced graph** (`neurarch-trace`) | Everything, with real shapes. Handles what static parsing cannot: `from_pretrained`, timm, models spread across files, anything built dynamically. | `pip install neurarch-trace`<br>`neurarch-trace my_pkg.model:build --input 1,3,224,224` |
+| **A traced graph** (`neurarch-trace`). **Start here.** | Everything, with real shapes, because they are read at runtime rather than inferred from text. Handles what static parsing cannot: `from_pretrained`, timm, models spread across files, anything built dynamically. The `trace_model` tool runs this for the agent. | `pip install neurarch-trace`<br>`neurarch-trace my_pkg.model:build --input 1,3,224,224` |
 | **A Hugging Face repo** | The architecture from `config.json`, with the published parameter count next to the graph's so you can see how close it is (Qwen2.5-0.5B: 494.00M against 494,032,768). | `npx -y neurarch-mcp hf:Qwen/Qwen2.5-0.5B --hf` |
+| **A self-contained PyTorch `.py` file**. The fallback. | Layers, types, hyperparameters and wiring, when the file builds its own layers with literal sizes. Shapes and FLOPs are unknown, because the source never says what goes in, and are reported as unknown rather than as zero. On real repositories this is the weak path, and we measured how weak: a graph a person would recognise for **41% of 116 real model files**, and of the block and warn findings raised on them, **zero were real defects** when hand-judged. Good enough to orient with, not to act on. [The study](#what-the-static-parser-can-read). | `npx -y neurarch-mcp model.py` |
 
 A `.neurarch.json` saved from the [Neurarch app](https://neurarch.com) (**File → Save**) is the fourth, and carries shapes, groups and design notes. Add `--watch` so the agent sees app-side saves without a restart.
+
+**The flow this server is built around**, in one line each: `trace_model` for a graph with real shapes, `plan` for the card that says whether to spend the GPU time, `lint_model` / `check_design` for the offline detail behind it, `suggest_fix` for the edit. Everything else answers a question one of those raised.
 
 ### What the static parser can read
 
@@ -80,7 +84,22 @@ Every read tool also takes an optional `model_path`, so **one server covers a wh
 
 ## Tools
 
-Three tools grade the model, and they are a ladder worth climbing in order. Each is free, offline and instant; `check_design` runs five pipeline stages, so an agent that starts at the top still pays for an answer two thirds of which a cheaper tool had.
+### Start here: the plan card, and the memory behind it
+
+These two are the front door, and the only two tools in this package that reach the network. `plan` is the artifact: the same card the [Neurarch CI bot](https://github.com/neurarch-ai/neurarch-bot) posts on a pull request and the `neurarch-trace` CLI prints, so the agent and the reviewer read the same words about the same graph.
+
+| Tool | Answers | Sends |
+|---|---|---|
+| `plan` | **Will it run, what will it cost, which GPUs does it fit, which of your repository's own rules does it break, what changed against a base design, and what happened last time this structure trained here.** `text` comes back verbatim. Policy lines are read from the repository's `.neurarch.yml` (the same file the CI bot reads, merged the same way) unless you pass `policy`; `base_path` adds a diff. `NEURARCH_API_KEY` is optional and adds the history line. `share` is pinned to false: an agent cannot publish your design. | The graph, to `POST /api/v1/plan`. This is the one tool that sends the model. |
+| `history` | **What this exact structure scored the last time it trained inside your organisation**: metric, epochs, wall time, cost, newest first, at most 20. Keyed by the graph's 8-character structural fingerprint, so it answers about the shape rather than the file and two people who arrived at the same architecture see the same runs. Pass `model_path`, or a `fingerprint` straight from a plan result. | The fingerprint and your key. **Never the graph.** |
+
+Why these exist: a frontier model reading your code can reason about the architecture, and cannot know that this shape trained here three days ago and reached 98.65% in 34 seconds for under a cent. That fact is not in the weights, not in the repository, and not derivable from the graph.
+
+**Without `NEURARCH_API_KEY`, `history` makes no request and says so.** It does not return an empty list: an unread ledger and an empty one are different answers, and only one of them means nobody has trained this. Keys come from [neurarch.com/developer](https://www.neurarch.com/developer).
+
+### Then the offline ladder
+
+Four tools grade the model, and they are a ladder worth climbing in order. Each is free, offline and instant; `check_design` runs five pipeline stages, so an agent that starts at the top still pays for an answer two thirds of which a cheaper tool had.
 
 | | Tool | Answers |
 |---|---|---|
@@ -116,7 +135,7 @@ Three tools grade the model, and they are a ladder worth climbing in order. Each
 | `load_architecture` | Open one and describe it. Then `model_path: "zoo:<id>"` on any tool. |
 | `load_hf_model` | A Hugging Face repo as a graph. Listed only under `--hf`, because it is the one tool that opens a socket. |
 | `find_models` | Walk a directory for nn.Module definitions and saved graphs, try the parser on each, and say which need `neurarch-trace` instead. |
-| `trace_model` | Run `neurarch-trace` in your Python with the input dims and get a graph with real shapes back as a `model_path`. The way past the static parser. |
+| `trace_model` | Run `neurarch-trace` in your Python with the input dims and get a graph with real shapes back as a `model_path`. **The primary way in for a real repository**, not a fallback: the static parser returns a recognisable graph for 41% of real model files and no finding it raised on one has yet been a real defect. |
 | `export_pytorch` | The graph as a runnable `nn.Module`, the app's own generator. `save_to` needs `--write` and never targets the file the server was started from. |
 
 ### Write (opt in with `--write`)
@@ -214,18 +233,22 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=full`: advertise every read tool. The default is the core thirteen; every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 3.9k tokens per turn, the full one 5.8k.
+- `--tools=full`: advertise every read tool. The default is the core fifteen, listed in the order they are meant to be reached for (`trace_model`, `plan`, `history`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 4.6k tokens per turn, the full one 6.5k.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
-## Network: one switch, off by default
+## Network: two tools, two switches, and nothing else
 
-| Switch | What it sends | When |
+| What | What it sends | When |
 |---|---|---|
+| `plan` | Your graph (and the base graph, and the policy lines) to `POST /api/v1/plan`. `share` is pinned to false. | Only when the agent calls `plan`. |
+| `history` | An 8-character structural fingerprint and your `NEURARCH_API_KEY`, to `GET /api/v1/history`. **Never the graph.** | Only when the agent calls `history` **and** a key is set. With no key it makes no request. |
 | `--hf` | A request to huggingface.co for a repo's `config.json` (and `HF_TOKEN`, if set). Never your model. | Only on `load_hf_model` or an `hf:` ref. |
-| `NEURARCH_REPORT=1` | One anonymous structure+verdict row: structural fingerprint, layer-type histogram, edge count, (rule id, severity) pairs. **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model` or `check_design` call, fire and forget, 5s cap. |
+| `NEURARCH_REPORT=1` | One anonymous structure+verdict row: structural fingerprint, layer-type histogram, edge count, (rule id, severity) pairs. **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model`, `check_design` or `plan` call, fire and forget, 5s cap. |
 
-With both unset, this server makes **no network calls at all**, and no tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package. Your model never leaves the machine. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+Both switches are off by default and `NEURARCH_REPORT` has not changed: `plan` joins the three tools that already send a row so that opting in means one thing across every tool that grades, and `history` grades nothing and sends none. Nothing here is new default-on behaviour; the two tools reach out when they are called, which their descriptions and their `openWorldHint` annotation say out loud.
+
+With `--hf` off, `NEURARCH_REPORT` unset and neither `plan` nor `history` called, this server makes **no network calls at all**, and no other tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package, so your model never leaves the machine. `NEURARCH_API` (the same variable `neurarch-trace` uses) points the two ledger tools somewhere else. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 
 ## Remote access
 
@@ -259,7 +282,7 @@ Shapes come out batchless (`[3,224,224]`, never `[1,3,224,224]`), the convention
 ```bash
 git clone https://github.com/neurarch-ai/neurarch-mcp && cd neurarch-mcp
 npm install
-npm run typecheck && npm run build && npm test     # vitest, 260+ tests
+npm run typecheck && npm run build && npm test     # vitest, 290+ tests
 node dist/index.js --help
 npm run build:mcpb                                 # the Claude Desktop bundle
 ```
@@ -332,12 +355,15 @@ Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only
 
 This server runs on your machine and is built not to phone home:
 
-- **Data collection**: none by default. The server makes no network calls unless you enable a switch. Your model files, graphs and source code are read from your disk and never transmitted.
+- **Data collection**: none by default. Your model files, graphs and source code are read from your disk and are transmitted by exactly one tool, `plan`, and only when it is called.
+- **`plan` (on request)**: sends the graph you are planning (plus the base graph if you passed `base_path`, and the policy lines from your `.neurarch.yml`) to `POST /api/v1/plan` on `neurarch.com`, which renders the card and returns it. `share` is pinned to false, so nothing is published; the graph is processed to answer that call. Your `NEURARCH_API_KEY` is sent if you set one. No other tool sends your model anywhere.
+- **`history` (on request, needs a key)**: sends an 8-character structural fingerprint of the graph and your `NEURARCH_API_KEY` to `GET /api/v1/history`. The graph itself is never sent, and with no key set the tool makes no request at all.
+- **`NEURARCH_API` (optional)**: points those two tools at a different host; nothing else reads it.
 - **`--hf` (optional)**: fetches a model's public `config.json` from huggingface.co. What is sent: the repo id you asked for, and your `HF_TOKEN` if you set one (to huggingface.co only). Responses are cached locally under `~/.cache/neurarch-mcp` and can be deleted at any time.
-- **`NEURARCH_REPORT=1` (optional, off by default)**: sends one anonymous structure row per graded graph to the Neurarch corpus: a structural fingerprint (8-char hash), a layer-type histogram, an edge count, and (rule id, severity) pairs. The payload format cannot carry your graph, parameter values, layer names, file paths, or any identity. Policy and examples: [neurarch.com/rules.html#data](https://www.neurarch.com/rules.html#data).
+- **`NEURARCH_REPORT=1` (optional, off by default)**: sends one anonymous structure row per graded graph (`validate_model`, `lint_model`, `check_design`, `plan`) to the Neurarch corpus: a structural fingerprint (8-char hash), a layer-type histogram, an edge count, and (rule id, severity) pairs. The payload format cannot carry your graph, parameter values, layer names, file paths, or any identity. Policy and examples: [neurarch.com/rules.html#data](https://www.neurarch.com/rules.html#data).
 - **The hosted instance** (`neurarch-mcp.fly.dev`) is different by nature: it processes the model text or references a client sends it, in memory, to answer that call. Nothing is stored server-side beyond a one-day `hf:` config cache; there are no accounts and no request logs of graph content. It runs with `NEURARCH_REPORT=1`, so each graded call also sends the anonymous structure row described above; use the local server if you do not want that.
 - **Retention**: the local server stores nothing beyond its local caches. Corpus rows (opt-in) are retained indefinitely as anonymous aggregates.
-- **Third parties**: no data is shared with anyone. The only third-party endpoint ever contacted is huggingface.co, and only under `--hf`.
+- **Third parties**: no data is shared with anyone. The only third-party endpoint ever contacted is huggingface.co, and only under `--hf`; `neurarch.com` is contacted only by `plan`, `history`, and opt-in corpus reporting.
 - **Contact**: neurarch.ai@gmail.com, or [open an issue](https://github.com/neurarch-ai/neurarch-mcp/issues).
 
 The app-wide policy at [neurarch.com/privacy](https://www.neurarch.com/privacy) covers the Neurarch web app; this section covers this server.

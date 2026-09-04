@@ -13,6 +13,7 @@ import { renderMermaid } from './mermaid.js';
 import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
 import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
 import { EXTRA_TOOLS } from './extraTools.js';
+import { LEDGER_TOOLS } from './ledgerTools.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
 export interface ToolContext {
@@ -47,6 +48,12 @@ export interface ToolDef {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /**
+   * True when the tool names its own subject and does not need the server's
+   * model. Only `history` does, given a fingerprint; every other tool is a
+   * question about a graph and must fail without one.
+   */
+  modelOptional?: boolean;
   /**
    * Overrides only. Read tools inherit read-only / idempotent / closed-world
    * defaults from `annotate()` in cli.ts, so a tool declares annotations here
@@ -415,7 +422,9 @@ const validateModelTool: ToolDef = {
 //
 // It used to be the one tool that required a key and a network call. The
 // verifier is a pure 13ms function of the graph, so it is vendored now and this
-// tool is as offline and as closed-world as the other eighteen.
+// tool is as offline and as closed-world as the rest of the local set. The two
+// that do reach the network (plan, history) live in ledgerTools.ts and answer
+// questions no local function can: what happened when this structure trained.
 // See src/lib/checkDesign.ts.
 const checkDesignTool: ToolDef = {
   name: 'check_design',
@@ -732,6 +741,7 @@ export const TOOLS: ToolDef[] = [
   listHyperparams,
   getDesignNotes,
   ...EXTRA_TOOLS,
+  ...LEDGER_TOOLS,
 ];
 
 // Suppress unused-export TS warning when not destructured elsewhere

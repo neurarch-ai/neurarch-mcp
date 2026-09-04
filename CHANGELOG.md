@@ -6,6 +6,71 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-03
+
+### Added
+- **`plan`**: the front-door artifact, missing from the agent surface until now.
+  The same card the Neurarch CI bot posts on a pull request and the
+  `neurarch-trace` CLI prints, so an agent and a reviewer read the same words
+  about the same graph: will it run, what it costs, which GPUs it fits, which
+  of the repository's own rules it breaks, what changed against a base design,
+  and what happened last time this structure trained here. The server's `text`
+  comes back verbatim. Policy lines are read from the repository's
+  `.neurarch.yml` (walking up from the model, merging a model's own `policy:`
+  over the top-level block key by key, exactly as the bot does) unless the call
+  passes `policy`; `base_path` adds a diff. `share` is pinned to false, so an
+  agent cannot publish someone's design. A `.neurarch.yml` that exists and
+  cannot be parsed is an error rather than a skip: planning while ignoring the
+  house rules and reporting "will run" is the confident wrong answer.
+
+- **`history`**: what this exact structure scored the last time it trained
+  inside your organisation, keyed by the graph's 8-character structural
+  fingerprint, so it answers about the shape rather than the file. Metric,
+  epochs, wall time and cost, newest first, rendered as a short table and one
+  sentence a person would say ("This structure trained here 3 days ago: 98.65%
+  in 3 epochs, 34s, under a cent"). Takes `model_path` like every read tool, or
+  a `fingerprint` from a plan result, which is the one call this server answers
+  without a model at all.
+
+  **Without `NEURARCH_API_KEY` it makes no request and says so**, rather than
+  returning an empty list: the ledger is per organisation, and an unread ledger
+  and an empty one are different answers. Only one of them means nobody has
+  trained this, and the distinction is the whole value of the row.
+
+  It sends the fingerprint and the key. Never the graph.
+
+- `NEURARCH_API_KEY` and `NEURARCH_API` are read, by these two tools and
+  nowhere else. `NEURARCH_API` is the same variable `neurarch-trace` uses.
+
+### Changed
+- **These two are the only tools in the package that reach the network**, and
+  they say so: `openWorldHint: true`, the reach named in the first sentence of
+  each description, and a rewritten README network section and privacy policy.
+  Every other tool still runs offline against the vendored engine, and with
+  `--hf` off, `NEURARCH_REPORT` unset and neither of these called, the server
+  makes no network calls at all.
+- **`NEURARCH_REPORT` is unchanged and still off by default.** `plan` joins
+  `validate_model` / `lint_model` / `check_design` as a tool that sends the
+  anonymous structure row when reporting is on, so opting in means one thing
+  across every tool that grades rather than leaving a gap an agent falls into
+  by reaching for the newest tool. `history` grades nothing and sends no row.
+- **Tracing is the primary path in the docs now, and static parsing is the
+  fallback**, with the measurement next to the claim rather than the demotion
+  asserted: the parser returns a graph a person would recognise for 41% of 116
+  real model files, and every block and warn it raised on them was hand-judged
+  as an artefact rather than a defect. `trace_model` reads the numbers at
+  runtime, which is the only place they exist. The README's "three ways in" is
+  reordered accordingly.
+- **The core tool listing is ordered, and the order is the recommendation.**
+  `selectTools` now reads `CORE_TOOLS` in order instead of filtering the
+  registry, so an agent scanning the list sees `trace_model`, `plan`,
+  `history`, then the offline ladder. The core set is fifteen tools and about
+  4.6k tokens a turn, up from thirteen and 3.9k; the budget test's cap was
+  raised deliberately rather than quietly.
+- `structuralFingerprint` is exported from `lib/corpusReport.ts` and used by
+  both the corpus row and `history`, so the two can never ask about different
+  structures.
+
 ## [0.15.1] - 2026-09-03
 
 ### Fixed

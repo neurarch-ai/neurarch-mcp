@@ -11,6 +11,8 @@
  * from "always in context" to "one read away".
  */
 export const SHORT: Record<string, string> = {
+  plan: 'Will it run, what it costs, which GPUs it fits, which of your .neurarch.yml rules it breaks, and what this structure scored last time it trained here. Sends the graph to /api/v1/plan. Start here.',
+  history: 'What this exact structure scored last time it trained in your organisation, by fingerprint. Sends the fingerprint, never the graph. Needs NEURARCH_API_KEY.',
   get_model_summary: 'Layer count, total params, dominant layer types, input/output shape. Cheapest orientation.',
   describe_architecture: 'One-call orientation: pipeline order, depth, IO shapes, params and MACs, top hotspots, validation. Start here.',
   get_layer: 'Everything about one layer by name: type, params, shapes, upstream and downstream.',
@@ -37,7 +39,7 @@ export const SHORT: Record<string, string> = {
   load_hf_model: 'A Hugging Face repo as a graph from its config.json (the one network call; listed only under --hf). Says whether it used the real config or a family template.',
   find_models: 'Walk a directory for nn.Module definitions and saved graphs; says which parse fully, partially, or need a runtime trace.',
   suggest_fix: 'Lint findings as unified diffs against the .py: exact where a number or order is pinned, proposal where a layer is missing. Apply, then lint again.',
-  trace_model: 'Run the model once in Python with hooks (neurarch-trace) to get a graph with real shapes; needs the input dims. For code the static parser cannot read.',
+  trace_model: 'Run the model once in Python with hooks (neurarch-trace) for a graph with real shapes; needs the input dims. The way in for a real repository: the static parser is recognisable on 41% of real files.',
   add_layer: 'Insert a new layer, optionally wired after an existing one.',
   modify_layer: 'Shallow-merge params, rename, or re-scope a layer. Returns a before/after diff.',
   add_connection: 'Wire two existing layers.',
@@ -47,6 +49,8 @@ export const SHORT: Record<string, string> = {
 };
 
 export const TITLES: Record<string, string> = {
+  plan: 'Plan this design',
+  history: 'Training history',
   get_model_summary: 'Model summary',
   describe_architecture: 'Describe architecture',
   get_layer: 'Get layer',

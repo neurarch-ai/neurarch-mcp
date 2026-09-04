@@ -9,6 +9,7 @@ import { parseFlags, CORE_TOOLS } from './cli.js';
 import { createMcpServer } from './server.js';
 import { setHfEnabled } from './sources.js';
 import { EXTRA_TOOLS, HF_TOOLS } from './extraTools.js';
+import { LEDGER_TOOLS } from './ledgerTools.js';
 import { PROMPTS } from './prompts.js';
 import { runLintCommand, runCheckCommand } from './commands.js';
 import {
@@ -75,19 +76,32 @@ Environment:
                       on every request (constant-time checked). Required before
                       --write may bind to a non-loopback host.
   NEURARCH_REPORT     Set to 1 to opt in to anonymous corpus reporting: each
-                      validate_model, lint_model or check_design call shares its
-                      structural fingerprint, layer-type histogram, edge count,
-                      and (rule, severity) pairs. Never the graph, params, names,
-                      or any identity. Off by default; errors never affect the
-                      tool call.
+                      validate_model, lint_model, check_design or plan call
+                      shares its structural fingerprint, layer-type histogram,
+                      edge count, and (rule, severity) pairs. Never the graph,
+                      params, names, or any identity. Off by default; errors
+                      never affect the tool call.
+  NEURARCH_API_KEY    Your organisation's key (nrk_...). Required by the
+                      history tool, which reads what happened the last time a
+                      structure trained inside your organisation; optional for
+                      the plan tool, where it adds that same line to the card.
+                      Read nowhere else, and sent nowhere but NEURARCH_API.
+  NEURARCH_API        Override the API host (default https://www.neurarch.com).
+                      The same variable neurarch-trace uses.
 
-  This is the only switch that opens a socket. Unset, this server makes no
-  network calls at all: every tool, check_design included, runs locally against
-  a vendored verifier. No API key is read anywhere in this package.
+  Two tools reach the network when you call them, and they say so in their
+  descriptions: plan POSTs the graph to /api/v1/plan for the same card the CI
+  bot posts, and history sends an 8-character structural fingerprint (never the
+  graph) to /api/v1/history. With --hf off, NEURARCH_REPORT unset and neither
+  of those called, this server makes no network calls at all: every other tool,
+  check_design included, runs locally against a vendored verifier.
 
 Read tools (always available):
-${TOOLS.filter(t => !EXTRA_TOOLS.includes(t)).map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+${TOOLS.filter(t => !EXTRA_TOOLS.includes(t) && !LEDGER_TOOLS.includes(t)).map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
 ${EXTRA_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
+
+Ledger tools (reach neurarch.com when called; see NEURARCH_API_KEY below):
+${LEDGER_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
 
 Network tools (only with --hf):
 ${HF_TOOLS.map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
