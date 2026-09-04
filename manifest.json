@@ -2,9 +2,9 @@
   "manifest_version": "0.2",
   "name": "neurarch-mcp",
   "display_name": "Neurarch",
-  "version": "0.15.1",
+  "version": "0.16.0",
   "description": "Structural awareness of a PyTorch model for the agent: layers, params, FLOPs, design rules, the full verdict, and which of k designs to train.",
-  "long_description": "Point it at a PyTorch .py file or a .neurarch.json graph. The agent can read layers, parameters and FLOPs, run the design linter (lint_model), get the full readiness / cost / deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, and export runnable PyTorch. Everything runs on your machine; nothing opens a socket unless you turn it on.",
+  "long_description": "Point it at a PyTorch .py file or a .neurarch.json graph. The agent can read layers, parameters and FLOPs, run the design linter (lint_model), get the full readiness / cost / deployment verdict (check_design), rank candidate designs (rank_designs), compare against 81 bundled reference architectures, and export runnable PyTorch. All of that runs on your machine. Two tools reach the network when called: plan renders the same card the Neurarch CI bot posts, and history says what this exact structure scored the last time it trained inside your organisation.",
   "author": {
     "name": "neurarch-ai",
     "url": "https://neurarch.com"
@@ -47,6 +47,18 @@
     }
   },
   "tools": [
+    {
+      "name": "plan",
+      "description": "Will it run, what it costs, GPU fit, your .neurarch.yml rules, and what this structure scored last time it trained here."
+    },
+    {
+      "name": "history",
+      "description": "What this exact structure scored the last time it trained in your organisation. Needs an API key."
+    },
+    {
+      "name": "trace_model",
+      "description": "Run the model once in Python with hooks for a graph with real shapes."
+    },
     {
       "name": "describe_architecture",
       "description": "One-call orientation: pipeline, depth, params, MACs, hotspots, validation."

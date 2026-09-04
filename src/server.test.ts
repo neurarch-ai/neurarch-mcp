@@ -15,7 +15,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './server.js';
 import { makeModel } from './test/fixtures.js';
 import { clearModelCache } from './models.js';
-import { MODEL_PATH_PARAM } from './cli.js';
+import { MODEL_PATH_PARAM, CORE_TOOLS } from './cli.js';
+import { TOOLS } from './tools.js';
 import type { ModelArchitecture } from './lib/types.js';
 
 let dir: string;
@@ -69,17 +70,24 @@ describe('ListTools', () => {
     }
   });
 
-  it('marks every read tool closed-world, check_design included', async () => {
+  it('marks every read tool closed-world except the two that read the ledger', async () => {
     // check_design was the exception until the verifier was vendored: it POSTed
     // the graph to an endpoint, so its answer tracked a service rather than the
     // file, and it was annotated openWorld/non-idempotent to say so. It is a
     // local function call now, and an annotation that still claimed otherwise
     // would tell a client to expect network failures that cannot happen.
+    //
+    // `plan` and `history` are the real exceptions and must stay declared as
+    // such: their answers live on the other side of an API key, and a client
+    // that believes they are local is a client that will not warn anybody the
+    // graph is about to leave the machine.
+    const openWorld = new Set(['plan', 'history']);
     const client = await connect();
     const { tools } = await client.listTools();
     for (const t of tools) {
-      expect(t.annotations!.openWorldHint, t.name).toBe(false);
+      expect(t.annotations!.openWorldHint, t.name).toBe(openWorld.has(t.name));
     }
+    expect(tools.filter(t => openWorld.has(t.name))).toHaveLength(openWorld.size);
     const check = tools.find(t => t.name === 'check_design')!;
     expect(check.annotations!.readOnlyHint).toBe(true);
   });
@@ -284,6 +292,37 @@ describe('model_source and zoo: routing', () => {
     expect(named.isError).toBeFalsy();
   });
 
+  it('hosted: history answers from a fingerprint alone, and only history gets that licence', async () => {
+    // A fingerprint IS the name of a structure, so the missing-model error is
+    // the wrong answer to a call that named one. The carve-out is one flag on
+    // one tool; every other tool on a modelless server must still fail.
+    const prev = process.env.NEURARCH_API_KEY;
+    delete process.env.NEURARCH_API_KEY;
+    try {
+      const server = createMcpServer({
+        getModel: () => { throw new Error('This server was started without a model.'); },
+        ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test',
+      });
+      const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
+      const [ct, st] = InMemoryTransport.createLinkedPair();
+      await Promise.all([server.connect(st), client.connect(ct)]);
+      // No key, so this answers offline and reaches no network in the suite.
+      const r = await client.callTool({ name: 'history', arguments: { fingerprint: '7d154c61' } });
+      expect(r.isError).toBeFalsy();
+      expect((r.structuredContent as any).fingerprint).toBe('7d154c61');
+      expect((r.structuredContent as any).ledger).toBe('no-key');
+      const bare = await client.callTool({ name: 'history', arguments: {} });
+      expect(bare.isError).toBe(true);
+      expect((bare.content as any)[0].text).toMatch(/name a structure/);
+      const planned = await client.callTool({ name: 'plan', arguments: {} });
+      expect(planned.isError).toBe(true);
+      expect((planned.content as any)[0].text).toMatch(/without a model/);
+    } finally {
+      if (prev === undefined) delete process.env.NEURARCH_API_KEY;
+      else process.env.NEURARCH_API_KEY = prev;
+    }
+  });
+
   it('--tools=core advertises the core set but still answers a full-set tool by name', async () => {
     const model = makeModel();
     const server = createMcpServer({ getModel: () => model, ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test', toolSet: 'core' });
@@ -291,7 +330,13 @@ describe('model_source and zoo: routing', () => {
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(st), client.connect(ct)]);
     const { tools } = await client.listTools();
-    expect(tools.length).toBeLessThan(15);
+    expect(tools.length).toBe(CORE_TOOLS.length);
+    expect(tools.length).toBeLessThan(TOOLS.length);
+    // The listing order is the recommendation, so it is the CORE_TOOLS order
+    // and not the registry's: an agent picks by scanning, and trace-then-plan
+    // is the path a real repository should take.
+    expect(tools.map(t => t.name)).toEqual([...CORE_TOOLS]);
+    expect(tools.map(t => t.name).slice(0, 2)).toEqual(['trace_model', 'plan']);
     expect(tools.map(t => t.name)).toContain('rank_designs');
     expect(tools.map(t => t.name)).not.toContain('list_connections');
     const r = await client.callTool({ name: 'list_connections', arguments: {} });

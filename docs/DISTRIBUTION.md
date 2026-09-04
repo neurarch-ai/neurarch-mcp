@@ -66,7 +66,7 @@ hosted mode with `--hf`; a mounted model directory works through `model_path`.
 Score 47/100 as of 2026-09-01, unverified. Verification wants: a homepage (set to
 https://www.neurarch.com/mcp), a TXT record on that host (DNS, not done), the
 Smithery badge in the README (done), and a paid plan (no). The quality score
-comes from the published release; a bundle whose manifest lists all 24 tools
+comes from the published release; a bundle whose manifest lists all 28 read tools
 with descriptions, not the 8 headline ones, is the cheap next step.
 
 ## Launch checklist (once per major release)

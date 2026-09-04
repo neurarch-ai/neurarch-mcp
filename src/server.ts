@@ -51,9 +51,17 @@ import { PROMPTS, renderPrompt } from './prompts.js';
  *
  * A corpus row records "this shape got this verdict", so it is meaningful only
  * after something graded the shape. get_layer_info and the rest inspect; these
- * three judge.
+ * four judge.
+ *
+ * `plan` is here so that NEURARCH_REPORT means one thing across every tool
+ * that grades, rather than a coverage gap an agent falls into by reaching for
+ * the newest tool. The row is derived from the graph, not from the response,
+ * so it is the same row the other three send and the server's fingerprint
+ * dedupes it. `history` is deliberately absent: it grades nothing, it is
+ * handed a fingerprint rather than a graph, and there is no verdict on it to
+ * record.
  */
-const GRADING_TOOLS = new Set(['validate_model', 'lint_model', 'check_design']);
+const GRADING_TOOLS = new Set(['validate_model', 'lint_model', 'check_design', 'plan']);
 
 /** Argument name for "answer this about model text I am handing you inline". */
 export const MODEL_SOURCE_PARAM = 'model_source';
@@ -136,7 +144,16 @@ export function createMcpServer(opts: McpServerOptions): Server {
           return { isError: true, content: [{ type: 'text', text: `${tool.name}: ${(e as Error).message}` }] };
         }
       } else {
-        model = getModel();
+        try {
+          model = getModel();
+        } catch (e) {
+          // A tool that names its own subject still has an answer on a server
+          // with no model: `history` takes a fingerprint. Every other tool is
+          // a question about a graph, and the missing-model error is the right
+          // answer for one that named none.
+          if (!tool.modelOptional) throw e;
+          model = undefined as unknown as ModelArchitecture;
+        }
       }
 
       const base: ToolContext = wantsOtherModel && !/^(zoo|hf):/i.test(pathArg as string)
@@ -155,7 +172,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
       // for the design rules or the whole verdict recorded nothing at all. The
       // row is derived from the graph rather than from the result, so these
       // three send the same row and the server's fingerprint dedupes them.
-      if (GRADING_TOOLS.has(tool.name) && reportingEnabled()) {
+      if (model && GRADING_TOOLS.has(tool.name) && reportingEnabled()) {
         sendCorpusReport(buildCorpusReport(model));
       }
       // Both shapes, deliberately. `structuredContent` (spec 2025-06-18) is what

@@ -67,6 +67,30 @@ export interface CorpusReport {
   findings: Array<{ ruleId: string; severity: 'warn' | 'block' }>;
 }
 
+/** The layer-type histogram, sorted so the same graph always hashes the same. */
+export function typeHistogramOf(model: ModelArchitecture): string {
+  const counts = new Map<string, number>();
+  for (const c of model.components) counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([t, n]) => `${t}:${n}`)
+    .join('|');
+}
+
+/**
+ * The 8-char structural id of a graph: what the corpus joins on, and what the
+ * training ledger is keyed by.
+ *
+ * Exported because `history` asks the server "what happened last time THIS
+ * structure trained", and the only way that question can be asked without
+ * sending the graph is to send this. Two callers computing it two ways would
+ * be two callers asking about two different structures, so there is one
+ * function, and the cross-repo lock vector in corpusReport.test.ts holds it.
+ */
+export function structuralFingerprint(model: ModelArchitecture): string {
+  return fnv1a(`${typeHistogramOf(model)}#e${model.connections.length}`);
+}
+
 export function reportingEnabled(): boolean {
   return process.env.NEURARCH_REPORT === '1';
 }
@@ -79,18 +103,11 @@ export function reportingEnabled(): boolean {
  * same graph produces the same row whichever tool was called.
  */
 export function buildCorpusReport(model: ModelArchitecture): CorpusReport {
-  const counts = new Map<string, number>();
-  for (const c of model.components) {
-    counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
-  }
-  const typeHistogram = [...counts.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([t, n]) => `${t}:${n}`)
-    .join('|');
+  const typeHistogram = typeHistogramOf(model);
   const connectionCount = model.connections.length;
 
   return {
-    fingerprint: fnv1a(`${typeHistogram}#e${connectionCount}`),
+    fingerprint: structuralFingerprint(model),
     typeHistogram,
     connectionCount,
     layerCount: model.components.length,

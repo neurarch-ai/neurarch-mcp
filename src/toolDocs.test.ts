@@ -12,11 +12,15 @@ describe('tool descriptions', () => {
       expect(SHORT[t.name].length, `${t.name} short description too long`).toBeLessThanOrEqual(220);
     }
   });
-  it('the core listing stays under 4.2k tokens and the full one under 6k (0.13 was 6.9k for the full set)', () => {
+  it('the core listing stays under 4.8k tokens and the full one under 6.7k (0.13 was 6.9k for the full set)', () => {
+    // The budget moved once, in 0.16, when `plan` and `history` joined the core
+    // set: two tools an agent should reach for first are worth ~0.7k a turn,
+    // and the cap is raised deliberately rather than quietly. It is still a
+    // cap: the next tool pays for itself out of somebody else's description.
     const core = JSON.stringify(listedTools(true, 'core')).length / 4;
     const full = JSON.stringify(listedTools(true, 'full')).length / 4;
-    expect(core).toBeLessThan(4200);
-    expect(full).toBeLessThan(6000);
+    expect(core).toBeLessThan(4800);
+    expect(full).toBeLessThan(6700);
   });
   it('core tools all exist', () => {
     const names = new Set(TOOLS.map(t => t.name));

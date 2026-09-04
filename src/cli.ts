@@ -48,17 +48,26 @@ const COMMANDS = new Set<Command>(['lint', 'check']);
  * long tail. Twenty-five tool descriptions ride along on every turn of every
  * conversation the server is attached to, and some clients cap the count;
  * `--tools=core` advertises these and keeps the rest callable by name.
+ *
+ * The ORDER is the listing order (`selectTools` reads this array, not the
+ * registry), and it is the order the tools are meant to be reached for. An
+ * agent picks by scanning a list, so the list is the recommendation: trace
+ * first because a static parse of a real repository is the weak path
+ * (recognisable on 41% of 116 real files, zero true findings hand-judged),
+ * then plan, then the local ladder.
  */
 export const CORE_TOOLS: readonly string[] = [
-  'describe_architecture',
-  'get_layer',
-  'find_layers',
-  'layer_impact',
-  'lint_model',
+  'trace_model',
+  'plan',
+  'history',
   'check_design',
+  'lint_model',
+  'describe_architecture',
   'rank_designs',
   'suggest_fix',
-  'trace_model',
+  'layer_impact',
+  'get_layer',
+  'find_layers',
   'mermaid_diagram',
   'export_pytorch',
   'list_architectures',
@@ -114,7 +123,13 @@ export function parseFlags(argv: string[]): ParsedFlags {
  */
 export function selectTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'): ToolDef[] {
   const reads = [...TOOLS, ...hfToolsIfEnabled()];
-  const advertised = toolSet === 'core' ? reads.filter(t => CORE_TOOLS.includes(t.name)) : reads;
+  // Ordered by CORE_TOOLS rather than by the registry: the listing order is
+  // what an agent scans, so it carries the recommendation. A name in
+  // CORE_TOOLS with no tool behind it is skipped rather than crashing the
+  // listing, since the two lists are maintained by hand.
+  const advertised = toolSet === 'core'
+    ? CORE_TOOLS.map(name => reads.find(t => t.name === name)).filter((t): t is ToolDef => !!t)
+    : reads;
   return writeEnabled ? [...advertised, ...WRITE_TOOLS] : advertised;
 }
 
@@ -171,6 +186,8 @@ export interface ListedTool {
  * costs a missing hint, not a broken tool.
  */
 const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  plan: { type: 'object', additionalProperties: true, properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
+  history: { type: 'object', additionalProperties: true, properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
   check_design: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },
   lint_model: { type: 'object', additionalProperties: true, properties: { clean: { type: 'boolean' }, counts: { type: 'object' }, findings: { type: 'array' } } },
   validate_model: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' } } },
