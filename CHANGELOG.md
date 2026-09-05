@@ -6,6 +6,18 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- **Opt-in corpus rows survive the exit.** `sendCorpusReport` was fire-and-forget
+  with nowhere to wait, so a process that exited before the POST left the socket
+  dropped the row with no error anywhere. Harmless under a chat client, where the
+  server is long-lived; always wrong under an agent that spawns the server, asks
+  once and closes the pipe, which is how the first hand-run probe of this channel
+  disappeared. The call site is still fire-and-forget (a corpus row must never
+  slow or fail a verdict); `flushCorpusReports()` waits for in-flight rows on
+  `beforeExit`, `SIGINT` and `SIGTERM`, for at most two seconds, and never
+  throws. A signal is now re-raised after the flush instead of being turned into
+  `exit(0)`, so a supervisor still reads the right exit code.
+
 ## [0.16.0] - 2026-09-03
 
 ### Added

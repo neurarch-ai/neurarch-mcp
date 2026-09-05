@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { buildCorpusReport, reportingEnabled, DEFAULT_REPORT_URL } from './corpusReport.js';
+import {
+  buildCorpusReport, reportingEnabled, DEFAULT_REPORT_URL,
+  sendCorpusReport, flushCorpusReports, pendingCorpusReports,
+} from './corpusReport.js';
 import type { ModelArchitecture } from './types.js';
 
 const model = {
@@ -95,5 +98,80 @@ describe('buildCorpusReport', () => {
     // budget. Same apex-307 trap as check_design; same answer.
     expect(DEFAULT_REPORT_URL).toBe('https://www.neurarch.com/api/v1/report');
     expect(new URL(DEFAULT_REPORT_URL).hostname).not.toBe('neurarch.com');
+  });
+});
+
+/**
+ * The row that was sent and never arrived.
+ *
+ * `sendCorpusReport` is fire-and-forget, which is right at the call site: a
+ * corpus row must never slow or fail a verdict. It was also the whole story,
+ * so a process that exited before the socket flushed dropped the row with no
+ * error anywhere. Under a chat client the server is long-lived and this never
+ * shows; under an agent that spawns it, asks once and closes the pipe, it
+ * always does. A channel that reports nothing looks the same whether it is
+ * broken or unused, which is why this is worth a test rather than a comment.
+ */
+describe('flushCorpusReports', () => {
+  const payload = () => buildCorpusReport(model);
+
+  it('resolves immediately when nothing is in flight', async () => {
+    await flushCorpusReports(50);
+    expect(pendingCorpusReports()).toBe(0);
+  });
+
+  it('waits for a send that is still in the socket', async () => {
+    const realFetch = globalThis.fetch;
+    let release!: () => void;
+    const landed = new Promise<void>(r => { release = r; });
+    let arrived = false;
+    globalThis.fetch = (async () => {
+      await landed;
+      arrived = true;
+      return new Response('', { status: 201 });
+    }) as typeof fetch;
+    try {
+      sendCorpusReport(payload());
+      expect(pendingCorpusReports()).toBe(1);
+      // The exit path: the process is going away and the POST has not landed.
+      setTimeout(release, 10);
+      await flushCorpusReports(2000);
+      expect(arrived, 'flush returned before the row was sent').toBe(true);
+      expect(pendingCorpusReports()).toBe(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('never throws when the endpoint is down', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('ECONNREFUSED'))) as typeof fetch;
+    try {
+      sendCorpusReport(payload());
+      await expect(flushCorpusReports(500)).resolves.toBeUndefined();
+      expect(pendingCorpusReports()).toBe(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  // Last on purpose. Its stub never settles and ignores the abort signal, so
+  // its row stays in the pending set for the rest of the file. A real fetch
+  // cannot do that (the 5s AbortController settles it either way), but a later
+  // test would wait on it and read its own flush as slow.
+  it('gives up rather than holding a shutdown open', async () => {
+    // The same rule that says a row may not fail a tool call says it may not
+    // hang an exit. A reporting endpoint that never answers costs the deadline
+    // and nothing more.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (() => new Promise(() => { /* never settles */ })) as typeof fetch;
+    try {
+      sendCorpusReport(payload());
+      const t0 = Date.now();
+      await flushCorpusReports(80);
+      expect(Date.now() - t0).toBeLessThan(1000);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });
