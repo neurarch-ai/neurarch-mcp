@@ -12,6 +12,7 @@ import { EXTRA_TOOLS, HF_TOOLS } from './extraTools.js';
 import { LEDGER_TOOLS } from './ledgerTools.js';
 import { PROMPTS } from './prompts.js';
 import { runLintCommand, runCheckCommand } from './commands.js';
+import { flushCorpusReports } from './lib/corpusReport.js';
 import {
   startHttpServer,
   isLoopbackHost,
@@ -238,7 +239,11 @@ async function main(): Promise<void> {
         reloading = false;
       }
     });
-    const stop = () => { unwatchFile(modelPath); process.exit(0); };
+    // Termination is owned by flushOnExit() below, which is registered first
+    // and waits for an in-flight corpus row before re-raising the signal. This
+    // handler only stops watching; calling process.exit(0) here would race the
+    // flush and lose the row, which is the bug this pair exists to fix.
+    const stop = () => { unwatchFile(modelPath); };
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
   }
@@ -278,6 +283,39 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
+
+/**
+ * Exit paths, so an opt-in corpus row survives them.
+ *
+ * A stdio server is long-lived under a chat client and short-lived under
+ * everything else: an agent that spawns it, asks one question and closes the
+ * pipe gets a process that exits with the POST still unsent. `sendCorpusReport`
+ * stays fire-and-forget at the call site, which is right; this is the one place
+ * that waits, and it waits at most two seconds.
+ *
+ * `beforeExit` covers the ordinary end (the event loop drained). The signals
+ * cover a client that kills the process, and both re-raise rather than swallow:
+ * a handler that turns SIGINT into a clean exit would change what a Ctrl-C
+ * means to whoever sent it.
+ */
+function flushOnExit(): void {
+  let shuttingDown = false;
+  process.once('beforeExit', () => { void flushCorpusReports(); });
+  for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(sig, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      void flushCorpusReports().finally(() => {
+        // Re-raise rather than exit(0): a process killed by a signal should
+        // report that it was, and a supervisor reads the exit code.
+        process.removeAllListeners(sig);
+        process.kill(process.pid, sig);
+      });
+    });
+  }
+}
+
+flushOnExit();
 
 main().catch((e: unknown) => {
   process.stderr.write(`neurarch-mcp: fatal: ${(e as Error).stack ?? String(e)}\n`);

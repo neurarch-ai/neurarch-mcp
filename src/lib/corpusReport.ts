@@ -121,16 +121,59 @@ export function buildCorpusReport(model: ModelArchitecture): CorpusReport {
   };
 }
 
+/**
+ * In-flight sends, so a process that is about to exit can wait for them.
+ *
+ * Fire-and-forget is right for the tool call (a corpus row must never slow or
+ * fail a verdict) and wrong for the process: a client that spawns this server,
+ * makes one call and closes it exits while the POST is still in the socket, and
+ * the row is lost with no error anywhere. That is not a hypothetical, it is how
+ * the first hand-run probe of this channel disappeared, and it is invisible
+ * exactly where it matters, because a channel that reports nothing looks
+ * identical whether it is broken or unused.
+ */
+const pending = new Set<Promise<void>>();
+
 /** Fire-and-forget send. Swallows everything; 5s cap. */
 export function sendCorpusReport(payload: CorpusReport): void {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 5000);
-  fetch(reportUrl(), {
+  const p: Promise<void> = fetch(reportUrl(), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal: ctrl.signal,
   })
+    .then(() => undefined)
     .catch(() => { /* reporting must never surface */ })
-    .finally(() => clearTimeout(timer));
+    .finally(() => { clearTimeout(timer); pending.delete(p); });
+  pending.add(p);
+}
+
+/**
+ * Wait for in-flight rows, for a process that is about to exit.
+ *
+ * Never throws and never waits longer than `ms`: shutdown must not be held
+ * hostage by a reporting endpoint, and the same rule that says a row may not
+ * fail a tool call says it may not hang an exit either. Safe to call when
+ * nothing is pending, and safe to call twice.
+ */
+export async function flushCorpusReports(ms = 2000): Promise<void> {
+  if (pending.size === 0) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>(resolve => {
+    timer = setTimeout(resolve, ms);
+    // Do not let the deadline itself keep the event loop alive.
+    (timer as { unref?: () => void }).unref?.();
+  });
+  try {
+    await Promise.race([Promise.allSettled([...pending]).then(() => undefined), deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Test seam: how many rows are still in flight. */
+export function pendingCorpusReports(): number {
+  return pending.size;
 }
