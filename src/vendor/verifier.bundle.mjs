@@ -5894,21 +5894,21 @@ function datasetOptionsFor(modality, numClasses) {
   switch (modality) {
     case "vision":
       return [
-        { label: "CIFAR-10", value: "hf:cifar10", hint: "60k 32\xD732 colour images, 10 classes" },
-        { label: "MNIST", value: "hf:mnist", hint: "70k 28\xD728 greyscale digits, 10 classes" },
+        { label: "CIFAR-10", value: "hf:uoft-cs/cifar10", hint: "60k 32\xD732 colour images, 10 classes" },
+        { label: "MNIST", value: "hf:ylecun/mnist", hint: "70k 28\xD728 greyscale digits, 10 classes" },
         ...upload,
         synthetic
       ];
     case "nlp":
       return [
-        { label: "IMDB reviews", value: "hf:imdb", hint: "50k reviews, binary sentiment" },
-        { label: "GLUE / SST-2", value: "hf:glue", hint: "Sentence-level sentiment, the standard small benchmark" },
+        { label: "IMDB reviews", value: "hf:stanfordnlp/imdb", hint: "50k reviews, binary sentiment" },
+        { label: "GLUE / SST-2", value: "hf:nyu-mll/glue", hint: "Sentence-level sentiment, the standard small benchmark" },
         ...upload,
         synthetic
       ];
     case "audio":
       return [
-        { label: "Speech Commands", value: "hf:speech_commands", hint: "1-second spoken keywords, 35 classes" },
+        { label: "Speech Commands", value: "hf:google/speech_commands", hint: "1-second spoken keywords, 35 classes" },
         ...upload,
         synthetic
       ];
