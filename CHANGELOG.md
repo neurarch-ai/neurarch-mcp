@@ -6,6 +6,31 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **`NEURARCH_TRACE=1 python train.py`** (neurarch-trace 0.2.0). No target, no
+  `--input`, no edit to the script. The install puts one line at the root of
+  site-packages, Python runs it before the first line of any script in the
+  environment, and with the variable set it waits for torch and records the
+  first forward pass the process runs. A real training entry point rarely has a
+  model you can name on a command line, because it sits behind a config, a
+  registry, a `from_pretrained` and an `if args.variant ==`; the running process
+  has already resolved all of that. With `NEURARCH_TRACE_PLAN=1
+  NEURARCH_TRACE_FAIL_ON_BLOCK=1` it becomes a gate: a design that will not
+  forward-pass stops the process after one step instead of at the shape error
+  two epochs in on a GPU that has been billing the whole time.
+
+  It is a guest in someone's run and behaves like one. It installs the same
+  hooks the CLI uses and drives nothing: no `eval()`, no grad enabled, no
+  `requires_grad` set on the caller's batch, no second forward pass, and
+  `nn.Module.__call__` is put back after the one capture. Nothing leaves the
+  machine unless `PLAN` or `SHARE` is set, and any failure inside the tracer is
+  one line on stderr while the run continues.
+
+- **`AGENTS.md`** at the repository root: what an agent that lands here should
+  reach for, in what order, and the one rule worth loading first, which is that
+  a finding from a statically parsed `.py` is not actionable and a traced graph
+  is.
+
 ### Fixed
 - **Opt-in corpus rows survive the exit.** `sendCorpusReport` was fire-and-forget
   with nowhere to wait, so a process that exited before the POST left the socket

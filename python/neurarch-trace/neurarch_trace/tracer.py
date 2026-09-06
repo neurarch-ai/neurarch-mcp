@@ -95,6 +95,7 @@ class Tracer:
         self.input_nodes: List[Tuple[torch.Tensor, str]] = []
         self.calls: Dict[str, int] = {}
         self.pending: List[Tuple[List[str], Optional[List[int]]]] = []
+        self.handles: List[Any] = []
         # Scope of the module whose inputs are being resolved right now, so a
         # merge node lands inside the block that consumes it, as the app draws it.
         self.consumer_scope: Optional[str] = None
@@ -211,36 +212,47 @@ class Tracer:
             self._register(t, node.id)
 
     # driver
+    #
+    # Split three ways because there are two callers with opposite rights over
+    # the forward pass. The CLI owns it: it may put the model in eval, turn grad
+    # on and choose the inputs. `autopatch` owns none of that -- the forward is
+    # the user's training step, already running -- so it needs to install the
+    # hooks, stand back, and be handed the result. `run` is the CLI's
+    # composition of the same three steps.
 
-    def run(self, inputs: Sequence[torch.Tensor]) -> List[Node]:
+    def begin(self, inputs: Sequence[torch.Tensor], require_grad: bool = True) -> None:
+        """Create the input nodes and install the hooks. Nothing runs yet."""
         for i, x in enumerate(inputs):
-            if x.is_floating_point():
+            # Only the driving caller may touch the user's tensors. A non-leaf
+            # input (already the output of something) cannot take the flag at
+            # all, and setting it on someone else's training batch would put an
+            # unwanted .grad on it.
+            if require_grad and x.is_floating_point() and x.is_leaf and not x.requires_grad:
                 x.requires_grad_(True)
             node = self._add(Node("input" if len(inputs) == 1 else "input_%d" % i, "input", "input", {"shape": batchless(x)}))
             node.output_shape = batchless(x)
             self.input_nodes.append((x, node.id))
             self._register(x, node.id)
 
-        handles = []
         for qual, m in select_modules(self.model, self.depth):
-            handles.append(m.register_forward_pre_hook(partial(self._pre, qual), with_kwargs=True))
-            handles.append(m.register_forward_hook(partial(self._post, qual), with_kwargs=True))
-        if not handles:
+            self.handles.append(m.register_forward_pre_hook(partial(self._pre, qual), with_kwargs=True))
+            self.handles.append(m.register_forward_hook(partial(self._post, qual), with_kwargs=True))
+        if not self.handles:
             raise RuntimeError("model has no modules to record (is it an nn.Module with layers?)")
 
         # Functional chains between two modules can be long (RoPE, masks), and
         # the walk is recursive; the default limit is too low for real LLMs.
         sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
-        was_training = self.model.training
-        self.model.eval()
-        try:
-            with torch.enable_grad():
-                result = self.model(*inputs)
-        finally:
-            for h in handles:
-                h.remove()
-            self.model.train(was_training)
 
+    def detach(self) -> None:
+        """Remove the hooks. Idempotent, and safe to call from a finally block."""
+        for h in self.handles:
+            h.remove()
+        self.handles = []
+
+    def finish(self, result: Any) -> List[Node]:
+        """Close the graph on whatever the forward returned."""
+        self.detach()
         outs = flatten_tensors(result)
         self.consumer_scope = None
         out = self._add(Node("output", "output", "output", {}))
@@ -252,6 +264,18 @@ class Tracer:
         if not out.inputs:
             raise RuntimeError("forward returned nothing traceable (no tensor output reached a recorded layer)")
         return self.nodes
+
+    def run(self, inputs: Sequence[torch.Tensor]) -> List[Node]:
+        self.begin(inputs, require_grad=True)
+        was_training = self.model.training
+        self.model.eval()
+        try:
+            with torch.enable_grad():
+                result = self.model(*inputs)
+        finally:
+            self.detach()
+            self.model.train(was_training)
+        return self.finish(result)
 
 
 def scope_of(qual: str) -> Optional[str]:

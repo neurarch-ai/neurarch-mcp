@@ -1,0 +1,3 @@
+include neurarch_autopatch.pth
+include LICENSE
+include README.md
