@@ -48,6 +48,73 @@ forward-pass), for CI; by default the exit code is 0 once the card printed.
 seconds. On a network failure, a rate limit, or a server error the CLI prints one
 line to stderr, exits 1, and the `.neurarch.json` is still on disk.
 
+## No arguments at all
+
+```
+pip install neurarch-trace
+NEURARCH_TRACE=1 python train.py
+```
+
+No target, no `--input`, no edit to `train.py`. The install puts one line in
+site-packages, Python runs it before the first line of any script in the
+environment, and with `NEURARCH_TRACE` set it waits for torch and records the
+**first forward pass the process runs**. Your script built the model and handed
+it a batch; there is nothing left to specify.
+
+```
+neurarch-trace: wrote ./GPT.neurarch.json (74 layers, 81 connections) from the
+first forward pass of GPT
+```
+
+The reason to prefer this over pointing the CLI at a file is not convenience. A
+real training entry point rarely has a model you can name: it is behind a config,
+a registry, a `from_pretrained`, a wrapper, three imports and a `if
+args.variant ==`. The running process has already resolved all of that.
+
+Add the plan, and it becomes a gate:
+
+```
+NEURARCH_TRACE=1 NEURARCH_TRACE_PLAN=1 NEURARCH_TRACE_FAIL_ON_BLOCK=1 python train.py
+```
+
+A design that will not forward-pass now stops the process after one step, with
+the blocker printed, instead of at the shape error two epochs in on a GPU that
+has been billing the whole time.
+
+**What it will not do to your run.** It reads the forward pass with the same
+hooks the CLI uses and drives nothing: it does not switch the model to `eval()`,
+does not enable grad, does not set `requires_grad` on your batch, and never runs
+a second forward pass. After the one capture it puts `nn.Module.__call__` back,
+so from step two there is no wrapper left in the stack. Nothing leaves the
+machine unless `NEURARCH_TRACE_PLAN` or `NEURARCH_TRACE_SHARE` is set. Any
+failure inside the tracer is one line on stderr and your run continues: a tracer
+must never be the reason a training job dies.
+
+The cost of that restraint is that under `torch.no_grad()` there is no autograd
+graph to walk, so residual adds and concatenations are not recovered as `add` /
+`concatenate` nodes. A training step has grad on and does not have this problem;
+for an inference-only script, use the CLI.
+
+| Variable | |
+|---|---|
+| `NEURARCH_TRACE=1` | arm it (nothing happens without this) |
+| `NEURARCH_TRACE_OUT=path` | where the graph goes (default `./<name>.neurarch.json`) |
+| `NEURARCH_TRACE_NAME=name` | graph name (default: the model's class name) |
+| `NEURARCH_TRACE_DEPTH=n` | stop descending at module depth n |
+| `NEURARCH_TRACE_SKIP=n` | ignore the first n forward passes (warmup, LR probes) |
+| `NEURARCH_TRACE_PLAN=1` | send the graph for the plan and print the card |
+| `NEURARCH_TRACE_SHARE=1` | implies `PLAN`; also store it at a public URL |
+| `NEURARCH_TRACE_FAIL_ON_BLOCK=1` | exit 2 when the plan reports a blocker |
+
+If you would rather not set an environment variable, `python -c "import
+neurarch_trace.autopatch as a; a.install(force=True)"` arms the same thing from
+inside a script, as long as it runs before the first forward pass.
+
+After `pip install -e .` from a source checkout, run `python
+scripts/dev_copy_pth.py` once: an editable install does not place the
+site-packages line, and without it `NEURARCH_TRACE=1` does nothing and says
+nothing. `--check` reports whether it is there.
+
 ## What it does
 
 Run one forward pass over a PyTorch model and write a `.neurarch.json` graph with
@@ -149,6 +216,10 @@ The trace runs in `eval()` mode on CPU with autograd enabled.
 - The batch is assumed to be dim 0. Sequence-first layouts
   (`nn.MultiheadAttention` with `batch_first=False`) come out with the sequence
   length stripped instead.
+- `NEURARCH_TRACE=1` captures the outermost `nn.Module.__call__` in the process,
+  which is the model in every normal script but is a warmup or a loss module in
+  a few; `NEURARCH_TRACE_SKIP` steps past those. A model already wrapped in
+  `torch.compile` should be traced before the compile call, not after.
 - The mapping table lives in `neurarch_trace/mapping.py` and mirrors
   `codeParser.ts` in the Neurarch app. If a torch module is missing there, it is
   recorded as `customModule` rather than guessed.
