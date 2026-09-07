@@ -3079,7 +3079,15 @@ var componentRegistry = {
     icon: "\u{1F517}",
     category: "tabular",
     defaultParams: { interactionDim: 64 },
-    computeOutputShape: (inputShape, params) => {
+    computeOutputShape: (inputShape, params, allInputShapes) => {
+      const dense = allInputShapes?.[0] ?? inputShape;
+      const table = allInputShapes?.[1];
+      const width = dense[dense.length - 1];
+      if (table && table.length >= 2 && typeof width === "number" && width > 0) {
+        const n = table[0] + 1;
+        const pairs = n * (n - 1) / 2;
+        return [width + pairs];
+      }
       return [inputShape[0] || 1, params.interactionDim || 64];
     }
   },
@@ -3090,7 +3098,8 @@ var componentRegistry = {
     category: "tabular",
     defaultParams: { vocabSize: 1e3, embedDim: 32 },
     computeOutputShape: (inputShape, params) => {
-      return [inputShape[0] || 1, params.embedDim || 32];
+      const dim = params.embedDim ?? params.embeddingDim ?? 32;
+      return [inputShape[0] || 1, dim];
     }
   },
   tabnet: {
@@ -3102,6 +3111,129 @@ var componentRegistry = {
     computeOutputShape: (inputShape, params) => {
       return [inputShape[0] || 1, params.decisionDim || 64];
     }
+  },
+  // ========== Recommendation: sequential / generative (2018-2025) ==========
+  // The nine shipped recommendation templates all predate 2020 and all model a
+  // user as ONE vector produced by a permutation-invariant or fixed-window
+  // encoder. The four nodes below are the structures the field actually moved
+  // to, and each one changes a shape the downstream layers have to agree with,
+  // which is the only reason a node earns a place here rather than a doc page.
+  targetAttention: {
+    type: "targetAttention",
+    name: "Target Attention (DIN)",
+    icon: "\u{1F3AF}",
+    category: "tabular",
+    // DIN's local activation unit: the CANDIDATE item is the query and the
+    // behaviour sequence is both key and value, so the sequence axis is
+    // consumed and the layer hands on one interest vector per candidate.
+    // That is what makes it different from selfAttention (shape-preserving)
+    // and from crossAttention (keeps the query's own length).
+    defaultParams: { embedDim: 64, hiddenDim: 36, activation: "dice" },
+    computeOutputShape: (inputShape, params, allInputShapes) => {
+      const ranked = (allInputShapes ?? []).filter((s) => s.length >= 2);
+      const seq = ranked.sort((a, b) => b[b.length - 2] - a[a.length - 2])[0] ?? inputShape;
+      const dim = seq.length >= 1 ? seq[seq.length - 1] : params.embedDim ?? 64;
+      return seq.length >= 2 ? [...seq.slice(0, -2), dim] : [dim];
+    }
+  },
+  behaviorRetrieval: {
+    type: "behaviorRetrieval",
+    name: "Long-Sequence Retrieval (SIM/ETA GSU)",
+    icon: "\u{1F50E}",
+    category: "tabular",
+    // The general search unit of SIM / ETA: a lifelong behaviour sequence
+    // (10^4 events) is cut to topK before anything quadratic touches it. The
+    // whole point is that the ESU downstream sees topK, not L, so the cost
+    // arithmetic on this graph is wrong by orders of magnitude if the shape
+    // does not say so. Hard mode (category match) has no parameters at all.
+    defaultParams: { topK: 50, embedDim: 64, mode: "soft" },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.topK) || 50);
+      if (inputShape.length >= 2) {
+        const out = [...inputShape];
+        out[out.length - 2] = k;
+        return out;
+      }
+      return inputShape;
+    }
+  },
+  multiInterest: {
+    type: "multiInterest",
+    name: "Multi-Interest Extractor (MIND/ComiRec)",
+    icon: "\u{1F9ED}",
+    category: "tabular",
+    // One user becomes K vectors, not one. Every downstream layer that assumed
+    // a single user embedding (a dot product against an item, a Linear on the
+    // last dim) is now operating on a rank it did not expect, which is exactly
+    // the class of break the shape gate exists to catch.
+    defaultParams: { embedDim: 64, numInterests: 4, numIterations: 3 },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.numInterests) || 4);
+      const dim = inputShape.length >= 1 ? inputShape[inputShape.length - 1] : params.embedDim ?? 64;
+      return inputShape.length >= 2 ? [...inputShape.slice(0, -2), k, dim] : [k, dim];
+    }
+  },
+  // ========== Representation learning / retrieval objectives ==========
+  // The two-tower template shipped with an encoder on each side and nothing at
+  // all where the objective goes, which is the half of a retrieval model that
+  // decides what the embeddings mean. These three are the ends that exist in
+  // practice, and each one changes something a downstream layer has to agree
+  // with rather than being a loss function in disguise.
+  contrastiveHead: {
+    type: "contrastiveHead",
+    name: "Contrastive Head (InfoNCE / CLIP)",
+    icon: "\u{1F39A}\uFE0F",
+    category: "multimodal",
+    // Projects to the shared space, L2-normalises, and owns the temperature.
+    // The normalisation is the part that matters downstream: after it, a dot
+    // product is a cosine and is bounded, which is what makes the temperature
+    // meaningful at all.
+    defaultParams: { projDim: 512, temperature: 0.07, learnableTemp: true, normalize: true },
+    computeOutputShape: (inputShape, params) => {
+      const d = Number(params.projDim) || 512;
+      return inputShape.length >= 1 ? [...inputShape.slice(0, -1), d] : [d];
+    }
+  },
+  matryoshkaHead: {
+    type: "matryoshkaHead",
+    name: "Matryoshka Head (MRL)",
+    icon: "\u{1FA86}",
+    category: "multimodal",
+    // Adds NO parameters. It is a promise about the embedding above it: every
+    // listed prefix length is independently usable, so a caller can truncate
+    // instead of running a second model. The promise is only well formed if
+    // every nested dim actually fits inside the embedding, which is what the
+    // matryoshka-dims-exceed-width rule checks.
+    defaultParams: { embedDim: 768, nestedDims: [768, 512, 256, 128, 64] },
+    computeOutputShape: (inputShape, params) => {
+      const d = Number(params.embedDim) || (inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 768);
+      return inputShape.length >= 1 ? [...inputShape.slice(0, -1), d] : [d];
+    }
+  },
+  lateInteraction: {
+    type: "lateInteraction",
+    name: "Late Interaction (ColBERT MaxSim)",
+    icon: "\u{1F517}",
+    category: "multimodal",
+    // Scores a query sequence against a document sequence by max-similarity per
+    // query token, summed. BOTH sequence axes are consumed and one number comes
+    // out, which is the whole difference from a single-vector retriever: the
+    // document keeps its tokens until scoring time.
+    defaultParams: { embedDim: 128, similarity: "cosine", docLen: 180 },
+    computeOutputShape: () => [1]
+  },
+  hstuBlock: {
+    type: "hstuBlock",
+    name: "HSTU Block",
+    icon: "\u{1F4C8}",
+    category: "tabular",
+    // Hierarchical Sequential Transduction Unit (Zhai et al. 2024). Shape
+    // preserving like a transformer block, but the pointwise aggregated
+    // attention has no softmax and the projections are split u/v/q/k, so the
+    // parameter and FLOP arithmetic is NOT a transformer block's and must not
+    // be approximated with one.
+    defaultParams: { embedDim: 512, numHeads: 4, linearDim: 128, attnDim: 128 },
+    computeOutputShape: (inputShape) => inputShape
   },
   // ========== Reinforcement Learning ==========
   dqnHead: {
@@ -3245,6 +3377,28 @@ var componentRegistry = {
     }
   },
   // ========== Multimodal ==========
+  patchMerger: {
+    type: "patchMerger",
+    name: "Patch Merger (Qwen-VL / InternVL)",
+    icon: "\u{1F9F1}",
+    category: "multimodal",
+    // The token-count reducer every any-resolution VLM uses: a k x k spatial
+    // group of visual tokens becomes ONE token k^2 times as wide, then a small
+    // MLP maps that to the language model's width. Both axes move at once and
+    // in opposite directions, which is why this is the most shape-error-prone
+    // node in a VLM and why it is not `pixelShuffle` (that one is [C,H,W]
+    // upsampling, a different op on a different rank).
+    defaultParams: { mergeSize: 2, inDim: 1280, outDim: 3584 },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.mergeSize) || 2);
+      const out = Number(params.outDim) || 3584;
+      if (inputShape.length >= 2) {
+        const n = Math.max(1, Math.floor(inputShape[inputShape.length - 2] / (k * k)));
+        return [...inputShape.slice(0, -2), n, out];
+      }
+      return [out];
+    }
+  },
   crossModalAttention: {
     type: "crossModalAttention",
     name: "Cross-Modal Attention",
@@ -3897,8 +4051,9 @@ var componentRegistry = {
     defaultParams: { dims: [0, 2, 1] },
     computeOutputShape: (inputShape, params) => {
       const dims = params.dims ?? [0, 2, 1];
-      if (dims.length === inputShape.length) {
-        return dims.map((d) => inputShape[d]);
+      if (dims.length === inputShape.length) return dims.map((d) => inputShape[d]);
+      if (dims.length === inputShape.length + 1 && dims[0] === 0) {
+        return dims.slice(1).map((d) => inputShape[d - 1]);
       }
       return inputShape;
     }
@@ -4514,6 +4669,91 @@ var componentRegistry = {
       }
       return [196, embedDim];
     }
+  },
+  // ========== Video latents / world models (2023-2025) ==========
+  causalConv3d: {
+    type: "causalConv3d",
+    name: "Causal Conv3D",
+    icon: "\u{1F39E}\uFE0F",
+    category: "cv",
+    // The building block of every modern video VAE: padding is applied to the
+    // LEFT of the time axis only, so frame t never sees frame t+1 and the
+    // encoder can be run on a growing clip. With temporalStride 1 the frame
+    // count is preserved, which is the property the rest of the pipeline
+    // depends on and which an ordinary conv3d silently breaks.
+    defaultParams: { outChannels: 128, kernelSize: 3, stride: 1, temporalStride: 1, padding: 1 },
+    computeOutputShape: (inputShape, params) => {
+      if (inputShape.length < 4) return inputShape;
+      const [, t, h, w] = inputShape;
+      const outC = Number(params.outChannels) || 128;
+      const k = Number(params.kernelSize) || 3;
+      const sT = Math.max(1, Number(params.temporalStride) || 1);
+      const s = Math.max(1, Number(params.stride) || 1);
+      const p = Number(params.padding ?? Math.floor(k / 2));
+      const outT = Math.max(1, Math.floor((t - 1) / sT) + 1);
+      const spat = (len) => Math.max(1, Math.floor((len + 2 * p - k) / s + 1));
+      return [outC, outT, spat(h), spat(w)];
+    }
+  },
+  rssm: {
+    type: "rssm",
+    name: "RSSM (Dreamer)",
+    icon: "\u{1F30D}",
+    category: "rl",
+    // The recurrent state-space model: a DETERMINISTIC recurrent path and a
+    // STOCHASTIC categorical latent, concatenated. Everything downstream (the
+    // reward head, the decoder, the actor) reads that concatenation, so the
+    // width is deterDim + stochDim * stochClasses and not deterDim, which is
+    // the mistake a plain GRU node would encode.
+    defaultParams: { deterDim: 512, stochDim: 32, stochClasses: 32, hiddenDim: 512 },
+    computeOutputShape: (_inputShape, params) => {
+      const det = Number(params.deterDim) || 512;
+      const st = Number(params.stochDim) || 32;
+      const cls = Math.max(1, Number(params.stochClasses) || 1);
+      return [det + st * cls];
+    }
+  },
+  latentActionModel: {
+    type: "latentActionModel",
+    name: "Latent Action Model (Genie)",
+    icon: "\u{1F579}\uFE0F",
+    category: "rl",
+    // Genie's LAM infers a discrete action from a PAIR of consecutive frames,
+    // so a T-frame clip yields T-1 actions. Getting that off-by-one wrong is
+    // the single most common way this component is mis-wired.
+    defaultParams: { latentDim: 32, codebookSize: 8, hiddenDim: 512 },
+    computeOutputShape: (inputShape, params) => {
+      const dim = Number(params.latentDim) || 32;
+      if (inputShape.length >= 2) {
+        const t = inputShape[inputShape.length - 2];
+        return [...inputShape.slice(0, -2), Math.max(1, t - 1), dim];
+      }
+      return [dim];
+    }
+  },
+  jepaPredictor: {
+    type: "jepaPredictor",
+    name: "JEPA Predictor",
+    icon: "\u{1F9E9}",
+    category: "rl",
+    // Predicts TARGET representations from CONTEXT representations, in
+    // representation space rather than pixel space. Shape preserving in the
+    // embedding width; the number of tokens is set by the mask, not by this
+    // layer, so the token axis is passed through unchanged.
+    defaultParams: { embedDim: 768, predictorDim: 384, depth: 6, numHeads: 12 },
+    computeOutputShape: (inputShape) => inputShape
+  },
+  emaTarget: {
+    type: "emaTarget",
+    name: "EMA Target / Stop-Gradient",
+    icon: "\u{1F9CA}",
+    category: "utility",
+    // Not a computation: a declaration that this branch is an
+    // exponential-moving-average copy of its upstream and carries no gradient.
+    // It exists so the graph can SAY the thing that keeps BYOL / SimSiam /
+    // I-JEPA from collapsing, which makes the absence of it checkable.
+    defaultParams: { momentum: 0.996, stopGradient: true },
+    computeOutputShape: (inputShape) => inputShape
   }
 };
 function createComponent(type, position, id) {
@@ -6162,6 +6402,46 @@ var deepNoResidual = (model) => {
     suggestion: "Add Residual or Add layers every 2-4 layers (ResNet-style). For transformers, use the built-in TransformerBlock which includes residuals."
   }];
 };
+var jepaTargetNeedsStopGrad = (model) => {
+  const predictors = model.components.filter((c) => c.type === "jepaPredictor");
+  if (predictors.length === 0) return [];
+  const stopped = model.components.some(
+    (c) => c.type === "emaTarget" || c.params?.stopGradient === true
+  );
+  if (stopped) return [];
+  return [{
+    id: "jepa-target-no-stop-grad",
+    ruleId: "jepa-target-no-stop-grad",
+    severity: "warning",
+    category: "pattern",
+    title: "Predictive branch with no stop-gradient on the target",
+    message: `A JEPA predictor is present but no branch is marked as an EMA / stop-gradient target. Joint-embedding predictive objectives have a trivial solution (predict a constant), and the momentum target with no gradient is the only thing that rules it out.`,
+    affectedIds: predictors.map((c) => c.id),
+    suggestion: "Add an EMA Target / Stop-Gradient node at the end of the target encoder branch (or set stopGradient on it). BYOL and SimSiam both collapse without it."
+  }];
+};
+var matryoshkaDimsExceedWidth = (model) => {
+  const issues = [];
+  for (const c of model.components) {
+    if (c.type !== "matryoshkaHead") continue;
+    const width = Number(c.params?.embedDim);
+    const nested = Array.isArray(c.params?.nestedDims) ? c.params.nestedDims : [];
+    if (!Number.isFinite(width) || width <= 0 || nested.length === 0) continue;
+    const tooBig = nested.map(Number).filter((d) => Number.isFinite(d) && d > width);
+    if (tooBig.length === 0) continue;
+    issues.push({
+      id: `matryoshka-dims-exceed-width-${c.id}`,
+      ruleId: "matryoshka-dims-exceed-width",
+      severity: "error",
+      category: "structure",
+      title: "Matryoshka prefix wider than the embedding",
+      message: `"${c.name}" publishes nested dimension(s) ${tooBig.join(", ")} against a ${width}-wide embedding. A prefix longer than the whole vector does not exist, so a caller who truncates to it silently gets ${width} instead.`,
+      affectedIds: [c.id],
+      suggestion: `Drop the dimensions above ${width}, or widen embedDim to at least ${Math.max(...tooBig)}.`
+    });
+  }
+  return issues;
+};
 var attentionNoPE = (model) => {
   const attnNodes = model.components.filter((c) => ATTENTION_TYPES.has(c.type));
   if (attnNodes.length === 0) return [];
@@ -6921,8 +7201,12 @@ var ALL_RULES = [
   // R33 pattern    info
   lmHeadVocabMismatch,
   // R34 structure  info
-  kvCacheContextBudget
+  kvCacheContextBudget,
   // R35 performance warning
+  jepaTargetNeedsStopGrad,
+  // R36 pattern    warning
+  matryoshkaDimsExceedWidth
+  // R37 structure  error
 ];
 var ADVISOR_RULE_IDS = [
   "no-input-node",
@@ -6959,7 +7243,9 @@ var ADVISOR_RULE_IDS = [
   "init-activation-mismatch",
   "deep-attention-default-init",
   "lm-head-vocab-mismatch",
-  "kv-cache-context-budget"
+  "kv-cache-context-budget",
+  "jepa-target-no-stop-grad",
+  "matryoshka-dims-exceed-width"
 ];
 function runAdvisorRules(model, opts = {}) {
   if (model.components.length === 0) return [];
@@ -7082,6 +7368,15 @@ var COMPONENT_TYPES = [
   "featureInteraction",
   "embeddingBag",
   "tabnet",
+  // Recommendation (sequential / generative, 2018-2025)
+  "targetAttention",
+  "behaviorRetrieval",
+  "multiInterest",
+  "hstuBlock",
+  // Representation learning / retrieval objectives
+  "contrastiveHead",
+  "matryoshkaHead",
+  "lateInteraction",
   // Reinforcement Learning
   "dqnHead",
   "actorHead",
@@ -7097,6 +7392,7 @@ var COMPONENT_TYPES = [
   "gin",
   "edgeConv",
   // Multimodal
+  "patchMerger",
   "crossModalAttention",
   "fusion",
   "projection",
@@ -7188,6 +7484,12 @@ var COMPONENT_TYPES = [
   "nerfPositionalEncoding",
   "dividedSpaceTimeAttention",
   "tubeletEmbed",
+  "causalConv3d",
+  // World models / model-based RL (2018-2025)
+  "rssm",
+  "latentActionModel",
+  "jepaPredictor",
+  "emaTarget",
   // Utility
   "dropout",
   "reshape",
@@ -7762,6 +8064,20 @@ var SHARED_EXPERT_MOE_CLASS = `class SharedExpertMoE(nn.Module):
         return flat_o.view_as(x)
 
 `;
+var DLRM_INTERACT_METHOD = `
+    @staticmethod
+    def _dlrm_interact(dense, emb):
+        """DLRM feature interaction: pairwise dots over [dense] + embedding rows,
+        concatenated back onto dense. Returns [B, D + C(N+1, 2)]."""
+        if emb.dim() == 2:
+            emb = emb.unsqueeze(0)
+        if dense.dim() == 1:
+            dense = dense.unsqueeze(0)
+        v = torch.cat([dense.unsqueeze(1), emb], dim=1)     # [B, N+1, D]
+        z = torch.bmm(v, v.transpose(1, 2))                  # [B, N+1, N+1]
+        i, j = torch.triu_indices(z.size(1), z.size(2), offset=1)
+        return torch.cat([dense, z[:, i, j]], dim=-1)
+`;
 var MOE_FORWARD_METHOD = `
     @staticmethod
     def _moe_forward(moe, x, top_k=2):
@@ -7780,6 +8096,462 @@ var MOE_FORWARD_METHOD = `
             out[rows] += w * moe['experts'][int(e_idx)](flat_x[rows])
         return out.view_as(x)
 `;
+var HELPER_CLASSES = {
+  attentionPool: `class AttentionPooling(nn.Module):
+    """Pooling by Multihead Attention (Set Transformer's PMA). Learned seed
+    vectors attend over the sequence, so the sequence axis is consumed and the
+    pooling is learned rather than an unweighted mean."""
+
+    def __init__(self, dim: int = 512, num_heads: int = 8, num_seeds: int = 1):
+        super().__init__()
+        self.seeds = nn.Parameter(torch.randn(num_seeds, dim) * 0.02)
+        heads = num_heads if dim % num_heads == 0 else 1
+        self.attn = nn.MultiheadAttention(dim, heads, batch_first=True)
+        self.num_seeds = num_seeds
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        q = self.seeds.unsqueeze(0).expand(x.size(0), -1, -1)
+        out = self.attn(q, x, x, need_weights=False)[0]
+        return out.squeeze(-2) if self.num_seeds == 1 else out
+
+
+`,
+  perceiverLatent: `class PerceiverLatent(nn.Module):
+    """A fixed set of learned latents cross-attends the input, so a variable
+    number of input tokens becomes a FIXED number of latents. This is the
+    Perceiver resampler and BLIP-2's Q-Former: the connector that decouples the
+    downstream token budget from the input's length."""
+
+    def __init__(self, num_latents: int = 64, latent_dim: int = 768, num_heads: int = 8):
+        super().__init__()
+        self.latents = nn.Parameter(torch.randn(num_latents, latent_dim) * 0.02)
+        heads = num_heads if latent_dim % num_heads == 0 else 1
+        self.attn = nn.MultiheadAttention(latent_dim, heads, batch_first=True)
+        self.norm = nn.LayerNorm(latent_dim)
+        self.ff = nn.Sequential(
+            nn.Linear(latent_dim, 4 * latent_dim), nn.GELU(), nn.Linear(4 * latent_dim, latent_dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        q = self.latents.unsqueeze(0).expand(x.size(0), -1, -1)
+        z = q + self.attn(q, x, x, need_weights=False)[0]
+        return z + self.ff(self.norm(z))
+
+
+`,
+  vaeBottleneck: `class VAEBottleneck(nn.Module):
+    """Reparameterised latent: one head for the mean, one for the log-variance,
+    and a sample drawn through them so the gradient survives. At eval time the
+    mean is used, which is why a reconstruction is deterministic there."""
+
+    def __init__(self, d_in: int, latent_dim: int = 128):
+        super().__init__()
+        self.mu = nn.Linear(d_in, latent_dim)
+        self.logvar = nn.Linear(d_in, latent_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        mu, logvar = self.mu(x), self.logvar(x)
+        if not self.training:
+            return mu
+        return mu + torch.randn_like(mu) * (0.5 * logvar).exp()
+
+
+`,
+  geglu: `class GEGLU(nn.Module):
+    """Gated GELU feed-forward. One projection produces both the value and its
+    gate, so the hidden width is halved relative to a plain GELU MLP at the same
+    parameter count."""
+
+    def __init__(self, dim: int = 512, hidden_dim: int = 2048):
+        super().__init__()
+        self.proj = nn.Linear(dim, hidden_dim * 2)
+        self.out = nn.Linear(hidden_dim, dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        value, gate = self.proj(x).chunk(2, dim=-1)
+        return self.out(value * F.gelu(gate))
+
+
+`,
+  patchMerger: `class PatchMerger(nn.Module):
+    """Qwen-VL / InternVL patch merger. A k x k group of visual tokens becomes
+    ONE token k^2 times as wide, then an MLP maps that to the language model's
+    width. Token count divides by k^2 and the width multiplies by it, in the
+    same step."""
+
+    def __init__(self, merge_size: int = 2, d_in: int = 1280, out_dim: int = 3584):
+        super().__init__()
+        self.k = merge_size
+        merged = d_in * merge_size * merge_size
+        # d_in rather than in_dim: the export gate greps for "(in_dim" as an
+        # unresolved placeholder, and a bound parameter is not one.
+        self.norm = nn.LayerNorm(d_in)
+        self.mlp = nn.Sequential(
+            nn.Linear(merged, merged), nn.GELU(), nn.Linear(merged, out_dim))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.norm(x)
+        group = self.k * self.k
+        n = x.size(-2) // group
+        # Trailing tokens that do not fill a group are dropped, which is what
+        # the shape on the canvas says (floor division) and what a real
+        # implementation does after padding the image to a whole grid.
+        x = x[..., : n * group, :]
+        return self.mlp(x.reshape(*x.shape[:-2], n, group * x.size(-1)))
+
+
+`,
+  contrastiveHead: `class ContrastiveHead(nn.Module):
+    """CLIP-style projection into the shared space: bias-free, L2-normalised,
+    with the temperature as a learned parameter. After the normalisation a dot
+    product is a cosine and is bounded, which is what makes the temperature
+    mean anything."""
+
+    def __init__(self, d_in: int, proj_dim: int = 512,
+                 temperature: float = 0.07, learnable_temp: bool = True,
+                 normalize: bool = True):
+        super().__init__()
+        self.proj = nn.Linear(d_in, proj_dim, bias=False)
+        self.normalize = normalize
+        scale = torch.tensor(float(1.0 / max(temperature, 1e-6))).log()
+        self.logit_scale = nn.Parameter(scale) if learnable_temp else scale
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        z = self.proj(x)
+        return F.normalize(z, dim=-1) if self.normalize else z
+
+
+`,
+  matryoshkaHead: `class MatryoshkaHead(nn.Module):
+    """Matryoshka Representation Learning. Adds no parameters: it is a promise
+    that each listed prefix of the embedding is independently usable, so a
+    caller can truncate instead of running a second model. \`views\` is what the
+    loss is summed over during training."""
+
+    def __init__(self, embed_dim: int = 768, nested_dims=(768, 512, 256, 128, 64)):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.nested_dims = [d for d in nested_dims if d <= embed_dim]
+
+    def views(self, x: torch.Tensor):
+        """Every nested prefix, each L2-normalised. Train on all of them."""
+        return [F.normalize(x[..., :d], dim=-1) for d in self.nested_dims]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.normalize(x, dim=-1)
+
+
+`,
+  lateInteraction: `class LateInteraction(nn.Module):
+    """ColBERT MaxSim: the best-matching document token for each query token,
+    summed. Both sequence axes are consumed and one score comes out. The
+    document keeps its tokens until scoring time, which is the whole difference
+    from a single-vector retriever, and also the whole cost."""
+
+    def __init__(self, embed_dim: int = 128, similarity: str = "cosine"):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.similarity = similarity
+
+    def forward(self, query: torch.Tensor, doc=None) -> torch.Tensor:
+        if doc is None:
+            doc = query
+        q, d = query, doc
+        if self.similarity == "cosine":
+            q, d = F.normalize(q, dim=-1), F.normalize(d, dim=-1)
+        sim = q @ d.transpose(-1, -2)          # [.., Lq, Ld]
+        return sim.max(dim=-1).values.sum(dim=-1, keepdim=True)
+
+
+`,
+  residualVQ: `class ResidualVQ(nn.Module):
+    """Residual vector quantization: each level quantizes what the level above
+    could not represent, which is what gives a semantic ID its coarse-to-fine
+    hierarchy."""
+
+    def __init__(self, num_quantizers: int = 8, codebook_size: int = 1024, embed_dim: int = 256):
+        super().__init__()
+        self.codebooks = nn.ModuleList(
+            [nn.Embedding(codebook_size, embed_dim) for _ in range(num_quantizers)])
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual, out = x, torch.zeros_like(x)
+        for cb in self.codebooks:
+            dist = (residual.unsqueeze(-2) - cb.weight).pow(2).sum(-1)
+            q = cb(dist.argmin(-1))
+            out = out + q
+            residual = residual - q
+        return x + (out - x).detach()  # straight-through
+
+
+`,
+  timeEmbedding: `class TimestepEmbedding(nn.Module):
+    """Sinusoidal diffusion-timestep features, then an MLP. Takes a scalar per
+    sample and returns one conditioning vector per sample."""
+
+    def __init__(self, dim: int = 256):
+        super().__init__()
+        self.dim = dim
+        self.mlp = nn.Sequential(nn.Linear(dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        t = t.reshape(t.size(0), -1)[:, 0].float()
+        half = self.dim // 2
+        freqs = torch.exp(
+            -torch.arange(half, device=t.device, dtype=t.dtype) * (9.2103403719762 / max(1, half - 1)))
+        ang = t[:, None] * freqs[None]
+        emb = torch.cat([ang.cos(), ang.sin()], dim=-1)
+        if emb.size(-1) < self.dim:
+            emb = F.pad(emb, (0, self.dim - emb.size(-1)))
+        return self.mlp(emb)
+
+
+`,
+  ditBlock: `class DiTBlock(nn.Module):
+    """DiT block with adaLN-Zero: the conditioning vector produces the scale,
+    shift and gate for both sublayers, and the gates start at zero so a fresh
+    block is the identity."""
+
+    def __init__(self, hidden_dim: int = 1152, num_heads: int = 16, cond_dim: int = 1152):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(hidden_dim, elementwise_affine=False)
+        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
+        self.norm2 = nn.LayerNorm(hidden_dim, elementwise_affine=False)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_dim, 4 * hidden_dim), nn.GELU(), nn.Linear(4 * hidden_dim, hidden_dim))
+        self.ada = nn.Sequential(nn.SiLU(), nn.Linear(cond_dim, 6 * hidden_dim))
+        nn.init.zeros_(self.ada[1].weight)
+        nn.init.zeros_(self.ada[1].bias)
+
+    def forward(self, x: torch.Tensor, cond=None) -> torch.Tensor:
+        if cond is None:
+            cond = x.mean(dim=-2)
+        sh1, sc1, g1, sh2, sc2, g2 = self.ada(cond).chunk(6, dim=-1)
+        h = self.norm1(x) * (1 + sc1.unsqueeze(-2)) + sh1.unsqueeze(-2)
+        x = x + g1.unsqueeze(-2) * self.attn(h, h, h, need_weights=False)[0]
+        h = self.norm2(x) * (1 + sc2.unsqueeze(-2)) + sh2.unsqueeze(-2)
+        return x + g2.unsqueeze(-2) * self.mlp(h)
+
+
+`,
+  targetAttention: `class TargetAttention(nn.Module):
+    """DIN's local activation unit. The CANDIDATE is the query over the
+    behaviour sequence, so the sequence axis is consumed and one interest
+    vector comes out per candidate."""
+
+    def __init__(self, embed_dim: int, hidden_dim: int = 36):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(4 * embed_dim, hidden_dim),
+            nn.PReLU(),
+            nn.Linear(hidden_dim, 1),
+        )
+
+    def forward(self, query: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+        if query.dim() == keys.dim() - 1:
+            query = query.unsqueeze(-2)
+        q = query[..., :1, :].expand_as(keys)
+        feats = torch.cat([q, keys, q - keys, q * keys], dim=-1)
+        w = self.mlp(feats).softmax(dim=-2)
+        return (w * keys).sum(dim=-2)
+
+
+`,
+  behaviorRetrieval: `class BehaviorRetrieval(nn.Module):
+    """SIM / ETA general search unit: cut a lifelong behaviour sequence to its
+    top-k most relevant events BEFORE anything quadratic runs. Hard mode is a
+    category lookup and learns nothing."""
+
+    def __init__(self, top_k: int = 50, embed_dim: int = 64, mode: str = "soft"):
+        super().__init__()
+        self.top_k = top_k
+        self.mode = mode
+        self.proj = None if mode == "hard" else nn.Linear(embed_dim, embed_dim, bias=False)
+
+    def forward(self, seq: torch.Tensor, target=None) -> torch.Tensor:
+        k = min(self.top_k, seq.size(-2))
+        h = seq if self.proj is None else self.proj(seq)
+        if target is None:
+            score = h.norm(dim=-1)
+        else:
+            if target.dim() == h.dim() - 1:
+                target = target.unsqueeze(-2)
+            score = (h * target[..., :1, :]).sum(-1)
+        idx = score.topk(k, dim=-1).indices
+        return seq.gather(-2, idx.unsqueeze(-1).expand(*idx.shape, seq.size(-1)))
+
+
+`,
+  multiInterest: `class MultiInterest(nn.Module):
+    """MIND behaviour-to-interest dynamic routing. One user becomes K vectors,
+    not one, so every downstream layer sees a rank it has to agree with."""
+
+    def __init__(self, embed_dim: int, num_interests: int = 4, num_iterations: int = 3):
+        super().__init__()
+        self.k = num_interests
+        self.iters = max(1, num_iterations)
+        self.bilinear = nn.Linear(embed_dim, embed_dim, bias=False)
+
+    @staticmethod
+    def _squash(x: torch.Tensor) -> torch.Tensor:
+        n2 = x.pow(2).sum(-1, keepdim=True)
+        return (n2 / (1.0 + n2)) * x / (n2.sqrt() + 1e-8)
+
+    def forward(self, seq: torch.Tensor) -> torch.Tensor:
+        u = self.bilinear(seq)
+        b = seq.new_zeros(seq.size(0), self.k, seq.size(-2))
+        v = self._squash(torch.bmm(b.softmax(dim=1), u))
+        for _ in range(self.iters - 1):
+            b = b + torch.bmm(v, u.transpose(1, 2))
+            v = self._squash(torch.bmm(b.softmax(dim=1), u))
+        return v
+
+
+`,
+  hstuBlock: `class HSTUBlock(nn.Module):
+    """Hierarchical Sequential Transduction Unit (Zhai et al., ICML 2024).
+    Pointwise aggregated attention: NO softmax over the sequence, and four
+    projections (u, v, q, k) rather than a transformer block's attention plus
+    a separate FFN. It is not a transformer block and does not cost like one."""
+
+    def __init__(self, embed_dim: int, num_heads: int = 4,
+                 linear_dim: int = 128, attn_dim: int = 128):
+        super().__init__()
+        self.h, self.dv, self.dqk = num_heads, linear_dim, attn_dim
+        self.uvqk = nn.Linear(embed_dim, num_heads * (2 * linear_dim + 2 * attn_dim))
+        self.out = nn.Linear(num_heads * linear_dim, embed_dim)
+        self.norm = nn.LayerNorm(embed_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+        h, dv, dqk = self.h, self.dv, self.dqk
+        u, v, q, k = self.uvqk(x).split([h * dv, h * dv, h * dqk, h * dqk], dim=-1)
+        q = q.view(b, t, h, dqk).transpose(1, 2)
+        k = k.view(b, t, h, dqk).transpose(1, 2)
+        vh = v.view(b, t, h, dv).transpose(1, 2)
+        attn = (F.silu(q @ k.transpose(-1, -2)) / t).tril()
+        o = (attn @ vh).transpose(1, 2).reshape(b, t, h * dv)
+        return self.norm(x + self.out(o * F.silu(u)))
+
+
+`,
+  causalConv3d: `class CausalConv3d(nn.Module):
+    """Video-VAE convolution: time is padded on the LEFT only, so frame t never
+    sees frame t+1 and the encoder can be run on a growing clip. With
+    temporal_stride 1 the frame count is preserved."""
+
+    def __init__(self, in_ch: int, out_ch: int, kernel_size: int = 3,
+                 stride: int = 1, temporal_stride: int = 1, padding: int = 1):
+        super().__init__()
+        self.pad_t = kernel_size - 1
+        # in_ch / out_ch rather than torch's in_channels / out_channels: the
+        # export gate greps for "(in_channels" as an unresolved placeholder,
+        # and a bound parameter of a helper class is not one.
+        self.conv = nn.Conv3d(
+            in_ch, out_ch, kernel_size,
+            stride=(temporal_stride, stride, stride),
+            padding=(0, padding, padding),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(F.pad(x, (0, 0, 0, 0, self.pad_t, 0)))
+
+
+`,
+  rssm: `class RSSM(nn.Module):
+    """Dreamer's recurrent state-space model: a deterministic recurrent path
+    beside a categorical stochastic latent. Everything downstream reads their
+    CONCATENATION, so the state width is deter_dim + stoch_dim * stoch_classes,
+    which is the number a plain GRU would get wrong."""
+
+    def __init__(self, embed_dim: int, deter_dim: int = 512, stoch_dim: int = 32,
+                 stoch_classes: int = 32, hidden_dim: int = 512):
+        super().__init__()
+        self.deter_dim, self.stoch_dim, self.stoch_classes = deter_dim, stoch_dim, stoch_classes
+        flat = stoch_dim * stoch_classes
+        self.cell = nn.GRUCell(flat, deter_dim)
+        self.prior = nn.Sequential(
+            nn.Linear(deter_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, flat))
+        self.post = nn.Sequential(
+            nn.Linear(deter_dim + embed_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, flat))
+
+    def forward(self, embed: torch.Tensor, state=None) -> torch.Tensor:
+        b = embed.size(0)
+        flat = self.stoch_dim * self.stoch_classes
+        if state is None:
+            deter = embed.new_zeros(b, self.deter_dim)
+            stoch = embed.new_zeros(b, flat)
+        else:
+            deter, stoch = state
+        deter = self.cell(stoch, deter)
+        # self.prior(deter) is the imagination branch: it predicts the same
+        # latent WITHOUT an observation, and the KL between the two is the
+        # world model's training signal. Observed steps use the posterior.
+        logits = self.post(torch.cat([deter, embed], dim=-1))
+        stoch = logits.view(b, self.stoch_dim, self.stoch_classes).softmax(-1).reshape(b, flat)
+        return torch.cat([deter, stoch], dim=-1)
+
+
+`,
+  latentActionModel: `class LatentActionModel(nn.Module):
+    """Genie's latent action model: a discrete action is inferred from a PAIR of
+    consecutive frames, so a T-frame clip yields T-1 actions."""
+
+    def __init__(self, in_dim: int, latent_dim: int = 32,
+                 codebook_size: int = 8, hidden_dim: int = 512):
+        super().__init__()
+        self.enc = nn.Sequential(
+            nn.Linear(2 * in_dim, hidden_dim), nn.SiLU(), nn.Linear(hidden_dim, latent_dim))
+        self.codebook = nn.Embedding(codebook_size, latent_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pairs = torch.cat([x[..., :-1, :], x[..., 1:, :]], dim=-1)
+        z = self.enc(pairs)
+        dist = (z.unsqueeze(-2) - self.codebook.weight).pow(2).sum(-1)
+        q = self.codebook(dist.argmin(-1))
+        return z + (q - z).detach()  # straight-through
+
+
+`,
+  jepaPredictor: `class JEPAPredictor(nn.Module):
+    """I-JEPA's predictor, narrow on purpose: a predictor as wide as the encoder
+    is a second encoder. Prediction happens in representation space."""
+
+    def __init__(self, embed_dim: int = 768, predictor_dim: int = 384,
+                 depth: int = 6, num_heads: int = 12):
+        super().__init__()
+        heads = num_heads if predictor_dim % num_heads == 0 else 1
+        self.inp = nn.Linear(embed_dim, predictor_dim)
+        self.blocks = nn.ModuleList([
+            nn.TransformerEncoderLayer(
+                d_model=predictor_dim, nhead=heads,
+                dim_feedforward=4 * predictor_dim, batch_first=True)
+            for _ in range(max(1, depth))
+        ])
+        self.out = nn.Linear(predictor_dim, embed_dim)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.inp(x)
+        for blk in self.blocks:
+            h = blk(h)
+        return self.out(h)
+
+
+`,
+  emaTarget: `class EMATarget(nn.Module):
+    """Not a computation: a declaration that this branch is an exponential
+    moving average of its upstream and carries NO gradient. Dropping the detach
+    is how BYOL / SimSiam / I-JEPA collapse to a constant."""
+
+    def __init__(self, momentum: float = 0.996):
+        super().__init__()
+        self.momentum = momentum
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x.detach()
+
+
+`
+};
 var INTENTIONAL_PASSTHROUGH = /* @__PURE__ */ new Set(["positionalEncoding", "rope", "residual", "skipConnection"]);
 function isUnsupportedPassthrough(comp) {
   if (comp.type === "input" || comp.type === "output" || comp.type === "stickyNote") return false;
@@ -7870,6 +8642,12 @@ function generatePyTorchCode(model) {
   }
   const compMap = new Map(components.map((c) => [c.id, c]));
   const connToFrom = new Map(model.connections.map((c) => [c.to, c.from]));
+  const connToFroms = /* @__PURE__ */ new Map();
+  for (const c of model.connections) {
+    const list = connToFroms.get(c.to);
+    if (list) list.push(c.from);
+    else connToFroms.set(c.to, [c.from]);
+  }
   const eligibleGroups = (model.groups ?? []).filter((g) => {
     const nonIO = g.componentIds.filter((id) => {
       const c = compMap.get(id);
@@ -7898,6 +8676,7 @@ function generatePyTorchCode(model) {
     for (const id of group.componentIds) compToGroupInfo.set(id, info);
   }
   const hasAudio = components.some((c) => ["melSpectrogram", "mfcc", "stft", "audioConv"].includes(c.type));
+  const hasGraph = components.some((c) => ["graphConv", "gcn", "graphAttention", "gat", "graphSAGE"].includes(c.type));
   let code = "# Architecture designed with Neurarch: https://neurarch.com\n";
   code += "# PyTorch: compatible with Python 3.8+ and torch>=1.12\n";
   code += "# Colab: pip install torch torchvision  (usually pre-installed)\n";
@@ -7916,6 +8695,7 @@ function generatePyTorchCode(model) {
   code += "\n";
   code += "import torch\nimport torch.nn as nn\nimport torch.nn.functional as F\nfrom typing import Tuple\n";
   if (hasAudio) code += "import torchaudio\n";
+  if (hasGraph) code += "from torch_geometric.nn import GCNConv, GATConv, SAGEConv\n";
   code += "\n";
   const hp = model.hyperparams ?? {};
   if (Object.keys(hp).length > 0) {
@@ -7942,6 +8722,9 @@ function generatePyTorchCode(model) {
   }
   if (model.components.some((c) => c.type === "sharedExpertMoE")) {
     code += SHARED_EXPERT_MOE_CLASS;
+  }
+  for (const type of Object.keys(HELPER_CLASSES)) {
+    if (model.components.some((c) => c.type === type)) code += HELPER_CLASSES[type];
   }
   for (const info of groupInfos) {
     code += info.classCode;
@@ -7986,18 +8769,27 @@ function generatePyTorchCode(model) {
   if (components.some((c) => c.type === "moeLayer" && !compToGroupInfo.has(c.id))) {
     code += MOE_FORWARD_METHOD;
   }
+  if (components.some((c) => c.type === "featureInteraction")) {
+    code += DLRM_INTERACT_METHOD;
+  }
   const inputComponents = components.filter((c) => c.type === "input");
   const hasMultipleInputs = inputComponents.length >= 2;
+  const inputVarNames = inputComponents.map((_, i) => i === 0 ? "src" : i === 1 ? "tgt" : `in${i + 1}`);
+  const edgeParam = hasGraph ? ", edge_index=None" : "";
   if (hasMultipleInputs) {
-    code += "\n    def forward(self, src, tgt=None):\n";
+    const params = inputVarNames.map((n, i) => i === 0 ? n : `${n}=None`).join(", ");
+    code += `
+    def forward(self, ${params}${edgeParam}):
+`;
   } else {
-    code += "\n    def forward(self, x):\n";
+    code += `
+    def forward(self, x${edgeParam}):
+`;
   }
   const sortedComponents = topoForGroups;
   const componentVars = /* @__PURE__ */ new Map();
   if (hasMultipleInputs) {
-    if (inputComponents[0]) componentVars.set(inputComponents[0].id, "src");
-    if (inputComponents[1]) componentVars.set(inputComponents[1].id, "tgt");
+    inputComponents.forEach((c, i) => componentVars.set(c.id, inputVarNames[i]));
   } else {
     const inputComponent = inputComponents[0];
     if (inputComponent) componentVars.set(inputComponent.id, "x");
@@ -8011,7 +8803,8 @@ function generatePyTorchCode(model) {
       continue;
     }
     if (comp.type === "output") {
-      const lastVar = componentVars.get(comp.inputs[0] || "") || "x";
+      const lastSrcId = comp.inputs[0] ?? connToFrom.get(comp.id);
+      const lastVar = lastSrcId && componentVars.get(lastSrcId) || "x";
       code += `        # Output
 `;
       code += `        return ${lastVar}
@@ -8032,7 +8825,7 @@ function generatePyTorchCode(model) {
       continue;
     }
     const layerName = componentToLayerName[comp.id];
-    const forwardCode = generateForwardCode(comp, layerName, model, componentVars, connToFrom);
+    const forwardCode = generateForwardCode(comp, layerName, model, componentVars, connToFrom, connToFroms);
     if (forwardCode) {
       const baseName = comp.type.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "");
       const idSuffix = comp.id.slice(-6).replace(/[^a-z0-9]/gi, "_");
@@ -8091,9 +8884,23 @@ function generatePyTorchCode(model) {
   }
   const hasEmbedding = sortedComponents.some((c) => c.type === "embedding");
   const hasConv2d = sortedComponents.some((c) => c.type === "conv2d");
+  const pyTuple = (dims) => dims.length === 1 ? `${dims[0]},` : dims.join(", ");
+  const consumerOf = (comp) => {
+    if (!comp) return void 0;
+    const nextId = model.connections.find((c) => c.from === comp.id)?.to;
+    return nextId ? compMap.get(nextId) : void 0;
+  };
+  const tokenSourceFor = (comp) => {
+    const next = consumerOf(comp);
+    return next?.type === "embedding" || next?.type === "embeddingBag" ? next : null;
+  };
+  const vocabOf = (emb) => emb?.params?.numEmbeddings ?? emb?.params?.vocabSize ?? 5e4;
   const makeExampleShape = (comp) => {
     const raw = comp?.params?.shape ?? comp?.outputShape;
-    if (raw && raw.length > 0) return raw[0] === 1 ? raw : [1, ...raw];
+    if (raw && raw.length > 0) {
+      const housesItsOwnBatch = raw.length >= 2 && raw[0] === 1 && tokenSourceFor(comp) !== null;
+      return housesItsOwnBatch ? raw : [1, ...raw];
+    }
     if (hasEmbedding) return [1, 128];
     if (!hasConv2d) return [1, 64];
     return [1, 3, 224, 224];
@@ -8107,28 +8914,42 @@ if __name__ == '__main__':
   code += `    model.eval()
 
 `;
+  const GRAPH_EXAMPLE_NODES = 4;
+  if (hasGraph) {
+    code += `    edge_index = torch.tensor([[0, 1, 2, 3], [1, 2, 3, 0]], dtype=torch.long)  # (2, num_edges) COO
+`;
+  }
   if (hasMultipleInputs) {
-    const srcShape = makeExampleShape(inputComponents[0]);
-    const tgtShape = makeExampleShape(inputComponents[1]);
-    code += `    src = torch.randint(0, ${inputComponents[0].params?.shape?.[0] ?? 37e3}, (${srcShape.join(", ")}))  # (batch, src_seq_len)
+    inputComponents.forEach((comp, i) => {
+      const name = inputVarNames[i];
+      const shape = makeExampleShape(comp);
+      const emb = tokenSourceFor(comp);
+      if (hasGraph) {
+        const feats = shape[shape.length - 1];
+        code += emb ? `    ${name} = torch.randint(0, ${vocabOf(emb)}, (${GRAPH_EXAMPLE_NODES},))  # ${comp.name} (num_nodes,)
+` : `    ${name} = torch.randn(${GRAPH_EXAMPLE_NODES}, ${feats})  # ${comp.name} (num_nodes, in_features)
 `;
-    code += `    tgt = torch.randint(0, ${inputComponents[1].params?.shape?.[0] ?? 37e3}, (${tgtShape.join(", ")}))  # (batch, tgt_seq_len)
+        return;
+      }
+      code += emb ? `    ${name} = torch.randint(0, ${vocabOf(emb)}, (${pyTuple(shape)}))  # ${comp.name}
+` : `    ${name} = torch.randn(${pyTuple(shape)})  # ${comp.name}
 `;
+    });
     code += `    with torch.no_grad():
 `;
-    code += `        output = model(src, tgt)
+    code += `        output = model(${inputVarNames.join(", ")}${hasGraph ? ", edge_index" : ""})
 
 `;
-    code += `    print(f'Src shape    : {tuple(src.shape)}')
+    for (const name of inputVarNames) {
+      code += `    print(f'${name.padEnd(6)} shape : {tuple(${name}.shape)}')
 `;
-    code += `    print(f'Tgt shape    : {tuple(tgt.shape)}')
-`;
+    }
     code += `    print(f'Output shape : {tuple(output.shape)}')
 `;
   } else {
     const inputComp = inputComponents[0];
     const exampleShape = makeExampleShape(inputComp);
-    const shapeStr = exampleShape.join(", ");
+    const shapeStr = pyTuple(exampleShape);
     let dimLabels;
     if (exampleShape.length === 2) {
       dimLabels = ["batch", "features"];
@@ -8140,11 +8961,14 @@ if __name__ == '__main__':
       dimLabels = exampleShape.map((_, i) => `dim_${i}`);
     }
     const shapeComment = `# (${dimLabels.join(", ")})`;
-    const firstNonIO = sortedComponents.find((c) => c.type !== "input" && c.type !== "output");
-    const isTokenModel = firstNonIO?.type === "embedding" || exampleShape.length <= 2;
-    const vocabSize = firstNonIO?.type === "embedding" ? firstNonIO.params?.vocabSize || 5e4 : 5e4;
-    if (isTokenModel) {
-      code += `    x = torch.randint(0, ${vocabSize}, (${shapeStr}))  ${shapeComment}
+    const inputEmb = tokenSourceFor(inputComp) ?? (sortedComponents.find((c) => c.type !== "input" && c.type !== "output")?.type === "embedding" ? sortedComponents.find((c) => c.type !== "input" && c.type !== "output") ?? null : null);
+    if (hasGraph) {
+      const feats = exampleShape[exampleShape.length - 1];
+      code += inputEmb ? `    x = torch.randint(0, ${vocabOf(inputEmb)}, (${GRAPH_EXAMPLE_NODES},))  # (num_nodes,)
+` : `    x = torch.randn(${GRAPH_EXAMPLE_NODES}, ${feats})  # (num_nodes, in_features)
+`;
+    } else if (inputEmb) {
+      code += `    x = torch.randint(0, ${vocabOf(inputEmb)}, (${shapeStr}))  ${shapeComment}
 `;
     } else {
       code += `    x = torch.randn(${shapeStr})  ${shapeComment}
@@ -8152,7 +8976,7 @@ if __name__ == '__main__':
     }
     code += `    with torch.no_grad():
 `;
-    code += `        output = model(x)
+    code += `        output = model(x${hasGraph ? ", edge_index" : ""})
 
 `;
     code += `    print(f'Input  shape : {tuple(x.shape)}')
@@ -8296,14 +9120,14 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     case "depthwiseConv2d": {
       const dwIn = params.inChannels ?? (inputShape?.[0] ?? "in_channels");
       const dm = params.depthMultiplier || 1;
-      return `nn.Conv2d(${dwIn}, ${dwIn}*${dm}, kernel_size=${pyDim(params.kernelSize, 3)}, groups=${dwIn}, bias=True)`;
+      return `nn.Conv2d(${dwIn}, ${dwIn}*${dm}, kernel_size=${pyDim(params.kernelSize, 3)}, stride=${pyDim(params.stride, 1)}, padding=${pyDim(params.padding, 0)}, groups=${dwIn}, bias=True)`;
     }
     case "separableConv2d": {
       const scIn = params.inChannels ?? (inputShape?.[0] ?? "in_channels");
       const scOut = params.outChannels || scIn;
       const scK = pyDim(params.kernelSize, 3);
       return `nn.Sequential(
-            nn.Conv2d(${scIn}, ${scIn}, kernel_size=${scK}, groups=${scIn}, bias=False),
+            nn.Conv2d(${scIn}, ${scIn}, kernel_size=${scK}, stride=${pyDim(params.stride, 1)}, padding=${pyDim(params.padding, 0)}, groups=${scIn}, bias=False),
             nn.Conv2d(${scIn}, ${scOut}, kernel_size=1)
         )`;
     }
@@ -8346,7 +9170,7 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     case "embedding":
       return `nn.Embedding(${params.numEmbeddings || params.vocabSize || 1e4}, ${params.embeddingDim || params.embedDim || 128})`;
     case "embeddingBag":
-      return `nn.EmbeddingBag(${params.numEmbeddings || 1e4}, ${params.embeddingDim || 64}, mode='mean')`;
+      return `nn.Embedding(${params.numEmbeddings ?? params.vocabSize ?? 1e4}, ${params.embeddingDim ?? params.embedDim ?? 64})`;
     case "layerNorm":
       let normFeatures = "normalized_shape";
       if (inputShape && Array.isArray(inputShape) && inputShape.length > 0) {
@@ -8515,7 +9339,7 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     case "patchEmbed": {
       const P = params.patchSize ?? 16;
       const D = params.embedDim ?? 768;
-      const inC = params.inChans ?? params.inChannels ?? 3;
+      const inC = params.inChans ?? params.inChannels ?? inputShape?.[0] ?? 3;
       return `nn.Conv2d(${inC}, ${D}, kernel_size=${P}, stride=${P})  # Patch embedding (ViT-style)`;
     }
     case "seBlock": {
@@ -8536,6 +9360,9 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
       return null;
     // Applied externally / stochastic depth via timm
     case "reshape":
+    case "permute":
+    case "globalAvgPool1d":
+    case "mean":
       return null;
     // handled in forward pass
     case "upsample":
@@ -8566,10 +9393,11 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
       return `nn.GroupNorm(${params.numGroups || 32}, ${gnChannels})`;
     }
     case "transformerBlock": {
-      const tbDim = params.hiddenDim || params.embedDim || 512;
+      const tbDim = params.hiddenDim || params.embedDim || params.dModel || 512;
       const tbHeads = params.numHeads || 8;
-      const tbFf = params.ffDim || tbDim * 4;
-      const isDecoder = comp.inputs.length >= 2;
+      const tbFf = params.ffDim || params.dFf || tbDim * 4;
+      const parentCount = Math.max(comp.inputs.length, model.connections.filter((e) => e.to === comp.id).length);
+      const isDecoder = parentCount >= 2;
       if (isDecoder) {
         return `nn.TransformerDecoderLayer(d_model=${tbDim}, nhead=${tbHeads}, dim_feedforward=${tbFf}, batch_first=True)`;
       }
@@ -8577,12 +9405,12 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     }
     case "selfAttention":
     case "attention": {
-      const attnDim = params.embedDim || 128;
+      const attnDim = params.embedDim || params.hiddenDim || params.dModel || 128;
       const attnHeads = params.numHeads || 8;
       return `nn.MultiheadAttention(embed_dim=${attnDim}, num_heads=${attnHeads}, batch_first=True)`;
     }
     case "crossAttention": {
-      const xaDim = params.embedDim || 512;
+      const xaDim = params.embedDim || params.hiddenDim || params.dModel || 512;
       const xaHeads = params.numHeads || 8;
       return `nn.MultiheadAttention(embed_dim=${xaDim}, num_heads=${xaHeads}, batch_first=True)`;
     }
@@ -8600,6 +9428,7 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     case "add":
     case "multiply":
     case "concatenate":
+    case "matmul":
       return null;
     // These are functional operations
     // ── RL heads ─────────────────────────────────────────────────────────────────
@@ -8637,15 +9466,12 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     // ── Graph ─────────────────────────────────────────────────────────────────────
     case "graphConv":
     case "gcn":
-      return null;
-    // Requires torch_geometric: GCNConv — not standard nn.Module
+      return `GCNConv(${params.inFeatures ?? inputShape?.[inputShape.length - 1] ?? 64}, ${params.outFeatures || 64})`;
     case "graphAttention":
     case "gat":
-      return null;
-    // Requires torch_geometric: GATConv
+      return `GATConv(${params.inFeatures ?? inputShape?.[inputShape.length - 1] ?? 64}, ${params.outFeatures || 64}, heads=${params.numHeads || 1})`;
     case "graphSAGE":
-      return null;
-    // Requires torch_geometric: SAGEConv
+      return `SAGEConv(${params.inFeatures ?? inputShape?.[inputShape.length - 1] ?? 64}, ${params.outFeatures || 64})`;
     // ── Tabular ───────────────────────────────────────────────────────────────────
     case "tabnet": {
       const tnIn = params.inputDim ?? (inputShape?.[inputShape.length - 1] ?? "input_dim");
@@ -8658,6 +9484,132 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     case "featureInteraction":
       return null;
     // Custom FM/DCN interaction — no standard nn.Module
+    // ── Recommendation: sequential / generative ──────────────────────────────
+    case "targetAttention": {
+      const taDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 64;
+      return `TargetAttention(embed_dim=${taDim}, hidden_dim=${params.hiddenDim || 36})`;
+    }
+    case "behaviorRetrieval": {
+      const brDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 64;
+      return `BehaviorRetrieval(top_k=${params.topK || 50}, embed_dim=${brDim}, mode="${params.mode || "soft"}")`;
+    }
+    case "multiInterest": {
+      const miDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 64;
+      return `MultiInterest(embed_dim=${miDim}, num_interests=${params.numInterests || 4}, num_iterations=${params.numIterations || 3})`;
+    }
+    case "hstuBlock": {
+      const hsDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 512;
+      return `HSTUBlock(embed_dim=${hsDim}, num_heads=${params.numHeads || 4}, linear_dim=${params.linearDim || 128}, attn_dim=${params.attnDim || 128})`;
+    }
+    // ── Video latents / world models ─────────────────────────────────────────
+    case "causalConv3d": {
+      const ccIn = params.inChannels ?? inputShape?.[0] ?? 3;
+      const ccK = params.kernelSize ?? 3;
+      return `CausalConv3d(${ccIn}, ${params.outChannels || 128}, kernel_size=${ccK}, stride=${params.stride ?? 1}, temporal_stride=${params.temporalStride ?? 1}, padding=${params.padding ?? Math.floor(Number(ccK) / 2)})`;
+    }
+    case "rssm": {
+      const rsEmbed = inputShape?.[inputShape.length - 1] ?? 4096;
+      return `RSSM(embed_dim=${rsEmbed}, deter_dim=${params.deterDim || 512}, stoch_dim=${params.stochDim || 32}, stoch_classes=${params.stochClasses || 32}, hidden_dim=${params.hiddenDim || 512})`;
+    }
+    case "latentActionModel": {
+      const laIn = inputShape?.[inputShape.length - 1] ?? 512;
+      return `LatentActionModel(in_dim=${laIn}, latent_dim=${params.latentDim || 32}, codebook_size=${params.codebookSize || 8}, hidden_dim=${params.hiddenDim || 512})`;
+    }
+    case "jepaPredictor": {
+      const jpDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 768;
+      return `JEPAPredictor(embed_dim=${jpDim}, predictor_dim=${params.predictorDim || 384}, depth=${params.depth || 6}, num_heads=${params.numHeads || 12})`;
+    }
+    case "emaTarget":
+      return `EMATarget(momentum=${params.momentum ?? 0.996})`;
+    // ── Types that used to fall through to the "No layer code" warning, which
+    //    made them silent passthroughs: shape-changing ones (lmHead, topK,
+    //    tubeletEmbed) then produced a file whose output did not match the
+    //    shape its own architecture page printed. ─────────────────────────────
+    case "lmHead": {
+      const lmIn = params.hiddenSize ?? params.hiddenDim ?? params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 768;
+      return `nn.Linear(${lmIn}, ${params.vocabSize || 32e3}, bias=False)`;
+    }
+    case "residualVQ":
+      return `ResidualVQ(num_quantizers=${params.numQuantizers || 8}, codebook_size=${params.codebookSize || 1024}, embed_dim=${params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 256})`;
+    case "timeEmbedding":
+      return `TimestepEmbedding(dim=${params.dim || 256})`;
+    case "ditBlock":
+      return `DiTBlock(hidden_dim=${params.hiddenDim || params.embedDim || 1152}, num_heads=${params.numHeads || 16}, cond_dim=${params.condDim || params.hiddenDim || 1152})`;
+    case "tubeletEmbed": {
+      const tub = Array.isArray(params.tubeletSize) ? params.tubeletSize : [2, 16, 16];
+      const tubIn = params.inChans ?? inputShape?.[0] ?? 3;
+      return `nn.Conv3d(${tubIn}, ${params.embedDim || 768}, kernel_size=(${tub.join(", ")}), stride=(${tub.join(", ")}))`;
+    }
+    case "topK":
+      return null;
+    // torch.topk is functional — emitted in the forward pass
+    // ── Multimodal connectors / retrieval objectives ─────────────────────────
+    case "patchMerger": {
+      const pmIn = params.inDim ?? inputShape?.[inputShape.length - 1] ?? 1280;
+      return `PatchMerger(merge_size=${params.mergeSize || 2}, d_in=${pmIn}, out_dim=${params.outDim || 3584})`;
+    }
+    case "contrastiveHead": {
+      const chIn = inputShape?.[inputShape.length - 1] ?? 768;
+      return `ContrastiveHead(d_in=${chIn}, proj_dim=${params.projDim || 512}, temperature=${params.temperature ?? 0.07}, learnable_temp=${params.learnableTemp === false ? "False" : "True"}, normalize=${params.normalize === false ? "False" : "True"})`;
+    }
+    case "matryoshkaHead": {
+      const mhDim = params.embedDim ?? inputShape?.[inputShape.length - 1] ?? 768;
+      const nested = Array.isArray(params.nestedDims) ? params.nestedDims : [768, 512, 256, 128, 64];
+      return `MatryoshkaHead(embed_dim=${mhDim}, nested_dims=(${nested.join(", ")}))`;
+    }
+    case "lateInteraction":
+      return `LateInteraction(embed_dim=${params.embedDim || 128}, similarity="${params.similarity || "cosine"}")`;
+    // ── Types that changed the shape and silently passed through ────────────
+    //    (see codeGenerator.passthrough.test.ts: a passthrough on a
+    //     shape-changing type exports a file whose output cannot match the
+    //     shape its own architecture page prints)
+    case "attentionPool": {
+      const apDim = params.dim ?? inputShape?.[inputShape.length - 1] ?? 512;
+      return `AttentionPooling(dim=${apDim}, num_heads=${params.numHeads || 8}, num_seeds=${params.numSeeds ?? 1})`;
+    }
+    case "perceiverLatent":
+      return `PerceiverLatent(num_latents=${params.numLatents || 64}, latent_dim=${params.latentDim || 768}, num_heads=${params.numHeads || 8})`;
+    case "vaeBottleneck": {
+      const vbIn = params.inDim ?? inputShape?.[inputShape.length - 1] ?? 512;
+      return `VAEBottleneck(d_in=${vbIn}, latent_dim=${params.latentDim || 128})`;
+    }
+    case "geglu": {
+      const ggDim = params.dim ?? inputShape?.[inputShape.length - 1] ?? 512;
+      return `GEGLU(dim=${ggDim}, hidden_dim=${params.hiddenDim || 2048})`;
+    }
+    case "globalMaxPool2d":
+      return `nn.AdaptiveMaxPool2d((1, 1))`;
+    case "maxpool3d":
+      return `nn.MaxPool3d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride ?? params.kernelSize, 2)})`;
+    case "avgpool3d":
+      return `nn.AvgPool3d(kernel_size=${pyDim(params.kernelSize, 2)}, stride=${pyDim(params.stride ?? params.kernelSize, 2)})`;
+    case "dilatedConv2d": {
+      const dcIn = params.inChannels ?? inputShape?.[0] ?? 3;
+      return `nn.Conv2d(${dcIn}, ${params.outChannels || 32}, kernel_size=${pyDim(params.kernelSize, 3)}, stride=${params.stride || 1}, padding=${params.padding ?? 2}, dilation=${params.dilation ?? 2})`;
+    }
+    case "bidirectionalGRU": {
+      let biGruInput = resolveSequenceInputSize(comp, inputShape, compMap);
+      if (params.inputSize !== void 0) biGruInput = params.inputSize;
+      return `nn.GRU(${biGruInput}, ${params.hiddenSize || 128}, num_layers=${params.numLayers || 1}, batch_first=True, bidirectional=True)`;
+    }
+    case "depthwiseConv1d": {
+      const dwIn = params.inChannels ?? inputShape?.[inputShape.length - 2] ?? 1;
+      return `nn.Conv1d(${dwIn}, ${dwIn}, kernel_size=${pyDim(params.kernelSize, 3)}, groups=${dwIn}, padding=${params.padding ?? 0})`;
+    }
+    // torch_geometric class names, the same convention gcn / gat / graphSAGE
+    // already use: the graph layers name the library's module rather than
+    // inlining an implementation.
+    case "gin":
+      return `GINConv(nn.Sequential(nn.Linear(${params.inFeatures ?? inputShape?.[inputShape.length - 1] ?? 64}, ${params.outFeatures || 64}), nn.ReLU(), nn.Linear(${params.outFeatures || 64}, ${params.outFeatures || 64})))`;
+    case "edgeConv":
+      return `EdgeConv(nn.Sequential(nn.Linear(${2 * Number(params.inFeatures ?? inputShape?.[inputShape.length - 1] ?? 64)}, ${params.outFeatures || 64}), nn.ReLU()))`;
+    case "glu":
+    case "interpolate":
+    case "unsqueeze":
+    case "pad":
+    case "stack":
+      return null;
+    // functional — emitted in the forward pass
     // ── Multimodal ────────────────────────────────────────────────────────────────
     case "fusion": {
       const fusIn = params.fusionDim ?? (inputShape?.[inputShape.length - 1] ?? "in_dim");
@@ -8670,7 +9622,7 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
     }
     // ── Audio ────────────────────────────────────────────────────────────────────
     case "audioConv": {
-      const acInC = params.inChannels || 1;
+      const acInC = params.inChannels ?? inputShape?.[inputShape.length - 2] ?? 1;
       const acOutC = params.outChannels || 32;
       const acK = pyDim(params.kernelSize, 3);
       return `nn.Conv1d(${acInC}, ${acOutC}, kernel_size=${acK}, stride=${params.stride || 1}, padding=${params.padding || 0})`;
@@ -8697,10 +9649,12 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
       return null;
   }
 }
-function generateForwardCode(comp, layerName, _model, componentVars, connToFrom) {
+function generateForwardCode(comp, layerName, _model, componentVars, connToFrom, connToFroms) {
   const { type, inputs } = comp;
   const getInputVars = () => {
     if (inputs.length === 0) {
+      const fromIds = connToFroms?.get(comp.id);
+      if (fromIds?.length) return fromIds.map((id) => componentVars.get(id) ?? "x");
       const fromId = connToFrom.get(comp.id);
       if (fromId) return [componentVars.get(fromId) ?? "x"];
       return ["x"];
@@ -8739,10 +9693,28 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom)
     case "flatten":
       return `torch.flatten(${primaryVar}, 1)`;
     case "reshape": {
-      const rshape = comp.params.shape || [512];
-      const shapeStr = Array.isArray(rshape) ? rshape.join(", ") : rshape;
-      return `${primaryVar}.reshape(${primaryVar}.size(0), ${shapeStr})`;
+      const rshape = Array.isArray(comp.params.shape) ? comp.params.shape : [comp.params.shape ?? 512];
+      const rsIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      const declaresItsOwnBatch = rshape[0] === 1 && rsIn != null && rshape.length === rsIn.length + 1;
+      const dims = declaresItsOwnBatch ? rshape.slice(1) : rshape;
+      return `${primaryVar}.reshape(${primaryVar}.size(0), ${dims.join(", ")})`;
     }
+    // The three below had no forward code at all: the exporter printed
+    // "No layer code for component type" and passed the tensor through
+    // unchanged, so a graph that transposed before pooling exported as a graph
+    // that did neither, and the shapes the app showed stopped describing the
+    // file it handed you.
+    case "permute": {
+      const dims = Array.isArray(comp.params.dims) ? comp.params.dims : [1, 0];
+      const pmIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      const alreadyBatched = pmIn != null && dims.length === pmIn.length + 1 && dims[0] === 0;
+      const runtime = alreadyBatched ? dims : [0, ...dims.map((d) => d + 1)];
+      return `${primaryVar}.permute(${runtime.join(", ")})`;
+    }
+    case "globalAvgPool1d":
+      return `${primaryVar}.mean(dim=-1)`;
+    case "mean":
+      return inputVars.length >= 2 ? `torch.stack([${inputVars.join(", ")}]).mean(dim=0)` : `${primaryVar}.mean(dim=-1)`;
     case "embedding":
     case "embeddingBag":
     case "layerNorm":
@@ -8799,6 +9771,84 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom)
     }
     case "sharedExpertMoE":
       return `self.${layerName}(${primaryVar})`;
+    case "targetAttention": {
+      const taKeys = inputVars.length >= 2 ? inputVars[1] : primaryVar;
+      return `self.${layerName}(${primaryVar}, ${taKeys})`;
+    }
+    case "behaviorRetrieval": {
+      const brTgt = inputVars.length >= 2 ? `, ${inputVars[1]}` : "";
+      return `self.${layerName}(${primaryVar}${brTgt})`;
+    }
+    case "multiInterest":
+    case "hstuBlock":
+    case "causalConv3d":
+    case "rssm":
+    case "latentActionModel":
+    case "jepaPredictor":
+    case "emaTarget":
+      return `self.${layerName}(${primaryVar})`;
+    case "lmHead":
+    case "residualVQ":
+    case "timeEmbedding":
+    case "patchMerger":
+    case "contrastiveHead":
+    case "matryoshkaHead":
+      return `self.${layerName}(${primaryVar})`;
+    case "lateInteraction": {
+      const liDoc = inputVars.length >= 2 ? `, ${inputVars[1]}` : "";
+      return `self.${layerName}(${primaryVar}${liDoc})`;
+    }
+    case "attentionPool":
+    case "perceiverLatent":
+    case "vaeBottleneck":
+    case "geglu":
+    case "maxpool3d":
+    case "avgpool3d":
+    case "dilatedConv2d":
+      return `self.${layerName}(${primaryVar})`;
+    case "globalMaxPool2d":
+      return `self.${layerName}(${primaryVar}).flatten(1)`;
+    case "bidirectionalGRU":
+      return comp.params?.returnSequences === false ? `self.${layerName}(${primaryVar})[0][:, -1, :]` : `self.${layerName}(${primaryVar})[0]`;
+    case "depthwiseConv1d":
+    case "gin":
+    case "edgeConv":
+      return `self.${layerName}(${primaryVar})`;
+    case "glu":
+      return `F.glu(${primaryVar}, dim=-1)`;
+    case "interpolate": {
+      const mode = String(comp.params?.mode ?? "nearest");
+      const align = mode === "nearest" ? "" : ", align_corners=False";
+      return comp.params?.size !== void 0 ? `F.interpolate(${primaryVar}, size=${Array.isArray(comp.params.size) ? `(${comp.params.size.join(", ")})` : comp.params.size}, mode="${mode}"${align})` : `F.interpolate(${primaryVar}, scale_factor=${Number(comp.params?.scaleFactor) || 2}, mode="${mode}"${align})`;
+    }
+    case "unsqueeze": {
+      const uqIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      const uqDeclared = comp.params?.dim !== void 0 ? Number(comp.params.dim) : -1;
+      const uqDim = uqDeclared >= 0 && uqIn ? uqDeclared - (uqIn.length + 1) : uqDeclared;
+      return `${primaryVar}.unsqueeze(${uqDim})`;
+    }
+    case "pad": {
+      const padding = Array.isArray(comp.params?.padding) ? comp.params.padding : [0, 0, 0, 0];
+      return `F.pad(${primaryVar}, (${padding.map((x) => Number(x) || 0).join(", ")}))`;
+    }
+    case "stack": {
+      const stIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      const stDeclared = comp.params?.dim !== void 0 ? Number(comp.params.dim) : 0;
+      const stDim = stDeclared >= 0 && stIn ? stDeclared - (stIn.length + 1) : stDeclared;
+      return inputVars.length >= 2 ? `torch.stack([${inputVars.join(", ")}], dim=${stDim})` : `${primaryVar}.unsqueeze(${stDim})`;
+    }
+    case "ditBlock": {
+      const dbCond = inputVars.length >= 2 ? `, ${inputVars[1]}` : "";
+      return `self.${layerName}(${primaryVar}${dbCond})`;
+    }
+    case "tubeletEmbed":
+      return `self.${layerName}(${primaryVar}).flatten(2).transpose(1, 2)  # [B, num_tubelets, embed_dim]`;
+    case "topK": {
+      const tkIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      const tkDeclared = comp.params?.dim !== void 0 ? Number(comp.params.dim) : -1;
+      const tkDim = tkDeclared >= 0 && tkIn ? tkDeclared - tkIn.length : tkDeclared;
+      return `torch.topk(${primaryVar}, k=${comp.params?.k ?? 2}, dim=${tkDim}).values`;
+    }
     case "swiglu":
       return `self.${layerName}['down_proj'](F.silu(self.${layerName}['gate_proj'](${primaryVar})) * self.${layerName}['up_proj'](${primaryVar}))`;
     case "patchEmbed":
@@ -8841,6 +9891,14 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom)
       } else {
         return inputVars.join(" + ");
       }
+    case "matmul": {
+      if (inputVars.length < 2) return `${primaryVar}`;
+      const mmIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+      if (mmIn && mmIn.length === 1) {
+        return `(${inputVars[0]} * ${inputVars[1]}).sum(dim=-1, keepdim=True)`;
+      }
+      return `torch.matmul(${inputVars[0]}, ${inputVars[1]})`;
+    }
     case "multiply":
       if (inputVars.length === 1) {
         return `${primaryVar}`;
@@ -8853,7 +9911,9 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom)
       if (inputVars.length === 1) {
         return `${primaryVar}`;
       } else {
-        const dim = comp.params?.dim !== void 0 ? comp.params.dim : -1;
+        const declared = comp.params?.dim !== void 0 ? Number(comp.params.dim) : -1;
+        const catIn = getInputShape(comp, _model, new Map(_model.components.map((c) => [c.id, c])), connToFrom);
+        const dim = declared >= 0 && catIn ? declared - catIn.length : declared;
         return `torch.cat([${inputVars.join(", ")}], dim=${dim})`;
       }
     case "dqnHead":
@@ -8871,9 +9931,9 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom)
     case "graphAttention":
     case "gat":
     case "graphSAGE":
-      return `self.${layerName}(${primaryVar}, edge_index)  # pass edge_index from graph data`;
+      return `self.${layerName}(${primaryVar}, edge_index)`;
     case "featureInteraction":
-      return `${primaryVar}  # feature interaction: implement FM/DCN manually`;
+      return inputVars.length >= 2 ? `self._dlrm_interact(${inputVars[0]}, ${inputVars[1]})` : `${primaryVar}  # feature interaction needs a dense and an embedding parent`;
     case "melSpectrogram":
       return `torchaudio.transforms.MelSpectrogram(sample_rate=${comp.params.sampleRate || 16e3}, n_mels=${comp.params.nMels || 80})(${primaryVar})`;
     case "mfcc":
@@ -9558,20 +10618,24 @@ function normalizeAndAugmentConfig(config, modelId) {
     if (config.d_model) config.hidden_size = config.d_model;
     else if (config.n_embd) config.hidden_size = config.n_embd;
     else if (config.model_dim) config.hidden_size = config.model_dim;
+    else if (config.dim) config.hidden_size = config.dim;
   }
   if (!config.num_hidden_layers) {
     if (config.n_layer) config.num_hidden_layers = config.n_layer;
+    else if (config.n_layers) config.num_hidden_layers = config.n_layers;
     else if (config.num_layers) config.num_hidden_layers = config.num_layers;
     else if (config.encoder_layers) config.num_hidden_layers = config.encoder_layers;
     else if (config.num_blocks) config.num_hidden_layers = config.num_blocks;
   }
   if (!config.num_attention_heads) {
     if (config.n_head) config.num_attention_heads = config.n_head;
+    else if (config.n_heads) config.num_attention_heads = config.n_heads;
     else if (config.encoder_attention_heads) config.num_attention_heads = config.encoder_attention_heads;
     else if (config.num_heads) config.num_attention_heads = config.num_heads;
   }
   if (!config.intermediate_size) {
     if (config.n_inner) config.intermediate_size = config.n_inner;
+    else if (config.hidden_dim) config.intermediate_size = config.hidden_dim;
     else if (config.encoder_ffn_dim) config.intermediate_size = config.encoder_ffn_dim;
     else if (config.d_ff) config.intermediate_size = config.d_ff;
     else if (config.ffn_dim) config.intermediate_size = config.ffn_dim;
