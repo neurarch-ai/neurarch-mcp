@@ -579,7 +579,15 @@ var componentRegistry = {
     icon: "\u{1F517}",
     category: "tabular",
     defaultParams: { interactionDim: 64 },
-    computeOutputShape: (inputShape, params) => {
+    computeOutputShape: (inputShape, params, allInputShapes) => {
+      const dense = allInputShapes?.[0] ?? inputShape;
+      const table = allInputShapes?.[1];
+      const width = dense[dense.length - 1];
+      if (table && table.length >= 2 && typeof width === "number" && width > 0) {
+        const n2 = table[0] + 1;
+        const pairs = n2 * (n2 - 1) / 2;
+        return [width + pairs];
+      }
       return [inputShape[0] || 1, params.interactionDim || 64];
     }
   },
@@ -590,7 +598,8 @@ var componentRegistry = {
     category: "tabular",
     defaultParams: { vocabSize: 1e3, embedDim: 32 },
     computeOutputShape: (inputShape, params) => {
-      return [inputShape[0] || 1, params.embedDim || 32];
+      const dim = params.embedDim ?? params.embeddingDim ?? 32;
+      return [inputShape[0] || 1, dim];
     }
   },
   tabnet: {
@@ -602,6 +611,129 @@ var componentRegistry = {
     computeOutputShape: (inputShape, params) => {
       return [inputShape[0] || 1, params.decisionDim || 64];
     }
+  },
+  // ========== Recommendation: sequential / generative (2018-2025) ==========
+  // The nine shipped recommendation templates all predate 2020 and all model a
+  // user as ONE vector produced by a permutation-invariant or fixed-window
+  // encoder. The four nodes below are the structures the field actually moved
+  // to, and each one changes a shape the downstream layers have to agree with,
+  // which is the only reason a node earns a place here rather than a doc page.
+  targetAttention: {
+    type: "targetAttention",
+    name: "Target Attention (DIN)",
+    icon: "\u{1F3AF}",
+    category: "tabular",
+    // DIN's local activation unit: the CANDIDATE item is the query and the
+    // behaviour sequence is both key and value, so the sequence axis is
+    // consumed and the layer hands on one interest vector per candidate.
+    // That is what makes it different from selfAttention (shape-preserving)
+    // and from crossAttention (keeps the query's own length).
+    defaultParams: { embedDim: 64, hiddenDim: 36, activation: "dice" },
+    computeOutputShape: (inputShape, params, allInputShapes) => {
+      const ranked = (allInputShapes ?? []).filter((s) => s.length >= 2);
+      const seq = ranked.sort((a, b) => b[b.length - 2] - a[a.length - 2])[0] ?? inputShape;
+      const dim = seq.length >= 1 ? seq[seq.length - 1] : params.embedDim ?? 64;
+      return seq.length >= 2 ? [...seq.slice(0, -2), dim] : [dim];
+    }
+  },
+  behaviorRetrieval: {
+    type: "behaviorRetrieval",
+    name: "Long-Sequence Retrieval (SIM/ETA GSU)",
+    icon: "\u{1F50E}",
+    category: "tabular",
+    // The general search unit of SIM / ETA: a lifelong behaviour sequence
+    // (10^4 events) is cut to topK before anything quadratic touches it. The
+    // whole point is that the ESU downstream sees topK, not L, so the cost
+    // arithmetic on this graph is wrong by orders of magnitude if the shape
+    // does not say so. Hard mode (category match) has no parameters at all.
+    defaultParams: { topK: 50, embedDim: 64, mode: "soft" },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.topK) || 50);
+      if (inputShape.length >= 2) {
+        const out = [...inputShape];
+        out[out.length - 2] = k;
+        return out;
+      }
+      return inputShape;
+    }
+  },
+  multiInterest: {
+    type: "multiInterest",
+    name: "Multi-Interest Extractor (MIND/ComiRec)",
+    icon: "\u{1F9ED}",
+    category: "tabular",
+    // One user becomes K vectors, not one. Every downstream layer that assumed
+    // a single user embedding (a dot product against an item, a Linear on the
+    // last dim) is now operating on a rank it did not expect, which is exactly
+    // the class of break the shape gate exists to catch.
+    defaultParams: { embedDim: 64, numInterests: 4, numIterations: 3 },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.numInterests) || 4);
+      const dim = inputShape.length >= 1 ? inputShape[inputShape.length - 1] : params.embedDim ?? 64;
+      return inputShape.length >= 2 ? [...inputShape.slice(0, -2), k, dim] : [k, dim];
+    }
+  },
+  // ========== Representation learning / retrieval objectives ==========
+  // The two-tower template shipped with an encoder on each side and nothing at
+  // all where the objective goes, which is the half of a retrieval model that
+  // decides what the embeddings mean. These three are the ends that exist in
+  // practice, and each one changes something a downstream layer has to agree
+  // with rather than being a loss function in disguise.
+  contrastiveHead: {
+    type: "contrastiveHead",
+    name: "Contrastive Head (InfoNCE / CLIP)",
+    icon: "\u{1F39A}\uFE0F",
+    category: "multimodal",
+    // Projects to the shared space, L2-normalises, and owns the temperature.
+    // The normalisation is the part that matters downstream: after it, a dot
+    // product is a cosine and is bounded, which is what makes the temperature
+    // meaningful at all.
+    defaultParams: { projDim: 512, temperature: 0.07, learnableTemp: true, normalize: true },
+    computeOutputShape: (inputShape, params) => {
+      const d = Number(params.projDim) || 512;
+      return inputShape.length >= 1 ? [...inputShape.slice(0, -1), d] : [d];
+    }
+  },
+  matryoshkaHead: {
+    type: "matryoshkaHead",
+    name: "Matryoshka Head (MRL)",
+    icon: "\u{1FA86}",
+    category: "multimodal",
+    // Adds NO parameters. It is a promise about the embedding above it: every
+    // listed prefix length is independently usable, so a caller can truncate
+    // instead of running a second model. The promise is only well formed if
+    // every nested dim actually fits inside the embedding, which is what the
+    // matryoshka-dims-exceed-width rule checks.
+    defaultParams: { embedDim: 768, nestedDims: [768, 512, 256, 128, 64] },
+    computeOutputShape: (inputShape, params) => {
+      const d = Number(params.embedDim) || (inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 768);
+      return inputShape.length >= 1 ? [...inputShape.slice(0, -1), d] : [d];
+    }
+  },
+  lateInteraction: {
+    type: "lateInteraction",
+    name: "Late Interaction (ColBERT MaxSim)",
+    icon: "\u{1F517}",
+    category: "multimodal",
+    // Scores a query sequence against a document sequence by max-similarity per
+    // query token, summed. BOTH sequence axes are consumed and one number comes
+    // out, which is the whole difference from a single-vector retriever: the
+    // document keeps its tokens until scoring time.
+    defaultParams: { embedDim: 128, similarity: "cosine", docLen: 180 },
+    computeOutputShape: () => [1]
+  },
+  hstuBlock: {
+    type: "hstuBlock",
+    name: "HSTU Block",
+    icon: "\u{1F4C8}",
+    category: "tabular",
+    // Hierarchical Sequential Transduction Unit (Zhai et al. 2024). Shape
+    // preserving like a transformer block, but the pointwise aggregated
+    // attention has no softmax and the projections are split u/v/q/k, so the
+    // parameter and FLOP arithmetic is NOT a transformer block's and must not
+    // be approximated with one.
+    defaultParams: { embedDim: 512, numHeads: 4, linearDim: 128, attnDim: 128 },
+    computeOutputShape: (inputShape) => inputShape
   },
   // ========== Reinforcement Learning ==========
   dqnHead: {
@@ -745,6 +877,28 @@ var componentRegistry = {
     }
   },
   // ========== Multimodal ==========
+  patchMerger: {
+    type: "patchMerger",
+    name: "Patch Merger (Qwen-VL / InternVL)",
+    icon: "\u{1F9F1}",
+    category: "multimodal",
+    // The token-count reducer every any-resolution VLM uses: a k x k spatial
+    // group of visual tokens becomes ONE token k^2 times as wide, then a small
+    // MLP maps that to the language model's width. Both axes move at once and
+    // in opposite directions, which is why this is the most shape-error-prone
+    // node in a VLM and why it is not `pixelShuffle` (that one is [C,H,W]
+    // upsampling, a different op on a different rank).
+    defaultParams: { mergeSize: 2, inDim: 1280, outDim: 3584 },
+    computeOutputShape: (inputShape, params) => {
+      const k = Math.max(1, Number(params.mergeSize) || 2);
+      const out = Number(params.outDim) || 3584;
+      if (inputShape.length >= 2) {
+        const n2 = Math.max(1, Math.floor(inputShape[inputShape.length - 2] / (k * k)));
+        return [...inputShape.slice(0, -2), n2, out];
+      }
+      return [out];
+    }
+  },
   crossModalAttention: {
     type: "crossModalAttention",
     name: "Cross-Modal Attention",
@@ -1397,8 +1551,9 @@ var componentRegistry = {
     defaultParams: { dims: [0, 2, 1] },
     computeOutputShape: (inputShape, params) => {
       const dims = params.dims ?? [0, 2, 1];
-      if (dims.length === inputShape.length) {
-        return dims.map((d) => inputShape[d]);
+      if (dims.length === inputShape.length) return dims.map((d) => inputShape[d]);
+      if (dims.length === inputShape.length + 1 && dims[0] === 0) {
+        return dims.slice(1).map((d) => inputShape[d - 1]);
       }
       return inputShape;
     }
@@ -2014,6 +2169,91 @@ var componentRegistry = {
       }
       return [196, embedDim];
     }
+  },
+  // ========== Video latents / world models (2023-2025) ==========
+  causalConv3d: {
+    type: "causalConv3d",
+    name: "Causal Conv3D",
+    icon: "\u{1F39E}\uFE0F",
+    category: "cv",
+    // The building block of every modern video VAE: padding is applied to the
+    // LEFT of the time axis only, so frame t never sees frame t+1 and the
+    // encoder can be run on a growing clip. With temporalStride 1 the frame
+    // count is preserved, which is the property the rest of the pipeline
+    // depends on and which an ordinary conv3d silently breaks.
+    defaultParams: { outChannels: 128, kernelSize: 3, stride: 1, temporalStride: 1, padding: 1 },
+    computeOutputShape: (inputShape, params) => {
+      if (inputShape.length < 4) return inputShape;
+      const [, t, h, w] = inputShape;
+      const outC = Number(params.outChannels) || 128;
+      const k = Number(params.kernelSize) || 3;
+      const sT = Math.max(1, Number(params.temporalStride) || 1);
+      const s = Math.max(1, Number(params.stride) || 1);
+      const p = Number(params.padding ?? Math.floor(k / 2));
+      const outT = Math.max(1, Math.floor((t - 1) / sT) + 1);
+      const spat = (len) => Math.max(1, Math.floor((len + 2 * p - k) / s + 1));
+      return [outC, outT, spat(h), spat(w)];
+    }
+  },
+  rssm: {
+    type: "rssm",
+    name: "RSSM (Dreamer)",
+    icon: "\u{1F30D}",
+    category: "rl",
+    // The recurrent state-space model: a DETERMINISTIC recurrent path and a
+    // STOCHASTIC categorical latent, concatenated. Everything downstream (the
+    // reward head, the decoder, the actor) reads that concatenation, so the
+    // width is deterDim + stochDim * stochClasses and not deterDim, which is
+    // the mistake a plain GRU node would encode.
+    defaultParams: { deterDim: 512, stochDim: 32, stochClasses: 32, hiddenDim: 512 },
+    computeOutputShape: (_inputShape, params) => {
+      const det = Number(params.deterDim) || 512;
+      const st = Number(params.stochDim) || 32;
+      const cls = Math.max(1, Number(params.stochClasses) || 1);
+      return [det + st * cls];
+    }
+  },
+  latentActionModel: {
+    type: "latentActionModel",
+    name: "Latent Action Model (Genie)",
+    icon: "\u{1F579}\uFE0F",
+    category: "rl",
+    // Genie's LAM infers a discrete action from a PAIR of consecutive frames,
+    // so a T-frame clip yields T-1 actions. Getting that off-by-one wrong is
+    // the single most common way this component is mis-wired.
+    defaultParams: { latentDim: 32, codebookSize: 8, hiddenDim: 512 },
+    computeOutputShape: (inputShape, params) => {
+      const dim = Number(params.latentDim) || 32;
+      if (inputShape.length >= 2) {
+        const t = inputShape[inputShape.length - 2];
+        return [...inputShape.slice(0, -2), Math.max(1, t - 1), dim];
+      }
+      return [dim];
+    }
+  },
+  jepaPredictor: {
+    type: "jepaPredictor",
+    name: "JEPA Predictor",
+    icon: "\u{1F9E9}",
+    category: "rl",
+    // Predicts TARGET representations from CONTEXT representations, in
+    // representation space rather than pixel space. Shape preserving in the
+    // embedding width; the number of tokens is set by the mask, not by this
+    // layer, so the token axis is passed through unchanged.
+    defaultParams: { embedDim: 768, predictorDim: 384, depth: 6, numHeads: 12 },
+    computeOutputShape: (inputShape) => inputShape
+  },
+  emaTarget: {
+    type: "emaTarget",
+    name: "EMA Target / Stop-Gradient",
+    icon: "\u{1F9CA}",
+    category: "utility",
+    // Not a computation: a declaration that this branch is an
+    // exponential-moving-average copy of its upstream and carries no gradient.
+    // It exists so the graph can SAY the thing that keeps BYOL / SimSiam /
+    // I-JEPA from collapsing, which makes the absence of it checkable.
+    defaultParams: { momentum: 0.996, stopGradient: true },
+    computeOutputShape: (inputShape) => inputShape
   }
 };
 
@@ -2395,6 +2635,46 @@ var deepNoResidual = (model) => {
     affectedIds: [],
     suggestion: "Add Residual or Add layers every 2-4 layers (ResNet-style). For transformers, use the built-in TransformerBlock which includes residuals."
   }];
+};
+var jepaTargetNeedsStopGrad = (model) => {
+  const predictors = model.components.filter((c) => c.type === "jepaPredictor");
+  if (predictors.length === 0) return [];
+  const stopped = model.components.some(
+    (c) => c.type === "emaTarget" || c.params?.stopGradient === true
+  );
+  if (stopped) return [];
+  return [{
+    id: "jepa-target-no-stop-grad",
+    ruleId: "jepa-target-no-stop-grad",
+    severity: "warning",
+    category: "pattern",
+    title: "Predictive branch with no stop-gradient on the target",
+    message: `A JEPA predictor is present but no branch is marked as an EMA / stop-gradient target. Joint-embedding predictive objectives have a trivial solution (predict a constant), and the momentum target with no gradient is the only thing that rules it out.`,
+    affectedIds: predictors.map((c) => c.id),
+    suggestion: "Add an EMA Target / Stop-Gradient node at the end of the target encoder branch (or set stopGradient on it). BYOL and SimSiam both collapse without it."
+  }];
+};
+var matryoshkaDimsExceedWidth = (model) => {
+  const issues = [];
+  for (const c of model.components) {
+    if (c.type !== "matryoshkaHead") continue;
+    const width = Number(c.params?.embedDim);
+    const nested = Array.isArray(c.params?.nestedDims) ? c.params.nestedDims : [];
+    if (!Number.isFinite(width) || width <= 0 || nested.length === 0) continue;
+    const tooBig = nested.map(Number).filter((d) => Number.isFinite(d) && d > width);
+    if (tooBig.length === 0) continue;
+    issues.push({
+      id: `matryoshka-dims-exceed-width-${c.id}`,
+      ruleId: "matryoshka-dims-exceed-width",
+      severity: "error",
+      category: "structure",
+      title: "Matryoshka prefix wider than the embedding",
+      message: `"${c.name}" publishes nested dimension(s) ${tooBig.join(", ")} against a ${width}-wide embedding. A prefix longer than the whole vector does not exist, so a caller who truncates to it silently gets ${width} instead.`,
+      affectedIds: [c.id],
+      suggestion: `Drop the dimensions above ${width}, or widen embedDim to at least ${Math.max(...tooBig)}.`
+    });
+  }
+  return issues;
 };
 var attentionNoPE = (model) => {
   const attnNodes = model.components.filter((c) => ATTENTION_TYPES.has(c.type));
@@ -3155,8 +3435,12 @@ var ALL_RULES = [
   // R33 pattern    info
   lmHeadVocabMismatch,
   // R34 structure  info
-  kvCacheContextBudget
+  kvCacheContextBudget,
   // R35 performance warning
+  jepaTargetNeedsStopGrad,
+  // R36 pattern    warning
+  matryoshkaDimsExceedWidth
+  // R37 structure  error
 ];
 function runAdvisorRules(model, opts = {}) {
   if (model.components.length === 0) return [];
@@ -3239,6 +3523,15 @@ var COMPONENT_TYPES = [
   "featureInteraction",
   "embeddingBag",
   "tabnet",
+  // Recommendation (sequential / generative, 2018-2025)
+  "targetAttention",
+  "behaviorRetrieval",
+  "multiInterest",
+  "hstuBlock",
+  // Representation learning / retrieval objectives
+  "contrastiveHead",
+  "matryoshkaHead",
+  "lateInteraction",
   // Reinforcement Learning
   "dqnHead",
   "actorHead",
@@ -3254,6 +3547,7 @@ var COMPONENT_TYPES = [
   "gin",
   "edgeConv",
   // Multimodal
+  "patchMerger",
   "crossModalAttention",
   "fusion",
   "projection",
@@ -3345,6 +3639,12 @@ var COMPONENT_TYPES = [
   "nerfPositionalEncoding",
   "dividedSpaceTimeAttention",
   "tubeletEmbed",
+  "causalConv3d",
+  // World models / model-based RL (2018-2025)
+  "rssm",
+  "latentActionModel",
+  "jepaPredictor",
+  "emaTarget",
   // Utility
   "dropout",
   "reshape",
@@ -3878,8 +4178,8 @@ function estimateLayerParams(type, params, inputShape) {
       return d > 0 && ff > 0 ? d * ff + ff + ff * d + d : 0;
     }
     case "transformerBlock": {
-      const d = num(p.embedDim ?? p.hiddenDim);
-      const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
+      const d = num(p.embedDim ?? p.hiddenDim ?? p.dModel);
+      const ff = num(p.ffDim ?? p.dFf, d > 0 ? d * 4 : 0);
       if (d <= 0) return 0;
       return 4 * d * d + 4 * d + d * ff + ff + ff * d + d + 4 * d;
     }
@@ -4181,6 +4481,87 @@ function estimateLayerParams(type, params, inputShape) {
       const seeds = num(p.numSeeds, 1);
       return dim > 0 ? seeds * dim + 4 * dim * dim : 0;
     }
+    // ── Recommendation: sequential / generative ──────────────────────────────
+    case "targetAttention": {
+      const d = num(p.embedDim ?? lastDim, 64);
+      const h = num(p.hiddenDim, 36);
+      return d > 0 ? 4 * d * h + h + h + 1 : 0;
+    }
+    case "behaviorRetrieval": {
+      if (String(p.mode ?? "soft") === "hard") return 0;
+      const d = num(p.embedDim ?? lastDim, 64);
+      return d > 0 ? d * d : 0;
+    }
+    case "multiInterest": {
+      const d = num(p.embedDim ?? lastDim, 64);
+      return d > 0 ? d * d : 0;
+    }
+    case "hstuBlock": {
+      const d = num(p.embedDim, 512);
+      const h = num(p.numHeads, 4);
+      const dv = num(p.linearDim, 128);
+      const dqk = num(p.attnDim, 128);
+      if (d <= 0) return 0;
+      const inProj = d * h * (2 * dv + 2 * dqk);
+      const outProj = h * dv * d;
+      return inProj + outProj + 2 * d;
+    }
+    // ── Video latents / world models ─────────────────────────────────────────
+    case "causalConv3d": {
+      const inC = num(p.inChannels ?? ch, 1);
+      const outC = num(p.outChannels);
+      const k = num(p.kernelSize, 3);
+      return outC > 0 ? inC * outC * k * k * k + outC : 0;
+    }
+    case "rssm": {
+      const det = num(p.deterDim, 512);
+      const st = num(p.stochDim, 32);
+      const cls = Math.max(1, num(p.stochClasses, 1));
+      const hid = num(p.hiddenDim, 512);
+      const stochFlat = st * cls;
+      const embed = num(lastDim, 0);
+      if (det <= 0) return 0;
+      const gru = 3 * (det + stochFlat) * det + 3 * det;
+      const prior = det * hid + hid + hid * stochFlat + stochFlat;
+      const post = (det + embed) * hid + hid + hid * stochFlat + stochFlat;
+      return gru + prior + post;
+    }
+    case "latentActionModel": {
+      const inD = num(lastDim, 512);
+      const hid = num(p.hiddenDim, 512);
+      const lat = num(p.latentDim, 32);
+      const code = num(p.codebookSize, 8);
+      return 2 * inD * hid + hid + hid * lat + lat + code * lat;
+    }
+    case "jepaPredictor": {
+      const d = num(p.embedDim, 768);
+      const pd = num(p.predictorDim, 384);
+      const depth = num(p.depth, 6);
+      if (d <= 0 || pd <= 0) return 0;
+      const blocks = depth * (4 * pd * pd + 2 * pd * (4 * pd));
+      return d * pd + pd + pd * d + d + blocks;
+    }
+    case "emaTarget":
+      return 0;
+    // ── Multimodal connectors / retrieval objectives ─────────────────────────
+    case "patchMerger": {
+      const k = Math.max(1, num(p.mergeSize, 2));
+      const inD = num(p.inDim ?? lastDim, 1280);
+      const outD = num(p.outDim, 3584);
+      const merged = inD * k * k;
+      if (merged <= 0) return 0;
+      return 2 * merged + merged * merged + merged + merged * outD + outD;
+    }
+    case "contrastiveHead": {
+      const inD = num(lastDim, 0);
+      const outD = num(p.projDim, 512);
+      if (inD <= 0 || outD <= 0) return 0;
+      return inD * outD + (p.learnableTemp === false ? 0 : 1);
+    }
+    case "matryoshkaHead":
+      return 0;
+    case "lateInteraction":
+      return 0;
     case "revIN": {
       if (p.affine === false) return 0;
       const f = num(p.numFeatures, 7);
@@ -4416,8 +4797,8 @@ function estimateLayerFlops(type, params, inputShape, outputShape) {
     }
     // ── Transformer block ─────────────────────────────────────────────────────
     case "transformerBlock": {
-      const D = n(p.embedDim ?? p.hiddenDim);
-      const ff = n(p.ffDim, D > 0 ? D * 4 : 0);
+      const D = n(p.embedDim ?? p.hiddenDim ?? p.dModel);
+      const ff = n(p.ffDim ?? p.dFf, D > 0 ? D * 4 : 0);
       const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
       if (D === 0) return 0;
       const mha = 4 * T * D * D + T * T * D;
@@ -4645,6 +5026,93 @@ function estimateLayerFlops(type, params, inputShape, outputShape) {
       const seeds = n(p.numSeeds, 1);
       const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
       return D > 0 ? seeds * T * D + 4 * seeds * D * D : 0;
+    }
+    // ── Recommendation: sequential / generative ──────────────────────────────
+    case "targetAttention": {
+      const D = n(p.embedDim, 64);
+      const H = n(p.hiddenDim, 36);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      return D > 0 ? T * (4 * D * H + H) + T * D : 0;
+    }
+    case "behaviorRetrieval": {
+      if (String(p.mode ?? "soft") === "hard") return 0;
+      const D = n(p.embedDim, 64);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      return D > 0 ? T * D * D : 0;
+    }
+    case "multiInterest": {
+      const D = n(p.embedDim, 64);
+      const K = n(p.numInterests, 4);
+      const it = n(p.numIterations, 3);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      return D > 0 ? T * D * D + it * T * K * D : 0;
+    }
+    case "hstuBlock": {
+      const D = n(p.embedDim, 512);
+      const H = n(p.numHeads, 4);
+      const dv = n(p.linearDim, 128);
+      const dqk = n(p.attnDim, 128);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      if (D === 0) return 0;
+      const proj = T * D * H * (2 * dv + 2 * dqk) + T * H * dv * D;
+      const attn = T * T * H * (dqk + dv);
+      return proj + attn;
+    }
+    // ── Video latents / world models ─────────────────────────────────────────
+    case "causalConv3d": {
+      const inC = inputShape.length >= 4 ? inputShape[0] : n(p.inChannels, 1);
+      const outC = n(p.outChannels, 128);
+      const k = n(p.kernelSize, 3);
+      const vox = outputShape.length >= 4 ? outputShape[1] * outputShape[2] * outputShape[3] : 1;
+      return inC * outC * k * k * k * vox;
+    }
+    case "rssm": {
+      const det = n(p.deterDim, 512);
+      const st = n(p.stochDim, 32);
+      const cls = Math.max(1, n(p.stochClasses, 1));
+      const hid = n(p.hiddenDim, 512);
+      const flat = st * cls;
+      return 3 * (det + flat) * det + 2 * (det * hid + hid * flat);
+    }
+    case "latentActionModel": {
+      const inD = inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 512;
+      const hid = n(p.hiddenDim, 512);
+      const lat = n(p.latentDim, 32);
+      const T = inputShape.length >= 2 ? Math.max(1, inputShape[inputShape.length - 2] - 1) : 1;
+      return T * (2 * inD * hid + hid * lat);
+    }
+    case "jepaPredictor": {
+      const D = n(p.embedDim, 768);
+      const pd = n(p.predictorDim, 384);
+      const depth = n(p.depth, 6);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      if (D === 0 || pd === 0) return 0;
+      return 2 * T * D * pd + depth * (4 * T * pd * pd + T * T * pd + 2 * T * pd * (4 * pd));
+    }
+    case "emaTarget":
+      return 0;
+    // ── Multimodal connectors / retrieval objectives ─────────────────────────
+    case "patchMerger": {
+      const k = Math.max(1, n(p.mergeSize, 2));
+      const inD = n(p.inDim, inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 1280);
+      const outD = n(p.outDim, 3584);
+      const merged = inD * k * k;
+      const outTokens = outputShape.length >= 2 ? outputShape[outputShape.length - 2] : 1;
+      return outTokens * (merged * merged + merged * outD);
+    }
+    case "contrastiveHead": {
+      const inD = inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 0;
+      const outD = n(p.projDim, 512);
+      const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      return T * inD * outD;
+    }
+    case "matryoshkaHead":
+      return 0;
+    case "lateInteraction": {
+      const D = n(p.embedDim, inputShape.length >= 1 ? inputShape[inputShape.length - 1] : 128);
+      const lq = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+      const ld = n(p.docLen, lq);
+      return lq * ld * D;
     }
     case "revIN":
       return inputShape.reduce((a, b) => a * b, 1) * 2;
@@ -5035,8 +5503,11 @@ function buildPreflightReport(model, opts) {
       });
     }
   }
-  const samplesAssumed = !(dataSpec?.samples && dataSpec.samples > 0);
-  const samples = samplesAssumed ? 5e4 : dataSpec.samples;
+  const fromFile = dataSpec?.samples && dataSpec.samples > 0 ? dataSpec.samples : null;
+  const fromSentence = opts?.workload && opts.workload.samples > 0 ? opts.workload.samples : null;
+  const samples = fromFile ?? fromSentence ?? 5e4;
+  const samplesAssumed = fromFile === null && fromSentence === null;
+  const samplesFrom = fromFile !== null ? "" : fromSentence !== null ? ` (from "${opts.workload.source}")` : " (assumed)";
   const hw = gpuById(gpu.hwId) ?? gpuById("a10g");
   const flopsPerStep = 2 * Math.max(flops, params) * 3 * batch;
   const roofline = rooflineTime(flopsPerStep, params * 32, hw, {
@@ -5050,13 +5521,13 @@ function buildPreflightReport(model, opts) {
   if (params > 0) {
     const hrs = estTrainSec / 3600;
     const timeStr = hrs >= 1 ? `${hrs.toFixed(1)}h` : `${Math.ceil(estTrainSec / 60)}m`;
-    const costStr = estCostUsd < 0.01 ? "<$0.01" : estCostUsd < 1 ? `~$${estCostUsd.toFixed(2)}` : `~$${estCostUsd.toFixed(1)}`;
+    const costStr = estCostUsd < 0.01 ? "<$0.01" : estCostUsd < 1 ? `~$${estCostUsd.toFixed(2)}` : estCostUsd < 1e3 ? `~$${estCostUsd.toFixed(1)}` : estCostUsd < 1e6 ? `~$${Math.round(estCostUsd).toLocaleString("en-US")}` : `~$${(estCostUsd / 1e6).toFixed(1)}M`;
     findings.push({
       id: "cost-estimate",
       category: "size",
       severity: "info",
       title: `Rough training cost: ${costStr}, ${timeStr}`,
-      detail: `${epochs} epochs, batch ${batch}, on a ${gpu.name}, over ${samples.toLocaleString()} samples${samplesAssumed ? " (assumed)" : ""}.`,
+      detail: `${epochs} epochs, batch ${batch}, on a ${gpu.name}, over ${samples.toLocaleString()} samples${samplesFrom}.`,
       fix: samplesAssumed ? 'Drop your CSV in "Your data" for an accurate sample count.' : void 0
     });
   }
@@ -5094,12 +5565,74 @@ function buildPreflightReport(model, opts) {
   };
 }
 
+// src/utils/runEvidence.ts
+var MEASURED_RUN_MODES = ["gpu", "colab", "kaggle"];
+function isMeasuredRunMode(mode) {
+  return typeof mode === "string" && MEASURED_RUN_MODES.includes(mode);
+}
+var WHERE = {
+  gpu: "a real GPU",
+  colab: "Colab",
+  kaggle: "Kaggle"
+};
+function runEvidence(run) {
+  if (!run) {
+    return {
+      measured: false,
+      reason: "never-run",
+      sentence: "Nothing has been trained yet"
+    };
+  }
+  if (isMeasuredRunMode(run.mode)) {
+    return {
+      measured: true,
+      mode: run.mode,
+      where: WHERE[run.mode],
+      sentence: `Trained on ${WHERE[run.mode]}`
+    };
+  }
+  if (run.mode === "simulation") {
+    return {
+      measured: false,
+      reason: "simulated",
+      sentence: "This run was simulated, so its curves come from the architecture rather than from data"
+    };
+  }
+  return {
+    measured: false,
+    reason: "unknown-mode",
+    sentence: "This run does not record how it ran, so it cannot be read as a measurement"
+  };
+}
+
 // src/utils/dataSource.ts
 var DATA_SOURCE_KEY = "pipeline-data-source";
+var HF_ID_MIGRATIONS = {
+  cifar10: "uoft-cs/cifar10",
+  mnist: "ylecun/mnist",
+  imdb: "stanfordnlp/imdb",
+  glue: "nyu-mll/glue",
+  speech_commands: "google/speech_commands"
+};
+function migrateDataSource(s) {
+  if (!s || s.kind !== "huggingface") return s;
+  const id = (s.hfDatasetId ?? "").trim();
+  const moved = HF_ID_MIGRATIONS[id];
+  return moved ? { ...s, hfDatasetId: moved } : s;
+}
 function getDataSource() {
   try {
     const raw = localStorage.getItem(DATA_SOURCE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const stored = JSON.parse(raw);
+    const migrated = migrateDataSource(stored);
+    if (migrated !== stored) {
+      try {
+        localStorage.setItem(DATA_SOURCE_KEY, JSON.stringify(migrated));
+      } catch {
+      }
+    }
+    return migrated;
   } catch {
     return null;
   }
@@ -5127,9 +5660,9 @@ function describeDataSource(s) {
 function deriveRunInsights(run) {
   const out = [];
   const { trainAcc, valAcc, trainLoss, valLoss } = run;
-  const measured = run.mode === "gpu";
+  const measured = runEvidence(run).measured;
   const sev = (s) => measured ? s : "info";
-  const said = measured ? "" : "The simulator predicts this; it is not a measurement. ";
+  const said = measured ? "" : `${runEvidence(run).sentence}. This is a prediction, not a measurement. `;
   const haveAcc = typeof trainAcc === "number" && typeof valAcc === "number";
   const gap = haveAcc ? trainAcc - valAcc : null;
   const lossGap = !haveAcc && typeof trainLoss === "number" && typeof valLoss === "number" && trainLoss > 0.05 ? (valLoss - trainLoss) / trainLoss : null;
@@ -5147,11 +5680,12 @@ function deriveRunInsights(run) {
       detail: said + `Validation accuracy is ${(valAcc * 100).toFixed(0)}%. Train longer, raise capacity, or revisit the data before relying on this in production.`
     });
   }
-  if (run.mode !== "gpu") {
+  const ev = runEvidence(run);
+  if (!ev.measured) {
     out.push({
       severity: "info",
-      title: "Results are simulated",
-      detail: "These metrics came from the architecture-based simulator, not a real GPU run. Run real training before trusting deploy readiness."
+      title: ev.reason === "simulated" ? "Results are simulated" : "Results are unmeasured",
+      detail: `${ev.sentence}. Run real training before trusting deploy readiness.`
     });
   } else if (out.length === 0 && typeof valAcc === "number" && valAcc >= 0.6) {
     out.push({
@@ -5272,6 +5806,178 @@ function deriveModelContract(arch, opts = {}) {
     outputDim: typeof opts.numClasses === "number" && opts.numClasses > 0 ? opts.numClasses : deriveOutputDim(arch),
     taskType: opts.taskType ?? heuristicTask(arch)
   };
+}
+
+// src/utils/datasetContract.ts
+var KNOWN_DATASETS = {
+  mnist: { key: "mnist", label: "MNIST", inputShape: [1, 28, 28], classes: 10 },
+  cifar10: { key: "cifar10", label: "CIFAR-10", inputShape: [3, 32, 32], classes: 10 },
+  imdb: { key: "imdb", label: "IMDB", inputShape: [], classes: 2 },
+  glue: { key: "glue", label: "GLUE / SST-2", inputShape: [], classes: 2 }
+};
+function knownDatasetFor(source) {
+  if (!source || source.kind !== "huggingface") return null;
+  const id = (source.hfDatasetId ?? "").trim().toLowerCase();
+  if (!id) return null;
+  const tail = id.includes("/") ? id.slice(id.lastIndexOf("/") + 1) : id;
+  return KNOWN_DATASETS[tail] ?? null;
+}
+function contractMismatches(model, source) {
+  const ds = knownDatasetFor(source);
+  if (!ds) return [];
+  const contract = deriveModelContract(model);
+  const out = [];
+  if (ds.inputShape.length > 0) {
+    const got = contract.inputShape;
+    const same = got.length === ds.inputShape.length && got.every((d, i) => d === ds.inputShape[i]);
+    if (!same) {
+      out.push({
+        kind: "input-shape",
+        title: `Input shape does not match ${ds.label}`,
+        detail: `The graph declares [${got.join(", ") || "nothing"}] and ${ds.label} is [${ds.inputShape.join(", ")}]. The run would resize and re-channel every sample to fit the graph, so the model would train on something other than the data you chose.`,
+        fix: `Set the input layer's shape to [${ds.inputShape.join(", ")}].`,
+        expected: ds.inputShape,
+        actual: got
+      });
+    }
+  }
+  const outputDim = contract.outputDim;
+  if (typeof outputDim === "number" && outputDim > 0 && outputDim !== ds.classes) {
+    out.push({
+      kind: "output-classes",
+      title: `Head is ${outputDim} wide, ${ds.label} has ${ds.classes} classes`,
+      detail: outputDim > ds.classes ? `The last layer predicts ${outputDim} classes and only ${ds.classes} exist. Cross-entropy over ${outputDim - ds.classes} classes that never appear makes the model slower to learn and its reported accuracy hard to read.` : `The last layer predicts ${outputDim} classes and the data has ${ds.classes}. Labels above ${outputDim - 1} cannot be represented at all.`,
+      fix: `Set the final layer's outFeatures to ${ds.classes}.`,
+      expected: ds.classes,
+      actual: outputDim
+    });
+  }
+  return out;
+}
+
+// src/utils/runDiagnosis.ts
+var AT_CHANCE_TOLERANCE = 0.05;
+var FLAT_EPSILON = 5e-3;
+var OVERFIT_GAP = 0.12;
+var PLATEAU_SKILL_FLOOR = 0.75;
+var DIVERGENCE_RISE = 1.2;
+var ROWS_PER_PARAM_FLOOR = 0.01;
+var pct = (v) => `${(v * 100).toFixed(1)}%`;
+function belowSkillFloor(valAcc, classes) {
+  if (!classes || classes <= 1) return false;
+  const chance = 1 / classes;
+  return (valAcc - chance) / (1 - chance) < PLATEAU_SKILL_FLOOR;
+}
+function tailOf(curve) {
+  if (curve.length < 4) return [];
+  return curve.slice(-Math.max(2, Math.round(curve.length / 3)));
+}
+function diagnoseRun(ev) {
+  if (!ev.measured) return [];
+  const out = [];
+  const last = ev.curve.length > 0 ? ev.curve[ev.curve.length - 1] : ev.final && (typeof ev.final.valAcc === "number" || typeof ev.final.valLoss === "number") ? {
+    epoch: 0,
+    totalEpochs: 0,
+    lr: Number.NaN,
+    epochMs: 0,
+    trainAcc: ev.final.trainAcc ?? Number.NaN,
+    valAcc: ev.final.valAcc ?? Number.NaN,
+    trainLoss: ev.final.trainLoss ?? Number.NaN,
+    valLoss: ev.final.valLoss ?? Number.NaN
+  } : null;
+  const contract = deriveModelContract(ev.model);
+  const dataset = knownDatasetFor(ev.source);
+  const mismatches = contractMismatches(ev.model, ev.source);
+  if (mismatches.length > 0) {
+    out.push({
+      kind: "contract-mismatch",
+      title: "The graph does not match the dataset it trained on",
+      evidence: mismatches.map((m) => m.title).join(". ") + ".",
+      fix: mismatches[0].fix,
+      agentFixable: true,
+      explainsEverything: true
+    });
+    return out;
+  }
+  const nonFinite = ev.curve.length > 0 && last && (!Number.isFinite(last.valLoss) || !Number.isFinite(last.trainLoss));
+  const climbing = ev.curve.length >= 3 && ev.curve.every((e, i) => i === 0 || e.trainLoss > ev.curve[i - 1].trainLoss) && last.trainLoss > ev.curve[0].trainLoss * DIVERGENCE_RISE;
+  if (nonFinite || climbing) {
+    out.push({
+      kind: "diverged",
+      title: "Training diverged",
+      evidence: nonFinite ? "The final loss is not a finite number." : `Training loss rose every epoch, ${ev.curve[0].trainLoss.toFixed(4)} to ${last.trainLoss.toFixed(4)}.`,
+      fix: `Lower the learning rate. It ran at ${last?.lr ?? "the configured rate"}; a tenth of that is the usual first try.`,
+      agentFixable: false,
+      explainsEverything: true
+    });
+    return out;
+  }
+  const classes = dataset?.classes ?? (typeof contract.outputDim === "number" ? contract.outputDim : null);
+  if (last && classes && classes > 1) {
+    const chance = 1 / classes;
+    if (Number.isFinite(last.valAcc) && last.valAcc <= chance + AT_CHANCE_TOLERANCE) {
+      out.push({
+        kind: "at-chance",
+        title: "The model is at chance level",
+        evidence: `Validation accuracy ${pct(last.valAcc)} against ${pct(chance)} for guessing among ${classes} classes.`,
+        fix: "Nothing was learned, so more epochs and more capacity are both the wrong lever. Check that labels reach the loss correctly and that the input is normalised the way the data expects.",
+        agentFixable: false
+      });
+    }
+  }
+  const tail = tailOf(ev.curve);
+  if (tail.length >= 2 && last && !out.some((d) => d.kind === "at-chance")) {
+    const move = tail[tail.length - 1].valAcc - tail[0].valAcc;
+    if (move > FLAT_EPSILON) {
+      out.push({
+        kind: "still-improving",
+        title: "The run stopped while it was still learning",
+        evidence: `Validation accuracy rose ${pct(move)} over the last ${tail.length} epochs (${pct(tail[0].valAcc)} to ${pct(last.valAcc)}) and had not levelled off.`,
+        fix: `Train longer. At that rate the next ${tail.length} epochs are worth roughly ${pct(move)} more.`,
+        agentFixable: false
+      });
+    } else if (move <= FLAT_EPSILON && belowSkillFloor(last.valAcc, classes)) {
+      out.push({
+        kind: "plateaued",
+        title: "The run had stopped learning before it ended",
+        evidence: `Validation accuracy moved ${pct(Math.abs(move))} over the last ${tail.length} epochs (${pct(tail[0].valAcc)} to ${pct(last.valAcc)}).`,
+        // The explicit negative is the point. "Train longer" was the advice
+        // this product gave for exactly this curve.
+        fix: "Training longer will not help; this is the ceiling of this graph on this data. Change the architecture or the data, not the schedule.",
+        agentFixable: true
+      });
+    }
+  }
+  if (last && Number.isFinite(last.trainAcc) && Number.isFinite(last.valAcc)) {
+    const gap = last.trainAcc - last.valAcc;
+    if (gap > OVERFIT_GAP) {
+      out.push({
+        kind: "overfit",
+        title: "Overfit",
+        evidence: `Train accuracy ${pct(last.trainAcc)} against validation ${pct(last.valAcc)}, a gap of ${pct(gap)}.`,
+        fix: "Add dropout or weight decay, or train on more data. The model has memorised what it saw.",
+        agentFixable: true
+      });
+    }
+  }
+  const params = estimateParams(ev.model);
+  if (ev.datasetSize && params && ev.datasetSize / params < ROWS_PER_PARAM_FLOOR) {
+    out.push({
+      kind: "tiny-data",
+      title: "There is far more model than data",
+      evidence: `${ev.datasetSize.toLocaleString()} training rows against roughly ${params.toLocaleString()} parameters.`,
+      fix: "More data, or a much smaller model. At this ratio the architecture is not what is limiting the result.",
+      agentFixable: false
+    });
+  }
+  return out;
+}
+function estimateParams(model) {
+  const total = (model.components ?? []).reduce(
+    (s, c) => s + estimateLayerParams(c.type, c.params, c.inputShape ?? []),
+    0
+  );
+  return total > 0 ? total : null;
 }
 
 // src/utils/evalStore.ts
@@ -5790,7 +6496,7 @@ var fmtDuration = (sec) => {
   return h >= 1 ? `${h.toFixed(1)}h` : `${Math.max(1, Math.ceil(sec / 60))}m`;
 };
 var fmtCount = (n2, one, many = `${one}s`) => `${n2} ${n2 === 1 ? one : many}`;
-var pct = (v) => `${(v * 100).toFixed(0)}%`;
+var pct2 = (v) => `${(v * 100).toFixed(0)}%`;
 function realLayerCount(model) {
   return model.components.filter(
     (c) => c.type !== "input" && c.type !== "output" && c.type !== "stickyNote"
@@ -5824,11 +6530,15 @@ function evidenceFor(stage) {
   }[stage];
   return { label: `Open ${STAGE_LABEL[stage]}`, event };
 }
-function runPreflightStage(model) {
+function runPreflightStage(model, workload) {
   if (realLayerCount(model) === 0) return emptyCanvasResult("preflight");
   const report = buildPreflightReport(model, {
     dataSpec: readDataSpec(),
-    plan: readTrainPlan()
+    plan: readTrainPlan(),
+    // A workload the caller read off the task sentence. Absent for every caller
+    // that has only a graph, which is most of them, and pre-flight then says
+    // "assumed" over its 50,000-row default exactly as before.
+    workload
   });
   const notes = report.findings.filter((f) => f.severity !== "pass").map((f) => ({
     severity: f.severity === "block" ? "block" : f.severity === "warn" ? "warn" : "info",
@@ -5938,16 +6648,29 @@ function runDataStage(model) {
     fix: "validate_data.py enforces this before a GPU-minute is spent, so a mismatch fails at batch 0."
   });
   if (hasRealData(source)) {
+    const mismatches = contractMismatches(model, source);
+    for (const m of mismatches) {
+      notes.push({
+        severity: "block",
+        ruleId: `dataset-${m.kind}`,
+        title: m.title,
+        detail: m.detail,
+        fix: m.fix,
+        // A graph edit resolves it, which is exactly what the agent can do.
+        agentFixable: true
+      });
+    }
     return {
       stage: "data",
-      status: "ok",
-      headline: `Training on ${describeDataSource(source)}.`,
+      status: mismatches.length > 0 ? "blocked" : "ok",
+      headline: mismatches.length > 0 ? `${describeDataSource(source)} is wired, but the graph does not match it.` : `Training on ${describeDataSource(source)}.`,
       notes,
       data: {
         wired: true,
         source,
         modality,
-        contract
+        contract,
+        mismatches
       },
       evidence: evidenceFor("data")
     };
@@ -5977,21 +6700,33 @@ function runTrainStage(model) {
   const gpu = report.metrics.fitsGpu;
   const costLine = dur > 0 ? `${fmtUsd(cost)} / ${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}` : "cost not estimable";
   if (run) {
-    const insights = deriveRunInsights(run);
-    const notes = insights.map((i) => ({
-      severity: i.severity === "warn" ? "warn" : i.severity === "good" ? "good" : "info",
-      title: i.title,
-      detail: i.detail,
-      // Overfit and a low ceiling are capacity / regularization problems, which
-      // are layers. "Results are simulated" is not, and stays inert.
-      agentFixable: i.severity === "warn"
+    const ev = runEvidence(run);
+    const measured = ev.measured;
+    const diagnoses = diagnoseRun({
+      curve: run.curve ?? [],
+      model,
+      source: getDataSource(),
+      measured,
+      final: { trainAcc: run.trainAcc, valAcc: run.valAcc, trainLoss: run.trainLoss, valLoss: run.valLoss }
+    });
+    const notes = diagnoses.map((d) => ({
+      severity: "warn",
+      ruleId: `run-${d.kind}`,
+      title: d.title,
+      detail: `${d.evidence} ${d.fix}`,
+      // Set per cause in runDiagnosis, never inferred from severity: "the
+      // dataset is 300 rows" and "the learning rate blew up" are warnings the
+      // agent cannot act on, and a fix button on either promises nothing.
+      agentFixable: d.agentFixable
     }));
-    const measured = run.mode === "gpu";
-    const accPart = typeof run.valAcc === "number" ? `val acc ${pct(run.valAcc)}` : "no accuracy reported";
+    for (const i of deriveRunInsights(run).filter((i2) => i2.severity !== "warn")) {
+      notes.push({ severity: i.severity === "good" ? "good" : "info", title: i.title, detail: i.detail });
+    }
+    const accPart = typeof run.valAcc === "number" ? `val acc ${pct2(run.valAcc)}` : "no accuracy reported";
     return {
       stage: "train",
-      status: insights.some((i) => i.severity === "warn") ? "attention" : measured ? "ok" : "attention",
-      headline: measured ? `Trained on real GPU: ${accPart} over ${fmtCount(run.epochs, "epoch")}.` : `Only a simulated run so far: ${accPart}. Nothing has been measured on real data.`,
+      status: diagnoses.length > 0 ? "attention" : measured ? "ok" : "attention",
+      headline: measured ? `${ev.sentence}: ${accPart} over ${fmtCount(run.epochs, "epoch")}.` : `${ev.sentence}. ${accPart}, and nothing has been measured on real data.`,
       notes,
       data: { lastRun: run, plan: plan ?? null, estCostUsd: cost, estTrainSec: dur, gpu },
       evidence: evidenceFor("train")
@@ -6024,6 +6759,7 @@ function runEvaluateStage(model) {
   if (realLayerCount(model) === 0) return emptyCanvasResult("evaluate");
   const run = getLastRun();
   const suite = summarize(loadSuite(model));
+  const source = getDataSource();
   const notes = [];
   if (suite.total === 0) {
     notes.push({
@@ -6061,21 +6797,37 @@ function runEvaluateStage(model) {
       detail: metricNames.slice(0, 6).map((k) => `${k.replace(/_/g, " ")} ${Math.abs(evalMetrics[k]) >= 100 ? evalMetrics[k].toFixed(1) : evalMetrics[k].toFixed(4)}`).join(", ")
     });
   }
-  const insights = deriveRunInsights(run);
-  for (const i of insights) {
+  const diagnoses = diagnoseRun({
+    curve: run.curve ?? [],
+    model,
+    source,
+    // Same predicate as the Train row: a Colab run is measured, and telling
+    // `diagnoseRun` otherwise makes it explain a real run as a simulated one.
+    measured: runEvidence(run).measured,
+    final: { trainAcc: run.trainAcc, valAcc: run.valAcc, trainLoss: run.trainLoss, valLoss: run.valLoss }
+  });
+  if (diagnoses.length > 0) {
     notes.push({
-      severity: i.severity === "warn" ? "warn" : i.severity === "good" ? "good" : "info",
-      title: i.title,
-      detail: i.detail,
-      agentFixable: i.severity === "warn"
+      severity: "warn",
+      ruleId: "run-diagnosed",
+      title: diagnoses.length === 1 ? `The run has a diagnosed cause: ${diagnoses[0].title.toLowerCase()}` : `The run has ${diagnoses.length} diagnosed causes`,
+      detail: `${diagnoses.map((d) => d.title).join("; ")}. The evidence and the fix for each are on the Train row.`
     });
   }
-  const bad = suite.failed > 0 || insights.some((i) => i.severity === "warn");
-  const accPart = typeof run.valAcc === "number" ? `val acc ${pct(run.valAcc)}` : "no accuracy reported";
+  const insights = deriveRunInsights(run).filter((i) => i.severity !== "warn");
+  for (const i of insights) {
+    notes.push({
+      severity: i.severity === "good" ? "good" : "info",
+      title: i.title,
+      detail: i.detail
+    });
+  }
+  const bad = suite.failed > 0 || diagnoses.length > 0;
+  const accPart = typeof run.valAcc === "number" ? `val acc ${pct2(run.valAcc)}` : "no accuracy reported";
   return {
     stage: "evaluate",
-    status: suite.failed > 0 ? "blocked" : bad ? "attention" : run.mode === "gpu" ? "ok" : "attention",
-    headline: run.mode === "gpu" ? `${accPart}${suite.total ? `, ${suite.passed}/${suite.total} test cases passing` : ", no test cases"}.` : `${accPart}, but simulated: this describes the architecture, not a trained model.`,
+    status: suite.failed > 0 ? "blocked" : bad ? "attention" : runEvidence(run).measured ? "ok" : "attention",
+    headline: runEvidence(run).measured ? `${accPart}${suite.total ? `, ${suite.passed}/${suite.total} test cases passing` : ", no test cases"}.` : `${accPart}, but simulated: this describes the architecture, not a trained model.`,
     notes,
     data: { run, suite, evalMetrics },
     evidence: evidenceFor("evaluate")
@@ -6100,16 +6852,17 @@ function runDeployStage(model) {
     });
   }
   const run = getLastRun();
-  if (!run || run.mode !== "gpu") {
+  const deployEv = runEvidence(run);
+  if (!deployEv.measured) {
     notes.push({
       severity: "warn",
       title: run ? "Readiness is unmeasured" : "Never trained",
-      detail: run ? "The only results so far are simulated, so nothing below is evidence about the trained model, only about the architecture." : "This analysis is about the architecture. Nothing has been trained, so there are no weights to ship."
+      detail: run ? `${deployEv.sentence}, so nothing below is evidence about the trained model, only about the architecture.` : "This analysis is about the architecture. Nothing has been trained, so there are no weights to ship."
     });
   }
   return {
     stage: "deploy",
-    status: blockers.length ? "blocked" : warnings.length || !run || run.mode !== "gpu" ? "attention" : "ok",
+    status: blockers.length ? "blocked" : warnings.length || !deployEv.measured ? "attention" : "ok",
     headline: blockers.length ? `${fmtCount(blockers.length, "blocker")} for ${best.profile.label}, the best-scoring target (${best.score}/100).` : `Best target is ${best.profile.label} (${best.score}/100): ${best.estimatedLatencyLabel} per inference, ${best.totalParamsMB.toFixed(1)} MB.`,
     notes,
     data: {
@@ -6126,10 +6879,10 @@ function runDeployStage(model) {
     evidence: evidenceFor("deploy")
   };
 }
-function runStage(stage, model) {
+function runStage(stage, model, opts) {
   switch (stage) {
     case "preflight":
-      return runPreflightStage(model);
+      return runPreflightStage(model, opts?.workload);
     case "data":
       return runDataStage(model);
     case "train":
@@ -6140,9 +6893,9 @@ function runStage(stage, model) {
       return runDeployStage(model);
   }
 }
-function runStageSafely(stage, model) {
+function runStageSafely(stage, model, opts) {
   try {
-    return runStage(stage, model);
+    return runStage(stage, model, opts);
   } catch (e) {
     return {
       stage,
@@ -6166,7 +6919,7 @@ function runPipeline(model, opts) {
   let stoppedAt = null;
   let question;
   for (const stage of STAGE_ORDER) {
-    const r = runStageSafely(stage, model);
+    const r = runStageSafely(stage, model, opts);
     results.push(r);
     if (r.status === "needs_input" && !question) question = r.question;
     if (r.status === "blocked" || r.status === "needs_input" && !opts?.continuePastQuestions) {
