@@ -10526,6 +10526,10 @@ var useProviderStore = create((set, get) => ({
   }
 }));
 
+// src/utils/safetensorsHub.ts
+var SMALL_FILE_BYTES = 8 * 1024 * 1024;
+var MAX_HEADER_BYTES = 100 * 1024 * 1024;
+
 // src/utils/hfModelLoader.ts
 function hfAuthHeaders() {
   if (typeof process !== "undefined" && process.env?.HF_TOKEN) {
