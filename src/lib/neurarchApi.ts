@@ -26,10 +26,25 @@ export const DEFAULT_API = 'https://www.neurarch.com';
 /** Anything slower than this is not worth an agent's turn. */
 export const DEFAULT_TIMEOUT_MS = 30_000;
 
+/**
+ * The channel tag on the two links this server prints to a person.
+ *
+ * `docs/DISTRIBUTION.md` has asked for one since the first release, and this is
+ * the channel where it matters most: npm serves ~2,000 downloads a month against
+ * one GitHub star, and with no tag there is no way to tell whether those are
+ * people or mirrors. A visit from an agent's user and a visit from a search
+ * result arrive as the same row and nothing else in the request separates them.
+ *
+ * Deliberately only the links that already existed. Tool output is an agent's
+ * context window, and adding a link to a finding so that a click can be counted
+ * would be spending someone else's tokens on our analytics.
+ */
+export const SOURCE_TAG = 'utm_source=mcp';
+
 /** What to tell someone who has no key, in one sentence, wherever it is needed. */
 export const KEY_HELP =
   'Set NEURARCH_API_KEY to your organisation\'s key (it looks like nrk_...); '
-  + 'https://www.neurarch.com/developer issues one.';
+  + `https://www.neurarch.com/developer?${SOURCE_TAG} issues one.`;
 
 /** Read at call time, never frozen at import: a host may configure the process after loading modules. */
 export function apiBase(): string {

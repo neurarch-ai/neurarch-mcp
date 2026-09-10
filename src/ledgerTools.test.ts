@@ -22,7 +22,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TOOLS, type ToolContext } from './tools.js';
 import { LEDGER_TOOLS, historyTool, planTool } from './ledgerTools.js';
-import { DEFAULT_API } from './lib/neurarchApi.js';
+import { DEFAULT_API, KEY_HELP, SOURCE_TAG } from './lib/neurarchApi.js';
+import { readFileSync } from 'node:fs';
 import { structuralFingerprint } from './lib/corpusReport.js';
 import { makeModel } from './test/fixtures.js';
 import { clearModelCache } from './models.js';
@@ -295,5 +296,30 @@ describe('plan', () => {
   it('reports an unreachable API as one sentence, not a stack trace', async () => {
     process.env.NEURARCH_API = 'http://127.0.0.1:1';
     await expect(call('plan', {})).rejects.toThrow(/could not be reached.*works offline/s);
+  });
+});
+
+describe('outbound attribution', () => {
+  it('tags the two links this server prints to a person', () => {
+    expect(SOURCE_TAG).toBe('utm_source=mcp');
+    expect(KEY_HELP).toContain(SOURCE_TAG);
+    const http = readFileSync(new URL('./http.ts', import.meta.url), 'utf8');
+    // The file is read as text, so a link built from the constant appears as
+    // the literal `${SOURCE_TAG}`. Both spellings count as tagged; the value
+    // behind the constant is asserted on the line above.
+    const untagged = (http.match(/https:\/\/(?:www\.)?neurarch\.com[^\s'"`\]<>\\]*/g) ?? [])
+      .filter((u) => !u.includes('utm_source=') && !u.includes('SOURCE_TAG'));
+    // The only other neurarch.com strings in this server are API endpoints a
+    // program calls, never a URL a browser opens, so a tag on one would be
+    // noise in a server log rather than attribution.
+    expect(untagged, `src/http.ts prints ${untagged.length} untagged link(s)`).toEqual([]);
+  });
+
+  it('does not put a link into tool output to make a click countable', () => {
+    // Tool output is an agent's context window. This is a promise, not a
+    // preference: the moment a finding carries a tracking link, the server is
+    // spending someone else's tokens on our analytics.
+    const check = readFileSync(new URL('./lib/checkDesign.ts', import.meta.url), 'utf8');
+    expect(check).not.toContain('utm_source');
   });
 });
