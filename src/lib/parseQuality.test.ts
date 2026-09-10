@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isUnresolved, parseQuality } from './parseQuality.js';
-import { graphFromPyTorchSource } from '../vendor/engine.bundle.mjs';
+import { graphFromPyTorchSource, edgeProvenance } from '../vendor/engine.bundle.mjs';
 import { makeModel } from '../test/fixtures.js';
 import { TOOLS } from '../tools.js';
 
@@ -47,5 +47,47 @@ class M(nn.Module):
     const g = graphFromPyTorchSource(await readFile(new URL('../../examples/tiny-vit.py', import.meta.url), 'utf-8'), 'vit')!;
     const lint = TOOLS.find(t => t.name === 'lint_model')!.handler({}, g, { modelPath: '' }) as any;
     expect(lint.counts.block).toBe(1);
+  });
+});
+
+/*
+ * `clean: true` on a graph whose topology was half guessed is the single most
+ * misleading thing lint_model can say, so the guess count has to travel with it.
+ */
+describe('lint_model reports the edges it inferred', () => {
+  const PARALLEL = `import torch.nn as nn
+
+class M(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.wq = nn.Linear(8, 8)
+        self.wk = nn.Linear(8, 8)
+
+    def forward(self, x):
+        return self.wq(x), self.wk(x)
+`;
+  const CHAINED = `import torch.nn as nn
+
+class M(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.fc1 = nn.Linear(8, 8)
+        self.act = nn.ReLU()
+
+    def forward(self, x):
+        h = self.fc1(x)
+        return self.act(h)
+`;
+
+  it('counts them when forward() did not chain the calls', () => {
+    const g = graphFromPyTorchSource(PARALLEL, 'm.py')!;
+    const p = edgeProvenance(g);
+    expect(p.total).toBeGreaterThan(0);
+    expect(p.inferred).toBeGreaterThan(0);
+  });
+
+  it('reports none when forward() spelled the chain out', () => {
+    const g = graphFromPyTorchSource(CHAINED, 'm.py')!;
+    expect(edgeProvenance(g).inferred).toBe(0);
   });
 });

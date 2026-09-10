@@ -11,7 +11,7 @@ import { loadModelFile } from './loader.js';
 import { compileUserRegExp } from './lib/regexGuard.js';
 import { renderMermaid } from './mermaid.js';
 import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
-import { lintModelGraph, type EngineFinding } from './vendor/engine.bundle.mjs';
+import { lintModelGraph, edgeProvenance, type EngineFinding } from './vendor/engine.bundle.mjs';
 import { EXTRA_TOOLS } from './extraTools.js';
 import { LEDGER_TOOLS } from './ledgerTools.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
@@ -513,6 +513,7 @@ const lintModelTool: ToolDef = {
     const counts = { block: 0, warn: 0, info: 0 };
     for (const f of findings) counts[f.severity]++;
     const quality = parseQuality(model);
+    const edges = edgeProvenance(model);
     return {
       // The headline an agent should act on before reading the list: a block is
       // a design that will not run or will not train, not a style note.
@@ -531,6 +532,16 @@ const lintModelTool: ToolDef = {
         suppressed: {
           count: suppressed,
           why: 'Dimension rules on layers whose dimension is unevaluated source text: the finding would be about the parser\'s placeholder, not the model.',
+        },
+      } : {}),
+      // `clean: true` on a graph whose topology was half guessed is the single
+      // most misleading thing this tool can say, so the guess count travels
+      // with it. An edge is inferred when nothing in forward() put one layer
+      // after the other; every rule ABOUT that adjacency held back on it.
+      ...(edges.inferred > 0 ? {
+        inferredEdges: {
+          ...edges,
+          why: 'The .py importer chained these edges from statement order rather than reading them out of forward(); rules about layer adjacency were held back on them. Run trace_model for the real graph.',
         },
       } : {}),
       ...(quality.grade !== 'full' ? { parseQuality: quality } : {}),
