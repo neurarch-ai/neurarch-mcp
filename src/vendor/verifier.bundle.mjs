@@ -2455,6 +2455,8 @@ var PE_TYPES = /* @__PURE__ */ new Set([
   "relativePositionBias"
 ]);
 var VANISHING_ACTIVATIONS = /* @__PURE__ */ new Set(["sigmoid", "tanh"]);
+var observedEdges = (model) => model.connections.filter((c) => !c.inferred);
+var hasUnmodelledMerge = (model) => model.connections.some((c) => c.inferred === "unmodelled-merge");
 var noInputNode = (model) => {
   if (model.components.length > 0 && !model.components.some((c) => c.type === "input")) {
     return [{
@@ -2532,7 +2534,7 @@ var deadEnds = (model) => {
 };
 var bnAfterActivation = (model) => {
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = model.components.find((c) => c.id === conn.from);
     const to = model.components.find((c) => c.id === conn.to);
     if (!from || !to) continue;
@@ -2553,7 +2555,7 @@ var bnAfterActivation = (model) => {
 };
 var dropoutBeforeBN = (model) => {
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = model.components.find((c) => c.id === conn.from);
     const to = model.components.find((c) => c.id === conn.to);
     if (!from || !to) continue;
@@ -2576,7 +2578,7 @@ var outputActivation = (model) => {
   const outputNode = model.components.find((c) => c.type === "output");
   if (!outputNode) return [];
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = model.components.find((c) => c.id === conn.from);
     if (!from) continue;
     if (from.type === "softmax" || from.type === "sigmoid") {
@@ -2603,7 +2605,7 @@ var bnAtOutput = (model) => {
   const outputNode = model.components.find((c) => c.type === "output");
   if (!outputNode) return [];
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = model.components.find((c) => c.id === conn.from);
     if (!from) continue;
     if (NORM_TYPES.has(from.type)) {
@@ -2625,6 +2627,7 @@ var deepNoResidual = (model) => {
   const deepLayers = model.components.filter((c) => DEEP_LAYER_TYPES.has(c.type));
   if (deepLayers.length < DEEP_NO_RESIDUAL_MIN_LAYERS) return [];
   if (model.components.some((c) => RESIDUAL_TYPES.has(c.type))) return [];
+  if (hasUnmodelledMerge(model)) return [];
   return [{
     id: "deep-no-residual",
     ruleId: "deep-no-residual",
@@ -2708,7 +2711,7 @@ var vanishingGradientRisk = (model) => {
 var longestUnnormalizedConvRun = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const next = /* @__PURE__ */ new Map();
-  for (const cn of model.connections) next.set(cn.from, [...next.get(cn.from) ?? [], cn.to]);
+  for (const cn of observedEdges(model)) next.set(cn.from, [...next.get(cn.from) ?? [], cn.to]);
   const input = model.components.find((c) => c.type === "input");
   const seen = /* @__PURE__ */ new Set();
   let frontier = input ? [input.id] : [];
@@ -2880,7 +2883,7 @@ var CONV_TYPES = /* @__PURE__ */ new Set([
 var linearAfterConvNoFlatten = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -2908,7 +2911,7 @@ var linearAfterConvNoFlatten = (model) => {
 var redundantActivation = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -2931,7 +2934,7 @@ var redundantActivation = (model) => {
 var consecutiveLinearNoActivation = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -2955,7 +2958,7 @@ var dropoutAtOutput = (model) => {
   if (!outputNode) return [];
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = byId.get(conn.from);
     if (!from || from.type !== "dropout") continue;
     issues.push({
@@ -3022,7 +3025,7 @@ var SPATIAL_CONV_TYPES = /* @__PURE__ */ new Set([
 var nonSpatialIntoConv = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -3044,7 +3047,7 @@ var nonSpatialIntoConv = (model) => {
 var doubleNorm = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -3067,7 +3070,7 @@ var duplicatePositionalEncoding = (model) => {
   const pes = model.components.filter((c) => PE_TYPES.has(c.type));
   if (pes.length < 2) return [];
   const outgoing = /* @__PURE__ */ new Map();
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const list = outgoing.get(conn.from);
     if (list) list.push(conn.to);
     else outgoing.set(conn.from, [conn.to]);
@@ -3109,7 +3112,7 @@ var SPATIAL_POOL_TYPES = /* @__PURE__ */ new Set([
 var poolIntoLinearNoFlatten = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -3137,7 +3140,7 @@ var poolIntoLinearNoFlatten = (model) => {
 var flattenIntoAttention = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -3274,7 +3277,7 @@ var initActivationMismatch = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const affected = [];
   const actNames = /* @__PURE__ */ new Set();
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -3318,7 +3321,7 @@ var lmHeadVocabMismatch = (model) => {
   const outputIds = new Set(model.components.filter((c) => c.type === "output").map((c) => c.id));
   if (outputIds.size === 0) return [];
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     if (!outputIds.has(conn.to)) continue;
     const head = byId.get(conn.from);
     if (!head || head.type !== "linear") continue;

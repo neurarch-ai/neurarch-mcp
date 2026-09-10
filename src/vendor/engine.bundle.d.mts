@@ -77,3 +77,45 @@ export function convertHFConfigToModel(
   modelId: string,
   config: HFModelConfig,
 ): { components: ModelArchitecture['components']; connections: ModelArchitecture['connections'] };
+
+// ── suggest_fix (moved here from src/lib in 0.17) ────────────────────────────
+
+/** One machine-applicable edit derived from a lint finding. */
+export interface Fix {
+  rule: string;
+  layer?: string;
+  confidence: 'exact' | 'proposal';
+  summary: string;
+  diff: string;
+  newText: string;
+  lines: number[];
+  followUp?: string;
+}
+
+export interface SuggestFixResult {
+  path: string;
+  fixes: Fix[];
+  notFixable: Array<{ rule: string; layer?: string; reason: string }>;
+  patchedSource?: string;
+}
+
+/**
+ * Turn lint findings into edits to the .py they came from: `exact` where the
+ * rule pins a number or an order, `proposal` where a layer is missing.
+ */
+export function suggestFixes(
+  model: ModelArchitecture,
+  findings: EngineFinding[],
+  source: string,
+  path: string,
+): SuggestFixResult;
+
+/** How many of a graph's edges the importer inferred rather than read. */
+export interface EdgeProvenance {
+  total: number;
+  inferred: number;
+  constructionOrder: number;
+  unmodelledMerge: number;
+}
+
+export function edgeProvenance(model: ModelArchitecture): EdgeProvenance;

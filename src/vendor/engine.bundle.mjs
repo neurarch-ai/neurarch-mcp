@@ -121,7 +121,7 @@ var require_react_production_min = __commonJS({
     function O(a) {
       return "object" === typeof a && null !== a && a.$$typeof === l;
     }
-    function escape(a) {
+    function escape2(a) {
       var b = { "=": "=0", ":": "=2" };
       return "$" + a.replace(/[=:]/g, function(a2) {
         return b[a2];
@@ -129,7 +129,7 @@ var require_react_production_min = __commonJS({
     }
     var P = /\/+/g;
     function Q(a, b) {
-      return "object" === typeof a && null !== a && null != a.key ? escape("" + a.key) : b.toString(36);
+      return "object" === typeof a && null !== a && null != a.key ? escape2("" + a.key) : b.toString(36);
     }
     function R(a, b, e, d, c) {
       var k = typeof a;
@@ -922,7 +922,7 @@ var require_react_development = __commonJS({
         }
         var SEPARATOR = ".";
         var SUBSEPARATOR = ":";
-        function escape(key) {
+        function escape2(key) {
           var escapeRegex = /[=:]/g;
           var escaperLookup = {
             "=": "=0",
@@ -943,7 +943,7 @@ var require_react_development = __commonJS({
             {
               checkKeyStringCoercion(element.key);
             }
-            return escape("" + element.key);
+            return escape2("" + element.key);
           }
           return index.toString(36);
         }
@@ -5264,7 +5264,11 @@ function expandClassInstance(className, callArgsStr, ctx, callerEnv) {
     type: l.type,
     params: resolveParamsWithEnv(l.params, env),
     sourceLine: l.sourceLine,
-    sourceClass: l.sourceClass ?? className
+    sourceClass: l.sourceClass ?? className,
+    // The class's own forward() decided these edges; carry that verdict up so
+    // an inlined block does not silently become "observed" at the call site.
+    ...l.flowFromPrev ? { flowFromPrev: l.flowFromPrev } : {},
+    ...l.mergesAfter ? { mergesAfter: true } : {}
   }));
 }
 function classItem(className, argsStr, ctx, env, line) {
@@ -5394,7 +5398,9 @@ function parseInitStmts(initStmt, ctx) {
       params: il.params,
       order: order++,
       sourceLine: il.sourceLine,
-      sourceClass: il.sourceClass ?? ctx.className
+      sourceClass: il.sourceClass ?? ctx.className,
+      ...il.flowFromPrev ? { flowFromPrev: il.flowFromPrev } : {},
+      ...il.mergesAfter ? { mergesAfter: true } : {}
     });
   };
   const localLists = /* @__PURE__ */ new Map();
@@ -5496,6 +5502,13 @@ function parseInitStmts(initStmt, ctx) {
   }
   return layers;
 }
+function edgeInferenceBetween(prev, cur) {
+  if (!prev) return void 0;
+  if (cur.argText === void 0 || prev.argText === void 0) return void 0;
+  if (new RegExp(`self\\.${prev.layerName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\s*\\(`).test(cur.argText)) return void 0;
+  if (prev.assignsTo && readsAny(cur.argText, assignedNames(prev.assignsTo))) return void 0;
+  return "construction-order";
+}
 function orderLayersByForward(initLayers, forwardCalls) {
   const allLayers = [];
   const usedLayerNames = /* @__PURE__ */ new Set();
@@ -5505,41 +5518,63 @@ function orderLayersByForward(initLayers, forwardCalls) {
     isFunctional: false,
     pyName: l.name,
     sourceLine: l.sourceLine,
-    sourceClass: l.sourceClass
+    sourceClass: l.sourceClass,
+    ...l.flowFromPrev ? { flowFromPrev: l.flowFromPrev } : {},
+    ...l.mergesAfter ? { mergesAfter: true } : {}
   });
-  for (const call of forwardCalls) {
+  const emit = (l, edge, first, call) => {
+    if (first && edge) l.flowFromPrev = edge;
+    if (call?.returned) l.feedsOutput = true;
+    allLayers.push(l);
+  };
+  for (let ci = 0; ci < forwardCalls.length; ci++) {
+    const call = forwardCalls[ci];
+    const edge = allLayers.length === 0 ? void 0 : edgeInferenceBetween(forwardCalls[ci - 1], call);
+    const emittedBefore = allLayers.length;
     if (call.isFunctional) {
       const componentType = mapFunctionalToComponent(call.layerName) ?? mapEinopsToComponent(call.layerName);
       if (componentType) {
-        allLayers.push({
+        emit({
           type: componentType,
           params: {},
           isFunctional: true,
           pyName: call.layerName,
           sourceLine: call.line
-        });
+        }, edge, true, call);
       }
     } else {
       const matchingLayers = initLayers.filter(
         (l) => l.name === call.layerName || l.name.startsWith(`${call.layerName}_`) || l.name.startsWith(`${call.layerName}.`)
       );
       if (matchingLayers.length > 1) {
+        let first = true;
         for (const layer of matchingLayers) {
           if (layer.type && !usedLayerNames.has(layer.name)) {
-            allLayers.push(toOrdered(layer));
+            emit(toOrdered(layer), edge, first, call);
             usedLayerNames.add(layer.name);
+            first = false;
           }
         }
       } else if (matchingLayers.length === 1) {
         const layer = matchingLayers[0];
-        if (layer.type) allLayers.push(toOrdered(layer));
+        if (layer.type) emit(toOrdered(layer), edge, true, call);
       }
+    }
+    if (call.merges && allLayers.length > emittedBefore) {
+      allLayers[allLayers.length - 1].mergesAfter = true;
     }
   }
   if (allLayers.length === 0) {
     for (const layer of initLayers) {
-      if (layer.type) allLayers.push(toOrdered(layer));
+      if (layer.type) {
+        const l = toOrdered(layer);
+        if (allLayers.length > 0) l.flowFromPrev = "construction-order";
+        allLayers.push(l);
+      }
     }
+  }
+  for (let i = 1; i < allLayers.length; i++) {
+    if (allLayers[i - 1].mergesAfter) allLayers[i].flowFromPrev = "unmodelled-merge";
   }
   return allLayers;
 }
@@ -5658,7 +5693,8 @@ function parsePyTorchCode(code, opts = {}) {
         from: prevComponentId,
         to: component.id,
         fromPort: bestPorts.fromPort,
-        toPort: bestPorts.toPort
+        toPort: bestPorts.toPort,
+        ...layer.flowFromPrev ? { inferred: layer.flowFromPrev } : {}
       };
       connections.push(connection);
       prevComponentId = component.id;
@@ -5667,12 +5703,14 @@ function parsePyTorchCode(code, opts = {}) {
       const outputY = START_Y + allLayers.length * COMPONENT_SPACING_Y;
       const outputComponent = createComponent("output", { x: 200, y: outputY }, void 0);
       components.push(outputComponent);
+      const returnsHere = allLayers.some((l) => l.feedsOutput) ? allLayers[allLayers.length - 1]?.feedsOutput === true : false;
       const lastConnection = {
         id: `conn-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
         from: prevComponentId,
         to: outputComponent.id,
         fromPort: "bottom",
-        toPort: "top"
+        toPort: "top",
+        ...returnsHere ? {} : { inferred: "construction-order" }
       };
       connections.push(lastConnection);
     }
@@ -5919,6 +5957,45 @@ function parseNumberOrVariable(value) {
   }
   return value;
 }
+function balancedArgs(line, open) {
+  let depth = 0;
+  for (let i = open; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      if (depth === 0) return line.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+function bracketDelta(text) {
+  let d = 0;
+  for (const ch of text) {
+    if (ch === "(" || ch === "[" || ch === "{") d++;
+    else if (ch === ")" || ch === "]" || ch === "}") d--;
+  }
+  return d;
+}
+function assignedNames(lhs) {
+  return [...lhs.matchAll(/[A-Za-z_]\w*/g)].map((m) => m[0]);
+}
+function readsAny(text, names) {
+  return names.some((n) => new RegExp(`(?<![\\w.])${n}(?![\\w])`).test(text));
+}
+function mergesAtTopLevel(rhs) {
+  if (/\b(?:torch|np)?\.?(?:cat|stack)\s*\(/.test(rhs)) return true;
+  let depth = 0;
+  for (let i = 0; i < rhs.length; i++) {
+    const ch = rhs[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    else if (depth === 0 && ch === "+" && rhs[i + 1] !== "=" && rhs[i - 1] !== "+") {
+      if (/[\w)\]]\s*$/.test(rhs.slice(0, i))) return true;
+    }
+  }
+  return false;
+}
 function parseForwardCalls(lines, startLine, endLine) {
   const calls = [];
   const seenForLoop = /* @__PURE__ */ new Set();
@@ -5937,13 +6014,21 @@ function parseForwardCalls(lines, startLine, endLine) {
       }
       continue;
     }
-    const selfCalls = [...line.matchAll(/self\.([\w.]+)\s*\(/g)].map((m) => m[1]);
-    for (const name of [...selfCalls].reverse()) {
-      calls.push({ layerName: name, isFunctional: false, line: i + 1 });
+    const assign = line.match(/^\s*([A-Za-z_][\w.,\s()[\]]*?)\s*=(?!=)\s*(.+)$/);
+    const augmented = line.match(/^\s*([A-Za-z_][\w.]*)\s*\+=\s*(.+)$/);
+    const lhs = augmented ? augmented[1] : assign ? assign[1] : void 0;
+    const rhs = augmented ? augmented[2] : assign ? assign[2] : line;
+    const stmtMerges = !!augmented || mergesAtTopLevel(rhs);
+    const stmt = lhs !== void 0 ? { assignsTo: lhs } : {};
+    const selfCalls = [...line.matchAll(/self\.([\w.]+)\s*\(/g)];
+    for (const m of [...selfCalls].reverse()) {
+      const open = m.index + m[0].length - 1;
+      const argText = balancedArgs(line, open) ?? void 0;
+      calls.push({ layerName: m[1], isFunctional: false, line: i + 1, ...stmt, argText });
     }
     for (const m of line.matchAll(/self\.([\w.]+)\s*\[/g)) {
       if (!seenForLoop.has(m[1])) {
-        calls.push({ layerName: m[1], isFunctional: false, line: i + 1 });
+        calls.push({ layerName: m[1], isFunctional: false, line: i + 1, ...stmt });
         seenForLoop.add(m[1]);
       }
     }
@@ -5951,18 +6036,48 @@ function parseForwardCalls(lines, startLine, endLine) {
       const funcName = m[1];
       const componentType = mapFunctionalToComponent(funcName);
       if (componentType) {
-        calls.push({ layerName: funcName, isFunctional: true, line: i + 1 });
+        const open = m.index + m[0].length - 1;
+        calls.push({ layerName: funcName, isFunctional: true, line: i + 1, ...stmt, argText: balancedArgs(line, open) ?? void 0 });
       }
     }
     for (const m of line.matchAll(/(?:einops\.)?(rearrange|repeat|reduce)\s*\(/g)) {
       const funcName = m[1];
       const componentType = mapEinopsToComponent(funcName);
       if (componentType) {
-        calls.push({ layerName: funcName, isFunctional: true, line: i + 1 });
+        const open = m.index + m[0].length - 1;
+        calls.push({ layerName: funcName, isFunctional: true, line: i + 1, ...stmt, argText: balancedArgs(line, open) ?? void 0 });
       }
     }
+    if (stmtMerges && calls.length > 0) calls[calls.length - 1].merges = true;
   }
+  markReturned(calls, lines, startLine, endLine);
   return calls;
+}
+function markReturned(calls, lines, startLine, endLine) {
+  if (calls.length === 0) return;
+  let expr = null;
+  for (let i = startLine; i <= endLine; i++) {
+    const line = lines[i];
+    if (line.match(/^\s*def\s+\w+/) && !line.match(/def\s+forward/)) break;
+    const m = line.match(/^\s*return\b(.*)$/);
+    if (!m) continue;
+    let text = m[1];
+    let depth = bracketDelta(text);
+    for (let j = i + 1; j <= endLine && depth > 0; j++) {
+      text += " " + lines[j];
+      depth += bracketDelta(lines[j]);
+    }
+    expr = text;
+  }
+  if (expr === null) return;
+  for (let i = calls.length - 1; i >= 0; i--) {
+    const c = calls[i];
+    const names = c.assignsTo ? assignedNames(c.assignsTo) : [];
+    if (new RegExp(`self\\.${c.layerName.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\s*\\(`).test(expr) || names.length > 0 && readsAny(expr, names)) {
+      c.returned = true;
+      return;
+    }
+  }
 }
 function mapFunctionalToComponent(funcName) {
   const mapping = {
@@ -6221,6 +6336,8 @@ var PE_TYPES = /* @__PURE__ */ new Set([
   "relativePositionBias"
 ]);
 var VANISHING_ACTIVATIONS = /* @__PURE__ */ new Set(["sigmoid", "tanh"]);
+var observedEdges = (model) => model.connections.filter((c) => !c.inferred);
+var hasUnmodelledMerge = (model) => model.connections.some((c) => c.inferred === "unmodelled-merge");
 var noInputNode = (model) => {
   if (model.components.length > 0 && !model.components.some((c) => c.type === "input")) {
     return [{
@@ -6298,7 +6415,7 @@ var deadEnds = (model) => {
 };
 var bnAfterActivation = (model) => {
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = model.components.find((c) => c.id === conn.from);
     const to = model.components.find((c) => c.id === conn.to);
     if (!from || !to) continue;
@@ -6319,7 +6436,7 @@ var bnAfterActivation = (model) => {
 };
 var dropoutBeforeBN = (model) => {
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = model.components.find((c) => c.id === conn.from);
     const to = model.components.find((c) => c.id === conn.to);
     if (!from || !to) continue;
@@ -6342,7 +6459,7 @@ var outputActivation = (model) => {
   const outputNode = model.components.find((c) => c.type === "output");
   if (!outputNode) return [];
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = model.components.find((c) => c.id === conn.from);
     if (!from) continue;
     if (from.type === "softmax" || from.type === "sigmoid") {
@@ -6369,7 +6486,7 @@ var bnAtOutput = (model) => {
   const outputNode = model.components.find((c) => c.type === "output");
   if (!outputNode) return [];
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = model.components.find((c) => c.id === conn.from);
     if (!from) continue;
     if (NORM_TYPES.has(from.type)) {
@@ -6391,6 +6508,7 @@ var deepNoResidual = (model) => {
   const deepLayers = model.components.filter((c) => DEEP_LAYER_TYPES.has(c.type));
   if (deepLayers.length < DEEP_NO_RESIDUAL_MIN_LAYERS) return [];
   if (model.components.some((c) => RESIDUAL_TYPES.has(c.type))) return [];
+  if (hasUnmodelledMerge(model)) return [];
   return [{
     id: "deep-no-residual",
     ruleId: "deep-no-residual",
@@ -6474,7 +6592,7 @@ var vanishingGradientRisk = (model) => {
 var longestUnnormalizedConvRun = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const next = /* @__PURE__ */ new Map();
-  for (const cn of model.connections) next.set(cn.from, [...next.get(cn.from) ?? [], cn.to]);
+  for (const cn of observedEdges(model)) next.set(cn.from, [...next.get(cn.from) ?? [], cn.to]);
   const input = model.components.find((c) => c.type === "input");
   const seen = /* @__PURE__ */ new Set();
   let frontier = input ? [input.id] : [];
@@ -6646,7 +6764,7 @@ var CONV_TYPES = /* @__PURE__ */ new Set([
 var linearAfterConvNoFlatten = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6674,7 +6792,7 @@ var linearAfterConvNoFlatten = (model) => {
 var redundantActivation = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6697,7 +6815,7 @@ var redundantActivation = (model) => {
 var consecutiveLinearNoActivation = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6721,7 +6839,7 @@ var dropoutAtOutput = (model) => {
   if (!outputNode) return [];
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections.filter((c) => c.to === outputNode.id)) {
+  for (const conn of observedEdges(model).filter((c) => c.to === outputNode.id)) {
     const from = byId.get(conn.from);
     if (!from || from.type !== "dropout") continue;
     issues.push({
@@ -6788,7 +6906,7 @@ var SPATIAL_CONV_TYPES = /* @__PURE__ */ new Set([
 var nonSpatialIntoConv = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6810,7 +6928,7 @@ var nonSpatialIntoConv = (model) => {
 var doubleNorm = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6833,7 +6951,7 @@ var duplicatePositionalEncoding = (model) => {
   const pes = model.components.filter((c) => PE_TYPES.has(c.type));
   if (pes.length < 2) return [];
   const outgoing = /* @__PURE__ */ new Map();
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const list = outgoing.get(conn.from);
     if (list) list.push(conn.to);
     else outgoing.set(conn.from, [conn.to]);
@@ -6875,7 +6993,7 @@ var SPATIAL_POOL_TYPES = /* @__PURE__ */ new Set([
 var poolIntoLinearNoFlatten = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -6903,7 +7021,7 @@ var poolIntoLinearNoFlatten = (model) => {
 var flattenIntoAttention = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -7040,7 +7158,7 @@ var initActivationMismatch = (model) => {
   const byId = new Map(model.components.map((c) => [c.id, c]));
   const affected = [];
   const actNames = /* @__PURE__ */ new Set();
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     const from = byId.get(conn.from);
     const to = byId.get(conn.to);
     if (!from || !to) continue;
@@ -7084,7 +7202,7 @@ var lmHeadVocabMismatch = (model) => {
   const outputIds = new Set(model.components.filter((c) => c.type === "output").map((c) => c.id));
   if (outputIds.size === 0) return [];
   const issues = [];
-  for (const conn of model.connections) {
+  for (const conn of observedEdges(model)) {
     if (!outputIds.has(conn.to)) continue;
     const head = byId.get(conn.from);
     if (!head || head.type !== "linear") continue;
@@ -7893,6 +8011,32 @@ var SHAPE_SEVERITY = {
   "attention-in-mismatch": "warn"
 };
 var SHAPE_RULE_IDS = Object.keys(SHAPE_SEVERITY);
+var FLOW_DEPENDENT_SHAPE_KINDS = /* @__PURE__ */ new Set([
+  "invalid-output-shape",
+  "merge-shape-mismatch",
+  "attention-in-mismatch",
+  "compute-error",
+  "linear-in-mismatch"
+]);
+function downstreamOfInferredEdges(model) {
+  const roots = model.connections.filter((c) => c.inferred).map((c) => c.to);
+  if (roots.length === 0) return /* @__PURE__ */ new Set();
+  const next = /* @__PURE__ */ new Map();
+  for (const c of model.connections) next.set(c.from, [...next.get(c.from) ?? [], c.to]);
+  const seen = new Set(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    for (const to of next.get(queue.shift()) ?? []) {
+      if (!seen.has(to)) {
+        seen.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  const names = /* @__PURE__ */ new Set();
+  for (const c of model.components) if (seen.has(c.id) && c.name) names.add(c.name);
+  return names;
+}
 var ALL_RULE_IDS = [
   .../* @__PURE__ */ new Set([...ADVISOR_RULE_IDS, ...SHAPE_RULE_IDS])
 ];
@@ -7927,9 +8071,11 @@ function lintModelGraph(model) {
       componentType: target?.type
     });
   }
+  const unreliableFlow = downstreamOfInferredEdges(model);
   for (const issue of propagateShapes(model).issues) {
     const severity = SHAPE_SEVERITY[issue.kind];
     if (!severity) continue;
+    if (FLOW_DEPENDENT_SHAPE_KINDS.has(issue.kind) && issue.componentName && unreliableFlow.has(issue.componentName)) continue;
     findings.push({
       rule: issue.kind,
       severity,
@@ -7939,6 +8085,356 @@ function lintModelGraph(model) {
     });
   }
   return dedupe(findings);
+}
+function edgeProvenance(model) {
+  const edges = model?.connections ?? [];
+  const constructionOrder = edges.filter((c) => c.inferred === "construction-order").length;
+  const unmodelledMerge = edges.filter((c) => c.inferred === "unmodelled-merge").length;
+  return {
+    total: edges.length,
+    inferred: constructionOrder + unmodelledMerge,
+    constructionOrder,
+    unmodelledMerge
+  };
+}
+
+// src/utils/unifiedDiff.ts
+function unifiedDiff(path, before, after, context = 3) {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  const n = a.length, m = b.length;
+  const dp = [];
+  for (let i2 = 0; i2 <= n; i2++) dp.push(new Uint32Array(m + 1));
+  for (let i2 = n - 1; i2 >= 0; i2--) {
+    for (let j2 = m - 1; j2 >= 0; j2--) {
+      dp[i2][j2] = a[i2] === b[j2] ? dp[i2 + 1][j2 + 1] + 1 : Math.max(dp[i2 + 1][j2], dp[i2][j2 + 1]);
+    }
+  }
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      ops.push({ kind: " ", text: a[i], ai: i, bi: j });
+      i++;
+      j++;
+    } else if (i < n && (j >= m || dp[i + 1][j] >= dp[i][j + 1])) {
+      ops.push({ kind: "-", text: a[i], ai: i, bi: j });
+      i++;
+    } else {
+      ops.push({ kind: "+", text: b[j], ai: i, bi: j });
+      j++;
+    }
+  }
+  if (!ops.some((o) => o.kind !== " ")) return "";
+  const hunks = [];
+  let current = null;
+  let equalRun = 0;
+  for (const op of ops) {
+    if (op.kind === " ") {
+      equalRun++;
+      if (current) {
+        current.push(op);
+        if (equalRun > context * 2) {
+          const trailing = current.splice(current.length - equalRun, equalRun);
+          current.push(...trailing.slice(0, context));
+          hunks.push(current);
+          current = null;
+        }
+      }
+    } else {
+      if (!current) {
+        current = [];
+        const start = ops.indexOf(op);
+        for (let k = Math.max(0, start - context); k < start; k++) if (ops[k].kind === " ") current.push(ops[k]);
+      }
+      equalRun = 0;
+      current.push(op);
+    }
+  }
+  if (current) {
+    if (equalRun > context) current.splice(current.length - equalRun + context, equalRun - context);
+    hunks.push(current);
+  }
+  const out = [`--- a/${path}`, `+++ b/${path}`];
+  for (const h of hunks) {
+    const aStart = (h.find((o) => o.kind !== "+")?.ai ?? h[0].ai) + 1;
+    const bStart = (h.find((o) => o.kind !== "-")?.bi ?? h[0].bi) + 1;
+    const aLen = h.filter((o) => o.kind !== "+").length;
+    const bLen = h.filter((o) => o.kind !== "-").length;
+    out.push(`@@ -${aStart},${aLen} +${bStart},${bLen} @@`);
+    for (const o of h) out.push(`${o.kind}${o.text}`);
+  }
+  return out.join("\n") + "\n";
+}
+
+// src/utils/suggestFix.ts
+var NUMERIC = /^-?\d+(\.\d+)?$/;
+function locate(c, lines) {
+  if (!c) return null;
+  const fromParser = c.sourceLine;
+  if (typeof fromParser === "number" && fromParser > 0 && fromParser <= lines.length) return fromParser;
+  const re = new RegExp(`^\\s*self\\.${escape(c.name)}\\s*=`);
+  const idx = lines.findIndex((l) => re.test(l));
+  return idx === -1 ? null : idx + 1;
+}
+function locateCall(name, lines) {
+  const re = new RegExp(`^\\s*\\w+\\s*=\\s*self\\.${escape(name)}\\(`);
+  const idx = lines.findIndex((l) => re.test(l));
+  return idx === -1 ? null : idx + 1;
+}
+function escape(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function replaceLiteral(line, from, to) {
+  const re = new RegExp(`(?<![\\w.])${from}(?![\\w.])`);
+  if (!re.test(line)) return null;
+  return line.replace(re, String(to));
+}
+function nearestMultiple(value, of) {
+  const down = Math.floor(value / of) * of;
+  const up = down + of;
+  return value - down <= up - value && down > 0 ? down : up;
+}
+function largestDivisorAtMost2(n, cap) {
+  for (let d = Math.min(cap, n); d >= 1; d--) if (n % d === 0) return d;
+  return 1;
+}
+function suggestFixes(model, findings, source, path) {
+  const original = source.split("\n");
+  const lines = [...original];
+  const base = () => [...original];
+  const byName = new Map(model.components.map((c) => [c.name, c]));
+  const fixes = [];
+  const notFixable = [];
+  const num = (v) => typeof v === "number" ? v : typeof v === "string" && NUMERIC.test(v) ? Number(v) : null;
+  for (const f of findings) {
+    const c = f.componentName ? byName.get(f.componentName) : void 0;
+    const at = locate(c, original);
+    const fail = (reason) => notFixable.push({ rule: f.rule, layer: f.componentName, reason });
+    switch (f.rule) {
+      case "head-dim-divisibility": {
+        const dim = num(c?.params.hiddenDim ?? c?.params.embedDim);
+        const heads = num(c?.params.numHeads);
+        if (!c || at === null || dim === null || heads === null) {
+          fail("the embed dim or head count is not a literal in the source");
+          break;
+        }
+        const target = nearestMultiple(dim, heads);
+        const touched = [];
+        const next = base();
+        for (const other of model.components) {
+          if (!Object.values(other.params ?? {}).some((v) => num(v) === dim)) continue;
+          const ln = locate(other, original);
+          if (ln === null) continue;
+          const replaced = replaceLiteral(next[ln - 1], dim, target);
+          if (replaced) {
+            next[ln - 1] = replaced;
+            touched.push(ln);
+          }
+        }
+        if (!touched.includes(at)) {
+          fail(`could not find the literal ${dim} on line ${at}`);
+          break;
+        }
+        for (const ln of touched) lines[ln - 1] = replaceLiteral(lines[ln - 1], dim, target) ?? lines[ln - 1];
+        fixes.push({
+          rule: f.rule,
+          layer: c.name,
+          confidence: "exact",
+          summary: `Change the width ${dim} to ${target} (divisible by ${heads} heads) on ${touched.length} line(s) that share it.`,
+          diff: unifiedDiff(path, source, next.join("\n")),
+          newText: next.join("\n"),
+          lines: touched.sort((a, b) => a - b),
+          followUp: touched.length === 1 ? void 0 : "Every layer that carried the old width was changed together; check any width passed through a variable rather than a literal."
+        });
+        break;
+      }
+      case "gqa-head-divisibility":
+      case "gqa-head-mismatch": {
+        const heads = num(c?.params.numHeads);
+        const kv = num(c?.params.numKVHeads ?? c?.params.numKvHeads);
+        if (!c || at === null || heads === null || kv === null) {
+          fail("head counts are not literals in the source");
+          break;
+        }
+        const target = largestDivisorAtMost2(heads, kv);
+        const replaced = replaceLiteral(original[at - 1], kv, target);
+        if (!replaced) {
+          fail(`could not find the literal ${kv} on line ${at}`);
+          break;
+        }
+        const next = base();
+        next[at - 1] = replaced;
+        lines[at - 1] = replaceLiteral(lines[at - 1], kv, target) ?? lines[at - 1];
+        fixes.push({ rule: f.rule, layer: c.name, confidence: "exact", summary: `Set KV heads to ${target}, the largest divisor of ${heads} at or below ${kv}.`, diff: unifiedDiff(path, source, next.join("\n")), newText: next.join("\n"), lines: [at] });
+        break;
+      }
+      case "high-dropout": {
+        const p = num(c?.params.p);
+        if (!c || at === null || p === null) {
+          fail("dropout rate is not a literal");
+          break;
+        }
+        const replaced = replaceLiteral(original[at - 1], p, 0.5);
+        if (!replaced) {
+          fail(`could not find the literal ${p} on line ${at}`);
+          break;
+        }
+        const next = base();
+        next[at - 1] = replaced;
+        lines[at - 1] = replaceLiteral(lines[at - 1], p, 0.5) ?? lines[at - 1];
+        fixes.push({ rule: f.rule, layer: c.name, confidence: "exact", summary: `Clamp dropout from ${p} to 0.5.`, diff: unifiedDiff(path, source, next.join("\n")), newText: next.join("\n"), lines: [at] });
+        break;
+      }
+      case "conv-stride-gt-kernel": {
+        const k = num(Array.isArray(c?.params.kernelSize) ? c?.params.kernelSize[0] : c?.params.kernelSize);
+        const s = num(Array.isArray(c?.params.stride) ? c?.params.stride[0] : c?.params.stride);
+        if (!c || at === null || k === null || s === null) {
+          fail("kernel or stride is not a literal");
+          break;
+        }
+        const replaced = original[at - 1].replace(new RegExp(`stride\\s*=\\s*${s}(?![\\d.])`), `stride=${k}`);
+        if (replaced === original[at - 1]) {
+          fail(`stride=${s} is not written as a keyword on line ${at}`);
+          break;
+        }
+        const next = base();
+        next[at - 1] = replaced;
+        lines[at - 1] = lines[at - 1].replace(new RegExp(`stride\\s*=\\s*${s}(?![\\d.])`), `stride=${k}`);
+        fixes.push({ rule: f.rule, layer: c.name, confidence: "exact", summary: `Reduce stride ${s} to the kernel size ${k} so no input is skipped.`, diff: unifiedDiff(path, source, next.join("\n")), newText: next.join("\n"), lines: [at] });
+        break;
+      }
+      case "groupnorm-divisibility": {
+        const groups = num(c?.params.numGroups);
+        const ch = num(c?.params.numChannels);
+        if (!c || at === null || groups === null || ch === null) {
+          fail("groups or channels is not a literal");
+          break;
+        }
+        const target = largestDivisorAtMost2(ch, groups);
+        const replaced = replaceLiteral(original[at - 1], groups, target);
+        if (!replaced) {
+          fail(`could not find the literal ${groups} on line ${at}`);
+          break;
+        }
+        const next = base();
+        next[at - 1] = replaced;
+        lines[at - 1] = replaceLiteral(lines[at - 1], groups, target) ?? lines[at - 1];
+        fixes.push({ rule: f.rule, layer: c.name, confidence: "exact", summary: `Use ${target} groups, which divides ${ch} channels.`, diff: unifiedDiff(path, source, next.join("\n")), newText: next.join("\n"), lines: [at] });
+        break;
+      }
+      case "dropout-before-bn":
+      case "bn-after-activation": {
+        if (!c) {
+          fail("no layer named");
+          break;
+        }
+        const nextId = c.outputs?.[0];
+        const nextC = model.components.find((x) => x.id === nextId);
+        const l1 = locateCall(c.name, original);
+        const l2 = nextC ? locateCall(nextC.name, original) : null;
+        if (l1 === null || l2 === null || Math.abs(l1 - l2) !== 1) {
+          fail("the two calls are not consecutive statements in forward(), reorder them by hand");
+          break;
+        }
+        const next = base();
+        [next[l1 - 1], next[l2 - 1]] = [next[l2 - 1], next[l1 - 1]];
+        [lines[l1 - 1], lines[l2 - 1]] = [lines[l2 - 1], lines[l1 - 1]];
+        fixes.push({ rule: f.rule, layer: c.name, confidence: "exact", summary: `Swap ${c.name} and ${nextC.name} in forward().`, diff: unifiedDiff(path, source, next.join("\n")), newText: next.join("\n"), lines: [Math.min(l1, l2), Math.max(l1, l2)] });
+        break;
+      }
+      case "consecutive-linear-no-activation": {
+        if (!c || at === null) {
+          fail("could not locate the layer");
+          break;
+        }
+        const indent = original[at - 1].match(/^\s*/)?.[0] ?? "        ";
+        const actName = `${c.name}_act`;
+        const next = base();
+        next.splice(at, 0, `${indent}self.${actName} = nn.GELU()`);
+        const call = locateCall(c.name, next);
+        if (call !== null) {
+          const callIndent = next[call - 1].match(/^\s*/)?.[0] ?? indent;
+          const lhs = next[call - 1].match(/^\s*(\w+)\s*=/)?.[1] ?? "x";
+          next.splice(call, 0, `${callIndent}${lhs} = self.${actName}(${lhs})`);
+        }
+        fixes.push({
+          rule: f.rule,
+          layer: c.name,
+          confidence: "proposal",
+          summary: `Insert a GELU after ${c.name}; two stacked linears without one collapse into a single matrix.`,
+          diff: unifiedDiff(path, source, next.join("\n")),
+          newText: next.join("\n"),
+          lines: [at + 1],
+          followUp: call === null ? "Add a call to the new activation in forward() after the linear." : "If the stack is a deliberate low-rank factorisation, drop this instead."
+        });
+        break;
+      }
+      case "attention-no-pe": {
+        if (!c || at === null) {
+          fail("could not locate the attention layer");
+          break;
+        }
+        const dim = num(c.params.hiddenDim ?? c.params.embedDim);
+        const indent = original[at - 1].match(/^\s*/)?.[0] ?? "        ";
+        const next = base();
+        next.splice(at - 1, 0, `${indent}self.pos_embed = nn.Parameter(torch.zeros(1, SEQ_LEN, ${dim ?? "EMBED_DIM"}))  # learned positional embedding`);
+        fixes.push({
+          rule: f.rule,
+          layer: c.name,
+          confidence: "proposal",
+          summary: "Add a learned positional embedding before the first attention layer.",
+          diff: unifiedDiff(path, source, next.join("\n")),
+          newText: next.join("\n"),
+          lines: [at],
+          followUp: "Replace SEQ_LEN with the sequence length, add `x = x + self.pos_embed` in forward() before the attention call, and import torch if the file only imports torch.nn."
+        });
+        break;
+      }
+      case "dropout-at-output":
+      case "output-activation":
+      case "bn-at-output": {
+        if (!c) {
+          fail("no layer named");
+          break;
+        }
+        const call = locateCall(c.name, original);
+        if (call === null) {
+          fail(`no statement calling self.${c.name} in forward()`);
+          break;
+        }
+        const next = base();
+        next.splice(call - 1, 1);
+        fixes.push({
+          rule: f.rule,
+          layer: c.name,
+          confidence: "proposal",
+          summary: `Drop the ${c.name} call at the output.`,
+          diff: unifiedDiff(path, source, next.join("\n")),
+          newText: next.join("\n"),
+          lines: [call],
+          followUp: "Keep the layer definition or remove it too; a definition nothing calls is harmless."
+        });
+        break;
+      }
+      case "invalid-output-shape":
+      case "compute-error":
+      case "unknown-layer-type":
+      case "merge-shape-mismatch":
+      case "attention-in-mismatch":
+        fail("a shape finding; on parsed source these are usually the parser's own unevaluated dimension, not a bug in the model");
+        break;
+      default:
+        fail("no mechanical fix for this rule; read the finding's message, it names the change");
+    }
+  }
+  const patched = lines.join("\n");
+  return {
+    path,
+    fixes,
+    notFixable,
+    ...fixes.some((x) => x.confidence === "exact") && patched !== source ? { patchedSource: patched } : {}
+  };
 }
 
 // src/utils/lintEngine.ts
@@ -12931,10 +13427,12 @@ export {
   ADVISOR_RULE_IDS,
   SHAPE_RULE_IDS,
   convertHFConfigToModel,
+  edgeProvenance,
   fetchHFModelConfig,
   generatePyTorchCode,
   graphFromPyTorchSource,
-  lintModelGraph
+  lintModelGraph,
+  suggestFixes
 };
 /*! Bundled license information:
 

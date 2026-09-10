@@ -1,24 +1,17 @@
+/**
+ * The vendored `suggestFixes` on a real file.
+ *
+ * The rules themselves are tested next to the engine (src/utils/suggestFix.test.ts
+ * in the Neurarch repo); this is the end-to-end check that the bundle this
+ * server ships actually produces them, which is the thing a refreshed vendor
+ * bundle can silently break.
+ */
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { suggestFixes } from './suggestFix.js';
-import { unifiedDiff } from './unifiedDiff.js';
 import { graphFromPyTorchSource, lintModelGraph } from '../vendor/engine.bundle.mjs';
 
 const VIT = new URL('../../examples/tiny-vit.py', import.meta.url);
-
-describe('unifiedDiff', () => {
-  it('is empty for identical texts and has one hunk for one changed line', () => {
-    expect(unifiedDiff('f', 'a\nb\nc', 'a\nb\nc')).toBe('');
-    const d = unifiedDiff('f.py', 'a\nb\nc\nd\ne\nf\ng', 'a\nb\nc\nX\ne\nf\ng');
-    expect(d).toMatch(/^--- a\/f\.py\n\+\+\+ b\/f\.py\n@@ -1,7 \+1,7 @@\n a\n b\n c\n-d\n\+X\n e\n f\n g\n$/);
-  });
-  it('separates distant changes into two hunks', () => {
-    const before = Array.from({ length: 30 }, (_, i) => `l${i}`).join('\n');
-    const after = before.replace('l2', 'A').replace('l27', 'B');
-    const d = unifiedDiff('f', before, after);
-    expect((d.match(/^@@/gm) ?? []).length).toBe(2);
-  });
-});
 
 describe('suggestFixes on tiny-vit.py', () => {
   it('fixes the head-dim crash on every line that shares the width, exactly', async () => {
