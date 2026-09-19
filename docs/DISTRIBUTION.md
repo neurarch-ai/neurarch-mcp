@@ -5,8 +5,8 @@ matters: the official registry first, because the directories crawl it.
 
 | Where | Mechanism | Status | On each release |
 |---|---|---|---|
-| npm | `npm publish` | 0.13.0 live 2026-09-01 | version bump, `npm publish` |
-| Official MCP Registry | `server.json` + `mcp-publisher publish` (GitHub auth for the `io.github.neurarch-ai/*` namespace) | listed since 0.10; 0.13.0 republish pending login | bump `version` in both places in `server.json`, republish |
+| npm | `npm publish` | **0.16.0 live**, verified 2026-09-09; 2,011 downloads over the previous 30 days, 25 non-zero days. Two commits have landed since (`suggestFixes` in the engine, `inferredEdges`), so the repo is one release ahead of npm | version bump, `npm publish` |
+| Official MCP Registry | `server.json` + `mcp-publisher publish` (GitHub auth for the `io.github.neurarch-ai/*` namespace) | **serving 0.11.0** as of 2026-09-09, five releases behind npm, so every directory that ingests from here shows a description with no `check_design` or `rank_designs` in it. `server.json` in this repo is already at 0.16.0: this is a login and a publish, and it is the highest-leverage hour on this page | bump `version` in both places in `server.json`, republish |
 | Smithery | Now takes an HTTP URL or the `.mcpb`: `npx @smithery/cli mcp publish ./neurarch-mcp-<v>.mcpb -n neurarch-ai/neurarch-mcp` (needs `SMITHERY_API_KEY` from smithery.ai/account/api-keys). `smithery.yaml` kept for the legacy stdio path. | live 2026-09-01: smithery.ai/servers/neurarch-ai/neurarch-mcp (published from `neurarch-mcp-<v>.smithery.mcpb`, which `npm run build:mcpb` now emits alongside the Anthropic one) | `npm run build:mcpb`, then `npx @smithery/cli mcp publish neurarch-mcp-<v>.smithery.mcpb -n neurarch-ai/neurarch-mcp` (`npx @smithery/cli auth login` once per machine) |
 | Glama | `glama.json` in repo root; submitted via Add Server at glama.ai/mcp/servers | submitted 2026-09-01, pending review | nothing |
 | PulseMCP | submissions paused until mid-August 2026; it ingests the Official MCP Registry automatically | will pick us up from the registry | nothing |
@@ -75,7 +75,9 @@ with descriptions, not the 8 headline ones, is the cheap next step.
 2. GitHub release with the `.mcpb` attached and the CHANGELOG section as the body.
 3. Claim / resubmit the directories above.
 4. Post: the real-repos study (`docs/REAL_REPOS_STUDY.md`) is the hook, the GIF is the visual, the tiny-vit.py planted bug is the reproducible demo.
-5. Every outbound link carries `?utm_source=<channel>` to `https://www.neurarch.com/mcp`, so the channel that actually brings people is measurable.
+5. Every outbound link carries `?utm_source=<channel>`, so the channel that actually brings people is measurable. **This server tags its two links as of 2026-09-09** (`SOURCE_TAG` in `src/lib/neurarchApi.ts`, pinned by a test in `src/ledgerTools.test.ts`); the sentence had been here since the first release with nothing honouring it, and the neurarch repo's `/api/metrics/visit` had nowhere to store the value until migration 042.
+
+   Only the two links that already existed are tagged. Tool output is an agent's context window, and adding a link to a finding so a click can be counted would be spending someone else's tokens on our analytics. A test asserts `checkDesign.ts` contains no tag.
 
 ## Refreshing the vendored bundles
 

@@ -25,6 +25,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { type ToolContext } from './tools.js';
+import { SOURCE_TAG } from './lib/neurarchApi.js';
 import { createMcpServer } from './server.js';
 import type { ToolSetName } from './cli.js';
 
@@ -186,7 +187,7 @@ export function startHttpServer(opts: HttpServerOptions): void {
         `neurarch-mcp ${version}: a Model Context Protocol server, not a web page.\n\n`
         + 'Connect an MCP client to this URL (Streamable HTTP). Claude Code:\n'
         + `  claude mcp add --transport http neurarch <this URL>${token ? " --header \"Authorization: Bearer <token>\"" : ''}\n\n`
-        + 'Liveness: GET /health. Docs: https://www.neurarch.com/mcp\n',
+        + `Liveness: GET /health. Docs: https://www.neurarch.com/mcp?${SOURCE_TAG}\n`,
       );
       return;
     }
