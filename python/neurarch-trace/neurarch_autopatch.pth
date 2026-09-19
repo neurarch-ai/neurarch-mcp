@@ -1,0 +1,8 @@
+# neurarch-trace autopatch. Installed at the root of site-packages, so Python
+# runs it before the first line of any script in this environment.
+#
+# It costs an unset environment variable one dict lookup and imports nothing.
+# With NEURARCH_TRACE set it imports neurarch_trace.autopatch (no torch, no
+# network) which waits for torch and traces the first forward pass. Any failure
+# is one line on stderr: a tracer must never be the reason a training job dies.
+import os, sys; exec("if os.environ.get('NEURARCH_TRACE', '').strip().lower() in ('1', 'true', 'yes', 'on'):\n    try:\n        import neurarch_trace.autopatch as _neurarch_autopatch; _neurarch_autopatch.install()\n    except Exception as _neurarch_exc:\n        sys.stderr.write('neurarch-trace: autopatch failed to arm: %r\\n' % (_neurarch_exc,))\n")

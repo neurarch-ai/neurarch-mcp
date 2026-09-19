@@ -1,0 +1,32 @@
+# The python half of this repo (python/neurarch-trace) had no gate on a pull
+# request: its tests ran once, inside the publish job, after the tag was
+# already pushed. That is late enough that the first sign of a broken tracer
+# was a failed release.
+#
+# Only fires when python/ changes, because installing torch costs a minute and
+# nothing in src/ can break it.
+name: neurarch-trace
+
+on:
+  push:
+    branches: [main]
+    paths: ['python/**', '.github/workflows/python.yml']
+  pull_request:
+    paths: ['python/**', '.github/workflows/python.yml']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python/neurarch-trace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install
+        run: |
+          uv venv
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install pytest numpy setuptools -e .
+      - name: Tests
+        run: uv run --no-sync pytest tests -q

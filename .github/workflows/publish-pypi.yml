@@ -37,6 +37,27 @@ jobs:
           uv venv && uv pip install torch --index-url https://download.pytorch.org/whl/cpu && uv pip install pytest numpy -e .
           uv run --no-sync pytest tests -q
       - run: uv build
+      - name: The built artifacts carry the autopatch
+        # neurarch_autopatch.pth is the whole of `NEURARCH_TRACE=1 python
+        # train.py`, and it is the one file in this package that no test in the
+        # source tree can miss the absence of: everything keeps working, the
+        # autopatch just stops existing. It has to be at the ROOT of the wheel,
+        # because that is what puts it at the root of site-packages, the only
+        # directory Python scans for .pth files.
+        run: |
+          python3 - <<'PY'
+          import glob, sys, tarfile, zipfile
+          PTH = "neurarch_autopatch.pth"
+          wheel = glob.glob("dist/*.whl")[0]
+          names = zipfile.ZipFile(wheel).namelist()
+          if PTH not in names:
+              sys.exit("%s is not at the root of %s: %s" % (PTH, wheel, names))
+          sdist = glob.glob("dist/*.tar.gz")[0]
+          members = tarfile.open(sdist).getnames()
+          if not any(m.endswith("/" + PTH) for m in members):
+              sys.exit("%s is missing from %s (check MANIFEST.in)" % (PTH, sdist))
+          print("%s present in both artifacts" % PTH)
+          PY
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python/neurarch-trace/dist
