@@ -31,6 +31,14 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   a finding from a statically parsed `.py` is not actionable and a traced graph
   is.
 
+- **`plan` takes a change spec.** `spec: { adapter?, quant?, serving?, constraints? }`
+  rides beside `policy` to `POST /api/v1/plan`, and the card gains a change
+  section: what is allowed to move on this base, a spec id that is a join key
+  beside the structural fingerprint (never inside it), and a gate that approves
+  or refuses on memory, fit and policy. The tool's result carries
+  `change: { specId, approved, blockers }`. The gate never says whether an
+  adapter will train well; the server says so in as many words.
+
 ### Fixed
 - **Opt-in corpus rows survive the exit.** `sendCorpusReport` was fire-and-forget
   with nowhere to wait, so a process that exited before the POST left the socket

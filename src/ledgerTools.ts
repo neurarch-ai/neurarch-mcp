@@ -137,6 +137,7 @@ interface PlanResponse {
     run?: { legal?: boolean; blockers?: unknown[]; warnings?: unknown[] };
     policy?: { applied?: boolean; violations?: number } | null;
     history?: { rows?: unknown[] } | null;
+    change?: { specId?: string; gate?: { ok?: boolean; blockers?: unknown[]; warnings?: unknown[] } } | null;
   };
 }
 
@@ -167,11 +168,22 @@ export const planTool: ToolDef = {
         type: 'string',
         description: 'A second model to diff against (a path, zoo:<id> or hf:<org/name>).',
       },
+      spec: {
+        type: 'object',
+        description:
+          'A change spec: what is allowed to move on this base and under which constraints. '
+          + '{ base?, adapter?: { peft: lora|qlora|dora, rank, targets[] }, quant?: fp32|fp16|int8|int4, '
+          + 'serving?: { gpu, promptTokens, genTokens, batchSize }, constraints?: { must_fit, max_memory_gb, '
+          + 'max_cost_usd, allow_gpu } }. The card gains a change section with its own spec id (a join key '
+          + 'beside the structural fingerprint, never inside it) and a gate that approves or refuses on '
+          + 'memory, fit and policy. The gate never says whether an adapter will train well.',
+        additionalProperties: true,
+      },
     },
     additionalProperties: false,
   },
   handler: async (
-    { policy, base_path }: { policy?: Policy; base_path?: string },
+    { policy, base_path, spec }: { policy?: Policy; base_path?: string; spec?: Record<string, unknown> },
     model: ModelArchitecture,
     ctx: ToolContext,
   ) => {
@@ -205,6 +217,7 @@ export const planTool: ToolDef = {
         model,
         ...(base ? { base } : {}),
         ...(effective ? { policy: effective } : {}),
+        ...(spec && Object.keys(spec).length ? { spec } : {}),
         // Never true from a tool call: publishing someone's design is a
         // decision for the person, not for the agent holding their file.
         share: false,
@@ -240,6 +253,13 @@ export const planTool: ToolDef = {
         },
       sentTo: `${apiBase()}/api/v1/plan`,
       ...(base_path ? { comparedWith: base_path } : {}),
+      ...(spec && Object.keys(spec).length
+        ? {
+          change: data.plan?.change
+            ? { specId: data.plan.change.specId ?? null, approved: data.plan.change.gate?.ok ?? null, blockers: data.plan.change.gate?.blockers?.length ?? 0 }
+            : { specId: null, approved: null, note: 'The server answered without a change section; it may predate change specs.' },
+        }
+        : {}),
     };
   },
 };
