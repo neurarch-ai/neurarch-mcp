@@ -244,7 +244,21 @@ def _outermost(model: Any, original: Callable[..., Any], args: tuple, kwargs: di
         return original(model, *args, **kwargs)
 
     try:
-        result = original(model, *args, **kwargs)
+        if _truthy(os.environ.get("NEURARCH_TRACE_EXIT")):
+            # A probe only wants the graph, and the graph needs autograd's
+            # grad_fn chain to resolve producers, so no_grad is not an option.
+            # What it does not need is every saved activation sitting on the
+            # GPU: with the Module.__call__ hook in place torch.compile breaks
+            # its graph at every module and the forward runs eager, which on
+            # Karpathy's GPT at depth 11 and batch 128 x 2048 needs 73 GB
+            # where the compiled training step needs 27. Parking the saved
+            # tensors on the CPU keeps the autograd walk and drops the GPU
+            # footprint to the weights plus one layer's working set.
+            import torch
+            with torch.autograd.graph.save_on_cpu(pin_memory=False):
+                result = original(model, *args, **kwargs)
+        else:
+            result = original(model, *args, **kwargs)
     finally:
         tracer.detach()
         uninstall()
