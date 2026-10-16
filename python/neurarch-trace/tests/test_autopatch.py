@@ -471,3 +471,25 @@ def test_exit_stops_the_process_after_the_graph(tmp_path, monkeypatch):
     assert e.value.code == 0
     graph = json.loads(Path(os.environ["NEURARCH_TRACE_OUT"]).read_text())
     assert "conv2d" in [c["type"] for c in graph["components"]]
+
+
+def test_exit_mode_traces_with_saved_tensors_parked_on_cpu(tmp_path, monkeypatch):
+    """The probe forward runs under save_on_cpu; the graph must still close
+    (producers are resolved through grad_fn, which save_on_cpu keeps)."""
+    monkeypatch.setenv("NEURARCH_TRACE_EXIT", "1")
+    seen = []
+    import torch.autograd.graph as ag
+    original = ag.save_on_cpu
+
+    class Spy(original):
+        def __init__(self, *a, **k):
+            seen.append(True)
+            super().__init__(*a, **k)
+
+    monkeypatch.setattr(ag, "save_on_cpu", Spy)
+    arm()
+    with pytest.raises(SystemExit) as e:
+        Tiny()(torch.randn(2, 3, 16, 16))
+    assert e.value.code == 0 and seen
+    graph = json.loads(Path(os.environ["NEURARCH_TRACE_OUT"]).read_text())
+    assert len(graph["connections"]) >= 5
