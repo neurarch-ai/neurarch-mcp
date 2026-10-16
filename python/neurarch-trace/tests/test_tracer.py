@@ -288,3 +288,25 @@ def test_functional_op_between_layers_marks_the_edge_inferred():
     assert edges[("proj", "gate")].get("inferred") == "unmodelled-op"
     assert "inferred" not in edges[("input", "proj")]
     assert "inferred" not in edges[("gate", "output")]
+
+
+def test_an_input_no_layer_consumes_is_dropped():
+    """`model(x, y)`: the targets reach the loss, never a layer. Without this
+    every training script traced through its real forward reported one
+    isolated input layer."""
+    from neurarch_trace.tracer import Tracer
+    from neurarch_trace.writer import build_graph
+
+    class WithTargets(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.fc = nn.Linear(8, 3)
+
+        def forward(self, x, y):
+            logits = self.fc(x)
+            return torch.nn.functional.cross_entropy(logits, y)
+
+    g = build_graph(Tracer(WithTargets()).run([torch.randn(4, 8), torch.randint(0, 3, (4,))]), "T")
+    inputs = [c for c in g["components"] if c["type"] == "input"]
+    assert len(inputs) == 1
+    assert all(c["outputs"] for c in inputs)
