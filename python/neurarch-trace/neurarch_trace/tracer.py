@@ -15,6 +15,7 @@ Both need the traced tensors kept alive (so ids are not recycled) and grad
 enabled on the forward (so the chain exists at all). Both are handled here.
 """
 import sys
+import weakref
 from functools import partial
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -90,7 +91,12 @@ class Tracer:
         self.by_gradfn: Dict[Any, str] = {}
         self.gradfn_at_register: Dict[int, Any] = {}
         self.memo: Dict[Any, List[str]] = {}
-        self.keep: List[torch.Tensor] = []
+        # Weak references, not the tensors. Holding every module output alive
+        # for the whole forward was 70 GB on a 50M GPT at batch 128 x 2048 and
+        # OOMed an H100 that trains the same model in 45 GB. A dead tensor's
+        # id can be reused, so the finalizer drops its mapping the moment it
+        # dies and a recycled id can never resolve to a stale producer.
+        self.keep: List[Any] = []
         self.param_ids = {id(p) for p in model.parameters()} | {id(b) for b in model.buffers()}
         self.input_nodes: List[Tuple[torch.Tensor, str]] = []
         self.calls: Dict[str, int] = {}
@@ -112,7 +118,7 @@ class Tracer:
         return node
 
     def _register(self, t: torch.Tensor, node_id: str) -> None:
-        self.keep.append(t)
+        self.keep.append(weakref.ref(t, partial(self._forget, id(t))))
         self.by_id[id(t)] = node_id
         # Remember the grad_fn the tensor had when the module returned it. An
         # in-place op afterwards (`out += identity`, torchvision's residual)
@@ -121,6 +127,10 @@ class Tracer:
         self.gradfn_at_register[id(t)] = t.grad_fn
         if t.grad_fn is not None:
             self.by_gradfn[t.grad_fn] = node_id
+
+    def _forget(self, tensor_id: int, _ref: Any = None) -> None:
+        self.by_id.pop(tensor_id, None)
+        self.gradfn_at_register.pop(tensor_id, None)
 
     # producer resolution
 
@@ -263,6 +273,13 @@ class Tracer:
         out.input_shape = batchless(outs[0]) if outs else None
         if not out.inputs:
             raise RuntimeError("forward returned nothing traceable (no tensor output reached a recorded layer)")
+        # The graph is closed; nothing here may keep a tensor or an autograd
+        # node (and through it every activation it saved) alive any longer.
+        self.by_gradfn.clear()
+        self.memo.clear()
+        self.gradfn_at_register.clear()
+        self.by_id.clear()
+        self.input_nodes = []
         return self.nodes
 
     def run(self, inputs: Sequence[torch.Tensor]) -> List[Node]:

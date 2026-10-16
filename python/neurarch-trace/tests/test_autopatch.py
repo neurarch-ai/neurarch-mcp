@@ -425,3 +425,49 @@ def test_an_unreachable_server_does_not_stop_the_run(monkeypatch, capsys):
     Tiny()(torch.randn(1, 3, 16, 16))
     assert "could not reach" in capsys.readouterr().err
     assert Path(os.environ["NEURARCH_TRACE_OUT"]).exists(), "lost the graph too"
+
+
+# ── memory and the probe exit ──────────────────────────────────────────────
+
+
+def test_capture_does_not_keep_activations_alive(tmp_path):
+    """The tracer used to hold every module output for the whole forward, which
+    was 70 GB on a 50M GPT at batch 128 x 2048 and OOMed an H100 that trains
+    the same model in 45 GB. Only weak references may survive the forward."""
+    import gc
+    import weakref
+    from neurarch_trace import autopatch as ap
+    from neurarch_trace.tracer import Tracer
+
+    seen = []
+    original_begin = Tracer.begin
+
+    def spy_begin(self, *a, **k):
+        seen.append(self)
+        return original_begin(self, *a, **k)
+
+    Tracer.begin = spy_begin  # type: ignore[method-assign]
+    try:
+        arm()
+        out = Tiny()(torch.randn(2, 3, 16, 16))
+    finally:
+        Tracer.begin = original_begin  # type: ignore[method-assign]
+    assert len(seen) == 1
+    tracer = seen[0]
+    assert tracer.keep and all(isinstance(r, weakref.ref) for r in tracer.keep)
+    del out
+    gc.collect()
+    # Everything the forward produced is gone, and nothing it produced is still
+    # resolvable as a producer: a recycled id cannot wire a stale edge.
+    assert all(r() is None for r in tracer.keep)
+    assert tracer.by_id == {}
+
+
+def test_exit_stops_the_process_after_the_graph(tmp_path, monkeypatch):
+    monkeypatch.setenv("NEURARCH_TRACE_EXIT", "1")
+    arm()
+    with pytest.raises(SystemExit) as e:
+        Tiny()(torch.randn(2, 3, 16, 16))
+    assert e.value.code == 0
+    graph = json.loads(Path(os.environ["NEURARCH_TRACE_OUT"]).read_text())
+    assert "conv2d" in [c["type"] for c in graph["components"]]

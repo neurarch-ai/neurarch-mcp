@@ -264,3 +264,27 @@ def test_inplace_residual_add_keeps_the_downsample_branch():
     assert sorted(adds[0]["inputs"]) == ["bn2", "downsample_1"]
     assert c["relu_2"]["inputs"] == [adds[0]["id"]]
     assert adds[0]["outputShape"] == [16, 8, 8]
+
+
+def test_functional_op_between_layers_marks_the_edge_inferred():
+    """A slice the graph has no node for sits between the residual and the
+    gate; the edge is kept (the data really flows) but marked, so a shape
+    propagated across it is never a blocker."""
+    from neurarch_trace.tracer import Tracer
+    from neurarch_trace.writer import build_graph
+
+    class Gated(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.proj = nn.Linear(16, 16)
+            self.gate = nn.Linear(4, 2)   # reads only the first 4 channels
+
+        def forward(self, x):
+            h = self.proj(x)
+            return self.gate(h[..., :4])
+
+    g = build_graph(Tracer(Gated()).run([torch.randn(3, 16)]), "Gated")
+    edges = {(e["from"], e["to"]): e for e in g["connections"]}
+    assert edges[("proj", "gate")].get("inferred") == "unmodelled-op"
+    assert "inferred" not in edges[("input", "proj")]
+    assert "inferred" not in edges[("gate", "output")]

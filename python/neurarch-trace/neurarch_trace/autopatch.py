@@ -40,6 +40,8 @@ script does; trace it with the CLI instead.
     NEURARCH_TRACE_PLAN=1       send the graph for the plan and print the card
     NEURARCH_TRACE_SHARE=1      implies PLAN; also store it at a public URL
     NEURARCH_TRACE_FAIL_ON_BLOCK=1   exit 2 when the plan reports a blocker
+    NEURARCH_TRACE_EXIT=1       exit 0 right after the graph is written: a probe
+                                process that only wants the graph, not the run
 
 The last two lines together are the point of the whole file:
 
@@ -286,9 +288,11 @@ def _emit(nodes: List[Any], model: Any, inputs: Sequence[Any]) -> None:
           % (out, layers, len(graph["connections"]), type(model).__name__))
 
     share = _truthy(os.environ.get("NEURARCH_TRACE_SHARE"))
-    if not (share or _truthy(os.environ.get("NEURARCH_TRACE_PLAN"))):
-        return
-    _plan(graph, shapes, layers, share)
+    if share or _truthy(os.environ.get("NEURARCH_TRACE_PLAN")):
+        _plan(graph, shapes, layers, share)
+    if _truthy(os.environ.get("NEURARCH_TRACE_EXIT")):
+        _warn("NEURARCH_TRACE_EXIT is set; stopping now that the graph is written")
+        raise SystemExit(0)
 
 
 def _plan(graph: Dict[str, Any], shapes: str, layers: int, share: bool) -> None:
