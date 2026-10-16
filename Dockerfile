@@ -1,11 +1,24 @@
 # Hosted neurarch-mcp: the same server over Streamable HTTP with no model on
 # disk. Callers pass model_path (zoo:/hf:) or model_source (inline text) on
 # every call. See docs/HOSTED.md.
+#
+# Two stages, because the image has to build from a bare git checkout. dist/ is
+# gitignored, so a single-stage `COPY dist` only worked on a machine that had
+# already run `npm run build`; a registry building from the repository (Glama,
+# Docker MCP Toolkit) failed at that line, the server never started, and the
+# listing could not be scored.
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json tsup.config.ts ./
+RUN npm ci --ignore-scripts
+COPY src ./src
+RUN npm run build
+
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
-COPY dist ./dist
+COPY --from=build /app/dist ./dist
 COPY zoo ./zoo
 COPY README.md LICENSE ./
 ENV NODE_ENV=production
