@@ -273,6 +273,16 @@ class Tracer:
         out.input_shape = batchless(outs[0]) if outs else None
         if not out.inputs:
             raise RuntimeError("forward returned nothing traceable (no tensor output reached a recorded layer)")
+        # An input no layer consumed is not part of the model: `model(x, y)`
+        # hands the targets through forward to the loss, and a node for them
+        # would be reported as an isolated layer on every training script
+        # written that way. Keep at least one input so the graph has a head.
+        consumed = {p for n in self.nodes for p in n.inputs}
+        unused = [n for n in self.nodes if n.type == "input" and n.id not in consumed]
+        if len(unused) < sum(1 for n in self.nodes if n.type == "input"):
+            for n in unused:
+                self.nodes.remove(n)
+                self.node_by_id.pop(n.id, None)
         # The graph is closed; nothing here may keep a tensor or an autograd
         # node (and through it every activation it saved) alive any longer.
         self.by_gradfn.clear()

@@ -7,9 +7,25 @@ drawn by hand.
 """
 import json
 import sys
-from typing import Any, Dict, List, Sequence
+from typing import Optional, Any, Dict, List, Sequence
 
 from .tracer import Node
+
+
+def _emitted_shape(p: Node, by_id: Dict[str, Node]) -> Optional[List[int]]:
+    """The shape a producer actually emitted. A synthesized merge node (the
+    residual add) often carries no shape of its own because the merged tensor
+    was never in hand; an elementwise merge emits the shape of its inputs, so
+    borrow the first known one. Without this the GPT's `ve_gate`, which reads
+    x[..., :32] of the residual, kept its edge unmarked and the plan refused a
+    model that trains."""
+    if p.output_shape is not None:
+        return list(p.output_shape)
+    for src in p.inputs:
+        q = by_id.get(src)
+        if q is not None and q.output_shape is not None and q.type != "input":
+            return list(q.output_shape)
+    return None
 
 
 def build_graph(nodes: Sequence[Node], name: str, description: str = "") -> Dict[str, Any]:
@@ -59,8 +75,9 @@ def build_graph(nodes: Sequence[Node], name: str, description: str = "") -> Dict
             # reads x[..., :32] of a 512-wide residual; the unfiltered rule
             # refused the working baseline eight times.)
             p = by_id.get(src)
-            if (p is not None and p.output_shape is not None and n.input_shape is not None
-                    and p.type != "input" and list(p.output_shape) != list(n.input_shape)):
+            if (p is not None and n.input_shape is not None and p.type != "input"
+                    and _emitted_shape(p, by_id) is not None
+                    and list(_emitted_shape(p, by_id)) != list(n.input_shape)):
                 edge["inferred"] = "unmodelled-op"
             connections.append(edge)
 
