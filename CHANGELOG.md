@@ -6,6 +6,8 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-17
+
 ### Added
 - **`size_training_job`**, the tool to call before a job takes a GPU
   reservation. Given the model, a batch size and optionally the card
@@ -34,8 +36,19 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   `rank_designs` left the core listing (still callable by name, and listed
   under `--tools=full`), and several schema descriptions were trimmed so the
   listing stays under its token caps.
-- Vendored `engine` and `verifier` bundles refreshed from neurarch-ai/neurarch
-  `11c02b72`.
+- **Vendored `engine`, `verifier` and `plan` bundles refreshed** from
+  neurarch-ai/neurarch `96254170`. What moved with them: the plan assumes SDPA
+  attention by default and counts the eager attention-score term only under
+  `attention: 'eager'` (neurarch #285); a token graph is sized at 2048 tokens
+  unless a sequence length is given, instead of at its declared context
+  (#286); the ConvNeXt, DINOv2, Swin and BEiT config readers are fixed (#286);
+  and right-sizing stops pooling memory across small cards, so a job is
+  matched to one card that holds it (#290). `size_training_job` numbers are
+  unchanged by this: it already sized SDPA by default and already defaulted
+  to 2048 tokens.
+- **`plan` takes `seq_len`** (#28). Optional; when given it rides in the POST
+  body to `/api/v1/plan`, and when omitted the server sizes a token graph at
+  2048 tokens.
 - **`NEURARCH_TRACE=1 python train.py`** (neurarch-trace 0.2.0). No target, no
   `--input`, no edit to the script. The install puts one line at the root of
   site-packages, Python runs it before the first line of any script in the
@@ -69,6 +82,29 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   adapter will train well; the server says so in as many words.
 
 ### Fixed
+- **`size_training_job` asks the plan for eager attention explicitly.** The
+  refreshed plan bundle defaults to SDPA, so its peak no longer contains the
+  attention-score term that `size_training_job` removes itself for an SDPA or
+  flash job. Left alone the term would have been removed twice: phi3-mini at
+  batch 32 read 6.3 GB instead of 17.9 GB, a job that does not fit a T4 was
+  reported as fitting, and `seq_len` stopped moving the peak on a long-context
+  model. The two-card split and the price lookup are pinned the same way, and
+  a test now checks that the SDPA peak lands on the plan's own SDPA peak.
+- **The Docker image builds from source** (#26). The single-stage `COPY dist`
+  only worked on a machine that had already run `npm run build`, so a registry
+  building straight from git (Glama, Docker MCP Toolkit) failed at that line
+  and the server never started there. Two stages now: `npm ci` and `tsup` in
+  the build stage, production dependencies plus `dist/` in the runtime stage.
+- **neurarch-trace probe fixes** (#23, #24, #25; the PyPI package, 0.2.1).
+  The autopatch no longer holds a strong reference to every module output
+  until the forward pass ends (a 50M GPT at batch 128 x 2048 went from OOM on
+  an H100 to normal), and `NEURARCH_TRACE_EXIT=1` ends a probe process once
+  the graph is written, with saved tensors kept on the CPU so a probe of a
+  depth 11 GPT no longer needs 73 GB. An edge whose consumer received a
+  different shape than its producer emitted is marked
+  `inferred: unmodelled-op`, including after a shape-less merge node, and an
+  input no layer consumes is left out of the graph instead of reported as an
+  orphan.
 - **Opt-in corpus rows survive the exit.** `sendCorpusReport` was fire-and-forget
   with nowhere to wait, so a process that exited before the POST left the socket
   dropped the row with no error anywhere. Harmless under a chat client, where the

@@ -1431,15 +1431,19 @@ var componentRegistry = {
     // NaN for every patchEmbed that omits it (the seeded HYB family and the
     // patch-tst template both do), and NaN silently poisoned every downstream
     // shape. Non-square inputs are handled per-axis rather than squared.
+    // `clsToken: true` prepends ViT's learned class token, one more sequence
+    // position (197 for ViT-B/16 rather than 196). `registerTokens: R` adds R
+    // learned register tokens after it (DINOv2 with registers).
     computeOutputShape: (inputShape, params) => {
       const patch = params.patchSize || 16;
       const embedDim = params.embedDim ?? 768;
+      const cls = (params.clsToken ? 1 : 0) + Math.max(0, Math.floor(Number(params.registerTokens) || 0));
       if (inputShape.length >= 3) {
         const [, h, w] = inputShape;
-        return [Math.floor(h / patch) * Math.floor(w / patch), embedDim];
+        return [Math.floor(h / patch) * Math.floor(w / patch) + cls, embedDim];
       }
       const side = Math.floor((params.imgSize ?? 224) / patch);
-      return [side * side, embedDim];
+      return [side * side + cls, embedDim];
     }
   },
   // ========== Utility ==========
@@ -4346,7 +4350,8 @@ function estimateLayerParams(type, params, inputShape) {
       const inC = num(p.inChans ?? p.inChannels, 3);
       const D = num(p.embedDim, 768);
       const P = num(p.patchSize, 16);
-      return inC * D * P * P + D;
+      const R = Math.max(0, Math.floor(num(p.registerTokens, 0)));
+      return inC * D * P * P + D + (p.clsToken ? D : 0) + R * D;
     }
     case "seBlock": {
       const C = num(p.channels, 64);

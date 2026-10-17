@@ -3931,15 +3931,19 @@ var componentRegistry = {
     // NaN for every patchEmbed that omits it (the seeded HYB family and the
     // patch-tst template both do), and NaN silently poisoned every downstream
     // shape. Non-square inputs are handled per-axis rather than squared.
+    // `clsToken: true` prepends ViT's learned class token, one more sequence
+    // position (197 for ViT-B/16 rather than 196). `registerTokens: R` adds R
+    // learned register tokens after it (DINOv2 with registers).
     computeOutputShape: (inputShape, params) => {
       const patch = params.patchSize || 16;
       const embedDim = params.embedDim ?? 768;
+      const cls = (params.clsToken ? 1 : 0) + Math.max(0, Math.floor(Number(params.registerTokens) || 0));
       if (inputShape.length >= 3) {
         const [, h, w] = inputShape;
-        return [Math.floor(h / patch) * Math.floor(w / patch), embedDim];
+        return [Math.floor(h / patch) * Math.floor(w / patch) + cls, embedDim];
       }
       const side = Math.floor((params.imgSize ?? 224) / patch);
-      return [side * side, embedDim];
+      return [side * side + cls, embedDim];
     }
   },
   // ========== Utility ==========
@@ -9838,6 +9842,13 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
       const P = params.patchSize ?? 16;
       const D = params.embedDim ?? 768;
       const inC = params.inChans ?? params.inChannels ?? inputShape?.[0] ?? 3;
+      const R = Math.max(0, Math.floor(Number(params.registerTokens) || 0));
+      if (params.clsToken && R > 0) {
+        return `nn.ModuleDict({'proj': nn.Conv2d(${inC}, ${D}, kernel_size=${P}, stride=${P}), 'cls': nn.Embedding(1, ${D}), 'reg': nn.Embedding(${R}, ${D})})  # Patch embedding + class token + ${R} register tokens (DINOv2-style)`;
+      }
+      if (params.clsToken) {
+        return `nn.ModuleDict({'proj': nn.Conv2d(${inC}, ${D}, kernel_size=${P}, stride=${P}), 'cls': nn.Embedding(1, ${D})})  # Patch embedding + class token (ViT-style)`;
+      }
       return `nn.Conv2d(${inC}, ${D}, kernel_size=${P}, stride=${P})  # Patch embedding (ViT-style)`;
     }
     case "seBlock": {
@@ -10350,6 +10361,12 @@ function generateForwardCode(comp, layerName, _model, componentVars, connToFrom,
     case "swiglu":
       return `self.${layerName}['down_proj'](F.silu(self.${layerName}['gate_proj'](${primaryVar})) * self.${layerName}['up_proj'](${primaryVar}))`;
     case "patchEmbed":
+      if (comp.params?.clsToken && Math.floor(Number(comp.params?.registerTokens) || 0) > 0) {
+        return `torch.cat([self.${layerName}['cls'].weight.unsqueeze(0).expand(${primaryVar}.size(0), -1, -1), self.${layerName}['reg'].weight.unsqueeze(0).expand(${primaryVar}.size(0), -1, -1), self.${layerName}['proj'](${primaryVar}).flatten(2).transpose(1, 2)], dim=1)  # [B, 1 + registers + num_patches, embed_dim]`;
+      }
+      if (comp.params?.clsToken) {
+        return `torch.cat([self.${layerName}['cls'].weight.unsqueeze(0).expand(${primaryVar}.size(0), -1, -1), self.${layerName}['proj'](${primaryVar}).flatten(2).transpose(1, 2)], dim=1)  # [B, 1 + num_patches, embed_dim]`;
+      }
       return `self.${layerName}(${primaryVar}).flatten(2).transpose(1, 2)  # [B, num_patches, embed_dim]`;
     case "seBlock":
       return `${primaryVar} * self.${layerName}(${primaryVar}).view(${primaryVar}.size(0), -1, 1, 1)`;
@@ -11604,6 +11621,14 @@ function buildModalityTower(a) {
   connect(projId, rsId);
   return rsId;
 }
+function hfVisionFamilyOf(modelType) {
+  const t = String(modelType ?? "").toLowerCase();
+  if (t === "convnext") return "convnext";
+  if (t === "dinov2" || t === "dinov2_with_registers") return "dinov2";
+  if (t === "swin") return "swin";
+  if (t === "beit") return "beit";
+  return null;
+}
 function convertHFConfigToModel(modelId, config) {
   const components = [];
   const connections = [];
@@ -11622,14 +11647,15 @@ function convertHFConfigToModel(modelId, config) {
     const latentCh = config.in_channels ?? 4;
     const latentHW = config.sample_size ?? 64;
     inputShape = [latentCh, latentHW, latentHW];
-  } else if (isViTOrCLIP) {
-    const imageSize = config.image_size || 224;
-    const numChannels = config.num_channels || 3;
-    inputShape = [1, numChannels, imageSize, imageSize];
+  } else if (isViTOrCLIP || hfVisionFamilyOf(modelType) === "dinov2" || hfVisionFamilyOf(modelType) === "beit") {
+    const visionCfg = config.vision_config ?? {};
+    const imageSize = visionCfg.image_size || config.image_size || 224;
+    const numChannels = visionCfg.num_channels || config.num_channels || 3;
+    inputShape = [numChannels, imageSize, imageSize];
   } else if (architectureClass.toLowerCase().includes("resnet") || modelType.toLowerCase().includes("resnet") || modelType.toLowerCase() === "vgg" || architectureClass.toLowerCase().includes("vgg") || modelType.toLowerCase().includes("mobilenet") || modelType.toLowerCase().includes("efficientnet") || modelType.toLowerCase().includes("convnext") || modelType.toLowerCase().includes("swin")) {
     const imageSize = config.image_size || 224;
     const numChannels = config.num_channels || 3;
-    inputShape = [1, numChannels, imageSize, imageSize];
+    inputShape = [numChannels, imageSize, imageSize];
   } else {
     inputShape = [1, config.max_position_embeddings || 512];
   }
@@ -11752,7 +11778,136 @@ function convertHFConfigToModel(modelId, config) {
   const isBERTLike = !isCLIP && !isEncoderDecoder && !isGPTLike && !isDiffusion && (BERT_LIKE_TYPES.some((t) => archLower.includes(t) || typeLower.includes(t)) || // Generic encoder: has hidden_size/layers/heads but no decoder indicators
   config.hidden_size && config.num_hidden_layers && config.num_attention_heads && !archLower.includes("vit") && !typeLower.includes("vit") && !archLower.includes("resnet") && !typeLower.includes("resnet"));
   const isConformerCTC = !isDiffusion && (modelIdLower.includes("parakeet") || modelIdLower.includes("conformer") || typeLower.includes("conformer") || archLower.includes("conformer") || (archLower.includes("ctc") || modelIdLower.includes("ctc")) && !modelIdLower.includes("wav2vec") && !typeLower.includes("wav2vec"));
-  if (isConformerCTC) {
+  const visionFamily = hfVisionFamilyOf(modelType);
+  if (visionFamily) {
+    const node = (type, name, params, from, x = xPos) => {
+      const id = generateId();
+      components.push({ id, type, name, position: { x, y: yPos }, params, inputs: [], outputs: [] });
+      connections.push({ id: generateConnId(), from, to: id, fromPort: "bottom", toPort: "top" });
+      yPos += verticalSpacing;
+      return id;
+    };
+    const add = (name, residual, branch) => {
+      const id = generateId();
+      components.push({ id, type: "add", name, position: { x: xPos, y: yPos }, params: {}, inputs: [], outputs: [] });
+      connections.push({ id: generateConnId(), from: residual, to: id, fromPort: "bottom", toPort: "left" });
+      connections.push({ id: generateConnId(), from: branch, to: id, fromPort: "bottom", toPort: "right" });
+      yPos += verticalSpacing;
+      return id;
+    };
+    const vc = config;
+    const numChannels = vc.num_channels ?? 3;
+    const imageSize = vc.image_size ?? 224;
+    const numLabels = /forimageclassification$/.test(archLower) ? vc.id2label ? Object.keys(vc.id2label).length : vc.num_labels ?? 1e3 : null;
+    const meanPoolTokens = (from) => node("globalAvgPool1d", "GlobalAvgPool", {}, node("permute", "Pool_Transpose", { dims: [1, 0] }, from));
+    if (visionFamily === "convnext") {
+      const depths = Array.isArray(vc.depths) ? vc.depths : [3, 3, 9, 3];
+      const dims = Array.isArray(vc.hidden_sizes) ? vc.hidden_sizes : [96, 192, 384, 768];
+      const patch = vc.patch_size ?? 4;
+      let x = node("conv2d", "Stem_Conv", { inChannels: numChannels, outChannels: dims[0], kernelSize: patch, stride: patch, padding: 0 }, lastId);
+      x = node("layerNorm", "Stem_LayerNorm", { normalizedShape: dims[0] }, x);
+      for (let s = 0; s < depths.length; s++) {
+        const dim = dims[s] ?? dims[dims.length - 1];
+        if (s > 0) {
+          const prev = dims[s - 1] ?? dim;
+          x = node("layerNorm", `Stage${s + 1}_Downsample_LayerNorm`, { normalizedShape: prev }, x);
+          x = node("conv2d", `Stage${s + 1}_Downsample_Conv`, { inChannels: prev, outChannels: dim, kernelSize: 2, stride: 2, padding: 0 }, x);
+        }
+        for (let b = 0; b < depths[s]; b++) {
+          x = node("convNeXtBlock", `Stage${s + 1}_Block${b + 1}_ConvNeXt`, { dim, kernelSize: 7, expandRatio: 4 }, x);
+        }
+      }
+      const last = dims[depths.length - 1] ?? dims[dims.length - 1];
+      x = node("globalAvgPool2d", "GlobalAvgPool", {}, x);
+      x = node("layerNorm", "Final_LayerNorm", { normalizedShape: last }, x);
+      if (numLabels) x = node("linear", "Classifier", { inFeatures: last, outFeatures: numLabels }, x);
+      lastId = x;
+    } else if (visionFamily === "swin") {
+      const depths = Array.isArray(vc.depths) ? vc.depths : [2, 2, 6, 2];
+      const heads = Array.isArray(vc.num_heads) ? vc.num_heads : [3, 6, 12, 24];
+      const C0 = vc.embed_dim ?? 96;
+      const patch = vc.patch_size ?? 4;
+      const win = vc.window_size ?? 7;
+      const mlpRatio = vc.mlp_ratio ?? 4;
+      let side = Math.floor(imageSize / patch);
+      let tokens = side * side;
+      let x = node("patchEmbed", "PatchEmbedding", { imgSize: imageSize, patchSize: patch, embedDim: C0, inChans: numChannels }, lastId);
+      x = node("layerNorm", "PatchEmbedding_LayerNorm", { normalizedShape: C0 }, x);
+      if (vc.use_absolute_embeddings) x = node("learnedPositionalEmbedding", "Patch_Position_Embedding", { maxLen: tokens, embedDim: C0 }, x);
+      let C = C0;
+      for (let s = 0; s < depths.length; s++) {
+        const h = heads[s] ?? heads[heads.length - 1];
+        for (let b = 0; b < depths[s]; b++) {
+          const tag = `Stage${s + 1}_Block${b + 1}`;
+          const w = Math.min(win, side);
+          let n = node("layerNorm", `${tag}_LayerNorm1`, { normalizedShape: C }, x);
+          n = node("relativePositionBias", `${tag}_RelPosBias`, { numHeads: h, numBuckets: (2 * w - 1) ** 2 }, n);
+          n = node("windowAttention", `${tag}_WindowAttention`, { embedDim: C, numHeads: h, windowSize: w, shifted: b % 2 === 1 }, n);
+          x = add(`${tag}_Add1`, x, n);
+          n = node("layerNorm", `${tag}_LayerNorm2`, { normalizedShape: C }, x);
+          n = node("feedForward", `${tag}_MLP`, { hiddenDim: C, ffDim: Math.round(C * mlpRatio) }, n);
+          x = add(`${tag}_Add2`, x, n);
+        }
+        if (s < depths.length - 1) {
+          tokens = Math.floor(side / 2) ** 2;
+          side = Math.floor(side / 2);
+          x = node("reshape", `Stage${s + 1}_PatchMerging_Gather`, { shape: [tokens, 4 * C] }, x);
+          x = node("layerNorm", `Stage${s + 1}_PatchMerging_LayerNorm`, { normalizedShape: 4 * C }, x);
+          x = node("linear", `Stage${s + 1}_PatchMerging_Reduce`, { inFeatures: 4 * C, outFeatures: 2 * C, bias: false }, x);
+          C = 2 * C;
+        }
+      }
+      x = node("layerNorm", "Final_LayerNorm", { normalizedShape: C }, x);
+      x = meanPoolTokens(x);
+      if (numLabels) x = node("linear", "Classifier", { inFeatures: C, outFeatures: numLabels }, x);
+      lastId = x;
+    } else {
+      const D = vc.hidden_size ?? 768;
+      const L = vc.num_hidden_layers ?? 12;
+      const H = vc.num_attention_heads ?? 12;
+      const patch = vc.patch_size ?? (visionFamily === "dinov2" ? 14 : 16);
+      const ff = vc.intermediate_size ?? Math.round(D * (vc.mlp_ratio ?? 4));
+      const side = Math.floor(imageSize / patch);
+      const registers = visionFamily === "dinov2" ? vc.num_register_tokens ?? 0 : 0;
+      const layerScale = visionFamily === "dinov2" ? vc.layerscale_value != null : (vc.layer_scale_init_value ?? 0) > 0;
+      let x = node("patchEmbed", "PatchEmbedding", {
+        imgSize: imageSize,
+        patchSize: patch,
+        embedDim: D,
+        inChans: numChannels,
+        clsToken: true,
+        ...registers > 0 ? { registerTokens: registers } : {}
+      }, lastId);
+      if (visionFamily === "dinov2" || vc.use_absolute_position_embeddings) {
+        x = node("learnedPositionalEmbedding", "Patch_Position_Embedding", { maxLen: side * side + 1 + registers, embedDim: D }, x);
+      }
+      const relBuckets = (2 * side - 1) ** 2 + 3;
+      const perLayerRel = visionFamily === "beit" && vc.use_relative_position_bias && !vc.use_shared_relative_position_bias;
+      if (visionFamily === "beit" && vc.use_shared_relative_position_bias) {
+        x = node("relativePositionBias", "Shared_RelPosBias", { numHeads: H, numBuckets: relBuckets }, x);
+      }
+      const gatedMlp = visionFamily === "dinov2" && vc.use_swiglu_ffn;
+      for (let i = 0; i < L; i++) {
+        let n = node("layerNorm", `LayerNorm_${i + 1}_1`, { normalizedShape: D }, x);
+        if (perLayerRel) n = node("relativePositionBias", `RelPosBias_${i + 1}`, { numHeads: H, numBuckets: relBuckets }, n);
+        n = node("multiHeadAttention", `Attention_${i + 1}`, { numHeads: H, hiddenDim: D }, n);
+        if (layerScale) n = node("layerScale", `LayerScale_${i + 1}_1`, { dim: D }, n);
+        x = add(`Add_${i + 1}`, x, n);
+        n = node("layerNorm", `LayerNorm_${i + 1}_2`, { normalizedShape: D }, x);
+        n = gatedMlp ? node("swiglu", `FFN_${i + 1}`, { embedDim: D, ffDim: Math.ceil(Math.floor(ff * 2 / 3) / 8) * 8 }, n) : node("feedForward", `FFN_${i + 1}`, { hiddenDim: D, ffDim: ff }, n);
+        if (layerScale) n = node("layerScale", `LayerScale_${i + 1}_2`, { dim: D }, n);
+        x = add(`Add_${i + 1}_2`, x, n);
+      }
+      if (visionFamily === "beit" && vc.use_mean_pooling !== false) {
+        x = meanPoolTokens(x);
+        x = node("layerNorm", "Pooler_LayerNorm", { normalizedShape: D }, x);
+      } else {
+        x = node("layerNorm", "Final_LayerNorm", { normalizedShape: D }, x);
+      }
+      if (numLabels && visionFamily === "beit") x = node("linear", "Classifier", { inFeatures: D, outFeatures: numLabels }, x);
+      lastId = x;
+    }
+  } else if (isConformerCTC) {
     const dModel = config.hidden_size ?? config.d_model ?? config.encoder_dim ?? 1024;
     const numLayers = config.num_hidden_layers ?? config.num_layers ?? config.n_layers ?? 24;
     const numHeads = config.num_attention_heads ?? config.n_heads ?? 8;
@@ -12267,14 +12422,15 @@ function convertHFConfigToModel(modelId, config) {
     const patchEmbedId = generateId();
     components.push({
       id: patchEmbedId,
-      type: "embedding",
+      type: "patchEmbed",
       name: "PatchEmbedding",
       position: { x: xPos, y: yPos },
       params: {
-        vocabSize: numPatches + 1,
-        // +1 for CLS token
-        embeddingDim: hiddenSize,
-        maxSeqLen: numPatches + 1
+        imgSize: imageSize,
+        patchSize,
+        embedDim: hiddenSize,
+        inChans: visionConfig.num_channels || config.num_channels || 3,
+        clsToken: true
       },
       inputs: [],
       outputs: []

@@ -1431,15 +1431,19 @@ var componentRegistry = {
     // NaN for every patchEmbed that omits it (the seeded HYB family and the
     // patch-tst template both do), and NaN silently poisoned every downstream
     // shape. Non-square inputs are handled per-axis rather than squared.
+    // `clsToken: true` prepends ViT's learned class token, one more sequence
+    // position (197 for ViT-B/16 rather than 196). `registerTokens: R` adds R
+    // learned register tokens after it (DINOv2 with registers).
     computeOutputShape: (inputShape, params) => {
       const patch = params.patchSize || 16;
       const embedDim = params.embedDim ?? 768;
+      const cls = (params.clsToken ? 1 : 0) + Math.max(0, Math.floor(Number(params.registerTokens) || 0));
       if (inputShape.length >= 3) {
         const [, h, w] = inputShape;
-        return [Math.floor(h / patch) * Math.floor(w / patch), embedDim];
+        return [Math.floor(h / patch) * Math.floor(w / patch) + cls, embedDim];
       }
       const side = Math.floor((params.imgSize ?? 224) / patch);
-      return [side * side, embedDim];
+      return [side * side + cls, embedDim];
     }
   },
   // ========== Utility ==========
@@ -4346,7 +4350,8 @@ function estimateLayerParams(type, params, inputShape) {
       const inC = num(p.inChans ?? p.inChannels, 3);
       const D = num(p.embedDim, 768);
       const P = num(p.patchSize, 16);
-      return inC * D * P * P + D;
+      const R = Math.max(0, Math.floor(num(p.registerTokens, 0)));
+      return inC * D * P * P + D + (p.clsToken ? D : 0) + R * D;
     }
     case "seBlock": {
       const C = num(p.channels, 64);
@@ -6764,6 +6769,45 @@ function checkComfyWorkflow(json) {
 }
 
 // src/utils/modelPlan.ts
+var DEFAULT_SEQ_LEN = 2048;
+function tokenInput(model) {
+  const inp = model.components.find((c) => c.type === "input");
+  const shape = inp?.params?.shape;
+  const hasEmbedding = model.components.some((c) => /embed/i.test(c.type));
+  if (!inp || !Array.isArray(shape) || shape.length < 1 || shape.length > 2 || !hasEmbedding) return null;
+  return { inp, shape };
+}
+function tokenSeqLenOf(model) {
+  const t = tokenInput(model);
+  if (!t) return null;
+  const L = Number(t.shape[t.shape.length - 1]);
+  return Number.isInteger(L) && L > 0 ? L : null;
+}
+function readSeqLen(v) {
+  if (v == null || v === "") return void 0;
+  const n2 = typeof v === "string" ? Number(v.trim()) : typeof v === "number" ? v : NaN;
+  return Number.isInteger(n2) && n2 > 0 ? n2 : null;
+}
+function withSeqLen(model, seqLen) {
+  const t = tokenInput(model);
+  if (!t) return { model, seqLen: null };
+  const current = Number(t.shape[t.shape.length - 1]);
+  const L = seqLen ?? Math.min(current, DEFAULT_SEQ_LEN);
+  if (L === current) return { model, seqLen: L };
+  const next = [...t.shape.slice(0, -1), L];
+  const components = model.components.map((c) => c === t.inp ? { ...c, params: { ...c.params, shape: next }, inputShape: next } : c);
+  return { model: { ...model, components }, seqLen: L };
+}
+var DEFAULT_ATTENTION = "sdpa";
+function readAttention(v) {
+  if (v == null || v === "") return DEFAULT_ATTENTION;
+  if (typeof v !== "string") return null;
+  const s = v.trim().toLowerCase();
+  if (s === "") return DEFAULT_ATTENTION;
+  if (s === "sdpa" || s === "eager" || s === "flash") return s;
+  if (/^flash[_-]?attention(_?[23])?$/.test(s)) return "flash";
+  return null;
+}
 function parseHumanSize(v) {
   if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
   if (typeof v !== "string") return null;
@@ -6920,22 +6964,28 @@ function layerAttentionElems(c, shapes) {
   const heads = p.numHeads ?? p.num_heads ?? p.nhead ?? 8;
   const L = i.length >= 2 ? i[i.length - 2] : i[0];
   const layers = p.numLayers ?? p.num_layers ?? 1;
-  return Number.isFinite(L) && L > 0 ? heads * L * L * layers : 0;
+  if (!(Number.isFinite(L) && L > 0)) return 0;
+  if (c.type === "windowAttention") {
+    const w = Number(p.windowSize ?? 7);
+    return heads * L * Math.min(L, w > 0 ? w * w : L) * layers;
+  }
+  return heads * L * L * layers;
 }
-function layerActivationElems(c, shapes) {
+function layerActivationElems(c, shapes, attention) {
   if (c.type === "input" || c.type === "output" || c.type === "stickyNote") return null;
   const out = shapes.get(c.id)?.out ?? c.outputShape;
   if (!out || !out.length || out.some((d) => !Number.isFinite(d) || d <= 0)) return null;
-  return out.reduce((a, b) => a * b, 1) * OUTPUT_K + layerAttentionElems(c, shapes) * ATTENTION_K;
+  const scores = attention === "eager" ? layerAttentionElems(c, shapes) * ATTENTION_K : 0;
+  return out.reduce((a, b) => a * b, 1) * OUTPUT_K + scores;
 }
 function attentionElemsFor(model, shapes) {
   return model.components.reduce((a, c) => a + layerAttentionElems(c, shapes) * ATTENTION_K, 0);
 }
-function activationElemsFor(model, shapes) {
+function activationElemsFor(model, shapes, attention) {
   let elems = 0;
   let seen = false;
   for (const c of model.components) {
-    const e = layerActivationElems(c, shapes);
+    const e = layerActivationElems(c, shapes, attention);
     if (e == null) continue;
     seen = true;
     elems += e;
@@ -6949,8 +6999,8 @@ function attentionScoresGbFor(model, batchSize) {
   const shapes = propagateShapes(model).shapes;
   return activationGbAt(attentionElemsFor(model, shapes), Math.max(1, batchSize));
 }
-function activationGbFor(model, shapes, batchSize) {
-  const elems = activationElemsFor(model, shapes);
+function activationGbFor(model, shapes, batchSize, attention = DEFAULT_ATTENTION) {
+  const elems = activationElemsFor(model, shapes, attention);
   return elems == null ? null : activationGbAt(elems, batchSize);
 }
 var FIT_HEADROOM = 1.15;
@@ -6993,6 +7043,7 @@ function topoOrder(model) {
 }
 function deviceMapFor(model, gpus, opts = {}) {
   const batch = Math.max(1, opts.batchSize ?? 32);
+  const attention = opts.attention ?? DEFAULT_ATTENTION;
   const shapes = propagateShapes(model).shapes;
   const layers = topoOrder(model).filter((c) => c.type !== "input" && c.type !== "output" && c.type !== "stickyNote");
   const splits = [];
@@ -7002,7 +7053,7 @@ function deviceMapFor(model, gpus, opts = {}) {
   for (const c of layers) {
     const inShape = shapes.get(c.id)?.in ?? void 0;
     const params = estimateLayerParams(c.type, c.params, inShape ?? void 0) ?? 0;
-    const elems = layerActivationElems(c, shapes);
+    const elems = layerActivationElems(c, shapes, attention);
     const w = params * 16 * OPTIMIZER_K / 1e9 + (elems == null ? 0 : activationGbAt(elems, batch));
     const cap = cur ? gpus[cur.card] / FIT_HEADROOM : 0;
     if (!cur || cur.gb + w > cap && cur.layers > 0 && cur.card + 1 < gpus.length) {
@@ -7016,13 +7067,13 @@ function deviceMapFor(model, gpus, opts = {}) {
   for (const sp of splits) if (sp.gb * FIT_HEADROOM > gpus[sp.card]) fits = false;
   return { splits, fits };
 }
-function twoCardSplitFor(model, peakGb, params, batchSize) {
+function twoCardSplitFor(model, peakGb, params, batchSize, attention) {
   if (params <= 0) return null;
   const sizes = [...new Set(PREFLIGHT_GPUS.map((g) => g.gb))].sort((a, b) => a - b);
   for (const gb of sizes) {
     if (peakGb * FIT_HEADROOM <= gb) return null;
     if (peakGb * FIT_HEADROOM > 2 * gb) continue;
-    const map = deviceMapFor(model, [gb, gb], { batchSize });
+    const map = deviceMapFor(model, [gb, gb], { batchSize, attention });
     if (map.fits) {
       const gpu = PREFLIGHT_GPUS.find((g) => g.gb === gb).name;
       return { gpu, gbPerCard: gb, ...map };
@@ -7030,7 +7081,7 @@ function twoCardSplitFor(model, peakGb, params, batchSize) {
   }
   return null;
 }
-function factsFor(model, workload, run) {
+function factsFor(model, workload, run, attention = DEFAULT_ATTENTION) {
   const report = buildPreflightReport(model, { workload, plan: run });
   const m = report.metrics;
   const prop = propagateShapes(model);
@@ -7041,7 +7092,7 @@ function factsFor(model, workload, run) {
   const batchSize = Math.max(1, run?.batchSize ?? 32);
   const footprintGb = m.trainFootprintBytes * OPTIMIZER_K / 1e9;
   const attentionGb = m.params > 0 ? activationGbAt(attentionElemsFor(model, prop.shapes), batchSize) : 0;
-  const activationElems = m.params > 0 ? activationElemsFor(model, prop.shapes) : null;
+  const activationElems = m.params > 0 ? activationElemsFor(model, prop.shapes, attention) : null;
   const activationGb = activationElems == null ? null : activationGbAt(activationElems, batchSize);
   const peakGb = footprintGb + (activationGb ?? 0);
   const smallest = m.params > 0 ? PREFLIGHT_GPUS.find((g) => fitsCard(peakGb, m.params, g.gb)) : void 0;
@@ -7052,6 +7103,7 @@ function factsFor(model, workload, run) {
     footprintGb,
     activationGb,
     activationElems,
+    attention,
     attentionGb,
     peakGb,
     estCostUsd: m.params > 0 && m.estTrainSec > 0 ? m.estCostUsd : null,
@@ -7065,12 +7117,25 @@ function factsFor(model, workload, run) {
     blockers: report.findings.filter((f) => f.severity === "block").map(findingOf),
     warnings: report.findings.filter((f) => f.severity === "warn").map(findingOf),
     inputShape: first ? shapeOf(prop.shapes.get(first.id)?.out) ?? shapeOf(first.params?.shape) : null,
-    outputShape
+    outputShape,
+    seqLen: tokenSeqLenOf(model)
   };
 }
 function fitsCard(peakGb, params, gb) {
   if (params <= 0) return null;
   return peakGb * FIT_HEADROOM <= gb;
+}
+var ATTENTION_LABEL = { sdpa: "SDPA", flash: "flash attention", eager: "eager" };
+function attentionPhrase(attention, scoresGb) {
+  if (scoresGb == null || !(scoresGb > 0.05)) return "";
+  return attention === "eager" ? `attention: eager, scores stored (${scoresGb.toFixed(1)} GB of the peak)` : `attention: ${ATTENTION_LABEL[attention]}, scores not stored; eager would add ${scoresGb.toFixed(1)} GB`;
+}
+function attentionSentence(attention, scoresGb) {
+  const p = attentionPhrase(attention, scoresGb);
+  return p ? `${p[0].toUpperCase()}${p.slice(1)}. ` : "";
+}
+function tokensAt(seqLen) {
+  return seqLen != null ? `, ${seqLen} tokens` : "";
 }
 function batchOf(plan) {
   const m = /at batch (\d+)/.exec(plan.cost.assumptions);
@@ -7216,6 +7281,9 @@ function unreadablePlan(blockers) {
       smallestFitGpu: null,
       maxBatch: { T4: null, A100_40: null, H100_80: null },
       twoCardSplit: null,
+      attention: DEFAULT_ATTENTION,
+      attentionScoresGb: null,
+      seqLen: null,
       // Nothing was refused here that we can price: an unreadable payload never
       // became a run with a number on it.
       refusedRunUsd: null,
@@ -7232,11 +7300,13 @@ function unreadablePlan(blockers) {
 function buildPlan(input, opts = {}) {
   const read = readGraph(input);
   if ("blockers" in read) return unreadablePlan(read.blockers);
-  const model = read.model;
+  const want = opts.seqLen === "default" ? null : typeof opts.seqLen === "number" && Number.isInteger(opts.seqLen) && opts.seqLen > 0 ? opts.seqLen : void 0;
+  const sized = (m) => want === void 0 ? m : withSeqLen(m, want).model;
+  const model = sized(read.model);
   let base;
   if (opts.base != null) {
     const b = readGraph(opts.base);
-    base = "model" in b ? b.model : void 0;
+    base = "model" in b ? sized(b.model) : void 0;
   }
   try {
     return buildPlanUnchecked(model, base, opts);
@@ -7249,7 +7319,8 @@ function buildPlan(input, opts = {}) {
   }
 }
 function buildPlanUnchecked(model, base, opts) {
-  const f = factsFor(model, opts.workload, opts.run);
+  const attention = readAttention(opts.attention) ?? DEFAULT_ATTENTION;
+  const f = factsFor(model, opts.workload, opts.run, attention);
   const gpuFits = {
     T4: fitsCard(f.peakGb, f.params, gpuGb("T4", 16)),
     A100_40: fitsCard(f.peakGb, f.params, gpuGb("A100 (40GB)", 40)),
@@ -7278,12 +7349,15 @@ function buildPlanUnchecked(model, base, opts) {
     activationGb: f.activationGb,
     smallestFitGpu: f.smallestFitGpu,
     maxBatch,
-    twoCardSplit: twoCardSplitFor(model, f.peakGb, f.params, f.batchSize),
+    twoCardSplit: twoCardSplitFor(model, f.peakGb, f.params, f.batchSize, attention),
+    attention,
+    attentionScoresGb: f.activationGb == null ? null : f.attentionGb,
+    seqLen: f.seqLen,
     // Written from what was actually priced, never typed alongside it: the
     // sentence used to say "50,000 samples (assumed)" unconditionally, so a
     // plan priced over 40 million rows would have carried a footnote about a
     // workload it did not use.
-    assumptions: `Cost is a roofline estimate on the priced GPU for ${f.epochs} epochs at batch ${f.batchSize} over ${f.samples.toLocaleString()} samples` + (f.samplesSource ? ` (from "${f.samplesSource}")` : " (assumed; no dataset attached)") + (f.activationGb != null ? `. GPU fit is the training peak at batch ${f.batchSize}, AdamW with bf16 autocast: weights, gradients and optimizer state (${f.footprintGb.toFixed(2)} GB, ${OPTIMIZER_K} x 16 bytes per parameter) plus activations (${f.activationGb.toFixed(1)} GB: ${OUTPUT_K} x every layer's output${f.attentionGb > 0.05 ? `, and ${f.attentionGb.toFixed(1)} GB of stored attention scores that flash attention would not keep` : ""}), with 1.15x headroom. Factors fitted on 141 measured runs across 44 templates; held out, the median error is 8% above 1 GB and the card verdict agrees with measurement 98% of the time; recurrent cells are under-counted.` : ". GPU fit is fp32 weights plus gradients plus two Adam moments (16 bytes per parameter) with 1.15x headroom; no shape propagated, so activations are not included.")
+    assumptions: `Cost is a roofline estimate on the priced GPU for ${f.epochs} epochs at batch ${f.batchSize}${tokensAt(f.seqLen)} over ${f.samples.toLocaleString()} samples` + (f.samplesSource ? ` (from "${f.samplesSource}")` : " (assumed; no dataset attached)") + (f.activationGb != null ? `. GPU fit is the training peak at batch ${f.batchSize}${tokensAt(f.seqLen)}, AdamW with bf16 autocast: weights, gradients and optimizer state (${f.footprintGb.toFixed(2)} GB, ${OPTIMIZER_K} x 16 bytes per parameter) plus activations (${f.activationGb.toFixed(1)} GB: ${OUTPUT_K} x every layer's output${attention === "eager" && f.attentionGb > 0.05 ? `, and ${f.attentionGb.toFixed(1)} GB of attention scores eager attention stores for backward` : ""}), with 1.15x headroom. ${attentionSentence(attention, f.attentionGb)}Factors fitted on 141 measured runs across 44 templates, with the attention-score term present on the templates that ran eager attention; held out, the median error is 8% above 1 GB and the card verdict agrees with measurement 98% of the time; recurrent cells are under-counted.` : ". GPU fit is fp32 weights plus gradients plus two Adam moments (16 bytes per parameter) with 1.15x headroom; no shape propagated, so activations are not included.")
   };
   const diff = base ? diffFor(model, f, base) : null;
   const read = opts.policy != null ? readPolicy(opts.policy) : null;
@@ -7533,7 +7607,9 @@ function renderPlanText(plan) {
     plan.run.legal == null ? `  will run  CANNOT SAY (${plan.run.withheld ?? "the read was incomplete"})` : plan.run.legal ? `  will run  yes (${plan.run.blockers.length} blockers, ${plan.run.warnings.length} warnings)` : `  will run  NO  (${plan.run.blockers.length} blocker${plan.run.blockers.length === 1 ? "" : "s"})`
   );
   const g = plan.cost.gpuFits;
-  L.push(`  fits      T4 16GB ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}   (peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${plan.cost.activationGb == null ? ", activations unknown" : ", est."})`);
+  L.push(`  fits      T4 16GB ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}   (peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? ", activations unknown" : ", est."})`);
+  const att = attentionPhrase(plan.cost.attention, plan.cost.attentionScoresGb);
+  if (att) L.push(`  attention ${att.slice("attention: ".length)}`);
   const mbLine = maxBatchLine(plan);
   if (mbLine) L.push(`  max batch ${mbLine}`);
   const split = splitLine(plan);
@@ -7582,7 +7658,9 @@ function renderPlanMarkdown(plan) {
   L.push(`| Layers / params | ${m.layers} / ${fmtParamCount(m.params)}${d ? ` (${fmtSigned(d.paramsDelta)}${d.paramsDeltaPct == null ? "" : `, ${d.paramsDeltaPct >= 0 ? "+" : ""}${d.paramsDeltaPct.toFixed(0)}%`})` : ""} |`);
   L.push(`| Shape | \`${fmtShape(m.inputShape)}\` -> \`${fmtShape(m.outputShape)}\` |`);
   L.push(`| Will it run | ${plan.run.legal == null ? `**cannot say**: ${plan.run.withheld ?? "the read was incomplete"}` : plan.run.legal ? `yes, ${plan.run.warnings.length} warning${plan.run.warnings.length === 1 ? "" : "s"}` : `**no**, ${plan.run.blockers.length} blocker${plan.run.blockers.length === 1 ? "" : "s"}`}${plan.run.legal == null ? "" : d?.legalityChanged === "became_illegal" ? " (**base ran, this does not**)" : d?.legalityChanged === "became_legal" ? " (base did not run, this does)" : ""} |`);
-  L.push(`| GPU fit | T4 ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}${d?.memoryDeltaGb != null ? ` (memory ${d.memoryDeltaGb >= 0 ? "+" : "-"}${Math.abs(d.memoryDeltaGb).toFixed(2)} GB)` : ""}, peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${plan.cost.activationGb == null ? " (activations unknown)" : " (est.)"} |`);
+  L.push(`| GPU fit | T4 ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}${d?.memoryDeltaGb != null ? ` (memory ${d.memoryDeltaGb >= 0 ? "+" : "-"}${Math.abs(d.memoryDeltaGb).toFixed(2)} GB)` : ""}, peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? " (activations unknown)" : " (est.)"} |`);
+  const att = attentionPhrase(plan.cost.attention, plan.cost.attentionScoresGb);
+  if (att) L.push(`| Attention | ${att.slice("attention: ".length)} |`);
   const mb = maxBatchLine(plan);
   if (mb) L.push(`| Max batch | ${mb} |`);
   const sp = splitLine(plan);
@@ -7635,9 +7713,12 @@ function renderPlanMarkdown(plan) {
 export {
   ACTIVATION_K,
   ATTENTION_K,
+  DEFAULT_ATTENTION,
+  DEFAULT_SEQ_LEN,
   OPTIMIZER_K,
   OUTPUT_K,
   activationGbFor,
+  attentionPhrase,
   attentionScoresGbFor,
   buildPlan,
   changeGateSentence,
@@ -7648,9 +7729,13 @@ export {
   loraTargetsFor,
   maxBatchFor,
   parseHumanSize,
+  readAttention,
   readGraph,
   readPolicy,
+  readSeqLen,
   renderLoraText,
   renderPlanMarkdown,
-  renderPlanText
+  renderPlanText,
+  tokenSeqLenOf,
+  withSeqLen
 };
