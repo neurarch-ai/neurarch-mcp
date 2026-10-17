@@ -174,11 +174,16 @@ export const planTool: ToolDef = {
           + 'Adds a change section with a spec id and a gate on memory, fit and policy (never on adapter quality).',
         additionalProperties: true,
       },
+      seq_len: {
+        type: 'integer',
+        minimum: 1,
+        description: 'Sequence length in tokens used for activation memory; default 2048 when omitted.',
+      },
     },
     additionalProperties: false,
   },
   handler: async (
-    { policy, base_path, spec }: { policy?: Policy; base_path?: string; spec?: Record<string, unknown> },
+    { policy, base_path, spec, seq_len }: { policy?: Policy; base_path?: string; spec?: Record<string, unknown>; seq_len?: number },
     model: ModelArchitecture,
     ctx: ToolContext,
   ) => {
@@ -213,6 +218,8 @@ export const planTool: ToolDef = {
         ...(base ? { base } : {}),
         ...(effective ? { policy: effective } : {}),
         ...(spec && Object.keys(spec).length ? { spec } : {}),
+        // Omitted, the server sizes a token graph at 2048 tokens.
+        ...(seq_len != null ? { seq_len } : {}),
         // Never true from a tool call: publishing someone's design is a
         // decision for the person, not for the agent holding their file.
         share: false,

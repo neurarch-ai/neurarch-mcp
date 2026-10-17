@@ -140,7 +140,7 @@ export const MODEL_PATH_PARAM = 'model_path';
 
 const MODEL_PATH_PROPERTY = {
   type: 'string',
-  description: 'Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>).',
+  description: 'Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>).',
 };
 
 /**
