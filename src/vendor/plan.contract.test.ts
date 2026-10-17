@@ -9,6 +9,12 @@
  * bundle from f0acf8a0^, which has no attentionScoresGbFor and puts gpt2 at
  * 13.38 GB and phi3-mini at 77.05 GB, so every test in this file but the
  * import check went red.
+ *
+ * Since neurarch #285 (582aafe3) the plan defaults to SDPA attention, which
+ * stores no score matrix. The 11c02b72 numbers are eager numbers, so they are
+ * pinned under attention: 'eager', where the bundle at 96254170 reproduces
+ * them to the last digit; the SDPA defaults are pinned beside them, and each
+ * is the eager peak minus attentionScoresGbFor at the same batch.
  */
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
@@ -34,9 +40,10 @@ describe('vendored plan contract', () => {
   });
 
   // Expected values: buildPlan(template, { run: { batchSize: 32 } }) in the app
-  // repository at 11c02b72, printed to full precision.
-  it('matches the app\'s buildPlan on the gpt2 template (fits a T4)', async () => {
-    const p = plan.buildPlan(await template('gpt2'), { run: { batchSize: 32 } });
+  // repository at 11c02b72 (eager by then, eager by name now), printed to full
+  // precision.
+  it('matches the app\'s buildPlan on the gpt2 template under eager attention (fits a T4)', async () => {
+    const p = plan.buildPlan(await template('gpt2'), { run: { batchSize: 32 }, attention: 'eager' });
     expect(p.model.params).toBe(84331345);
     expect(p.cost.peakGb).toBeCloseTo(10.376738319040001, 9);
     expect(p.cost.activationGb).toBeCloseTo(8.676618403840001, 9);
@@ -45,9 +52,9 @@ describe('vendored plan contract', () => {
     expect(p.cost.twoCardSplit).toBeNull();
   });
 
-  it('matches the app\'s buildPlan on the phi3-mini template (does not fit a T4)', async () => {
+  it('matches the app\'s buildPlan on the phi3-mini template under eager attention (does not fit a T4)', async () => {
     const m = await template('phi3-mini');
-    const p = plan.buildPlan(m, { run: { batchSize: 32 } });
+    const p = plan.buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
     expect(p.model.params).toBe(310288704);
     expect(p.cost.peakGb).toBeCloseTo(47.71804469248001, 9);
     expect(p.cost.activationGb).toBeCloseTo(41.462624419840004, 9);
@@ -57,6 +64,29 @@ describe('vendored plan contract', () => {
     expect(p.cost.maxBatch).toEqual({ T4: 5, A100_40: 22, H100_80: 48 });
     expect(p.cost.twoCardSplit?.gpu).toBe('A100 (40GB)');
     expect(p.cost.twoCardSplit?.fits).toBe(true);
+  });
+
+  // Expected values: buildPlan(template, { run: { batchSize: 32 } }) in the app
+  // repository at 96254170, printed to full precision. SDPA is the default.
+  it('defaults to SDPA: the eager peak minus the plan\'s own attention-score term', async () => {
+    const g = await template('gpt2');
+    const pg = plan.buildPlan(g, { run: { batchSize: 32 } });
+    expect(pg.cost.attention).toBe('sdpa');
+    expect(pg.cost.seqLen).toBe(1024);
+    expect(pg.cost.peakGb).toBeCloseTo(7.582325222080001, 9);
+    expect(pg.cost.peakGb).toBeCloseTo(10.376738319040001 - plan.attentionScoresGbFor(g as never, 32), 9);
+    expect(pg.cost.maxBatch).toEqual({ T4: 66, A100_40: 179, H100_80: 369 });
+
+    const m = await template('phi3-mini');
+    const pm = plan.buildPlan(m, { run: { batchSize: 32 } });
+    expect(pm.cost.attention).toBe('sdpa');
+    expect(pm.cost.seqLen).toBe(2048);
+    expect(pm.cost.peakGb).toBeCloseTo(17.91097165824, 9);
+    expect(pm.cost.peakGb).toBeCloseTo(47.71804469248001 - plan.attentionScoresGbFor(m as never, 32), 9);
+    expect(pm.cost.activationGb).toBeCloseTo(11.6555513856, 9);
+    expect(pm.cost.gpuFits.T4).toBe(false);
+    expect(pm.cost.smallestFitGpu).toBe('L4 (24GB)');
+    expect(pm.cost.maxBatch).toEqual({ T4: 21, A100_40: 78, H100_80: 173 });
   });
 
   it('prices on the card it is given, so the server\'s card names match the bundle\'s', async () => {

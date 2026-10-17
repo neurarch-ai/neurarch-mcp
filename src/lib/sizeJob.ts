@@ -6,7 +6,8 @@
  * arithmetic of its own beyond two things the plan does not do for a caller:
  *
  *   1. Removing the stored-attention-score term when the job runs SDPA or flash
- *      attention. The plan's `peakGb` assumes eager attention; SDPA (the PyTorch
+ *      attention. The plan is asked for eager attention (its `peakGb` then
+ *      includes the scores); SDPA (the PyTorch
  *      and Hugging Face default) and flash keep no score matrix for backward.
  *      The term removed is the plan's own (`attentionScoresGbFor`), so the two
  *      cannot drift.
@@ -227,7 +228,7 @@ function twoCardSplit(model: ModelArchitecture, peakGb: number, batch: number, a
     // flash that over-states every card's share, so a cut it says fits
     // certainly fits; one it says does not is not reported, rather than
     // reported wrong.
-    const map = deviceMapFor(model, [gb, gb], { batchSize: batch });
+    const map = deviceMapFor(model, [gb, gb], { batchSize: batch, attention: 'eager' });
     const conservative = attention !== 'eager' && attnDropped > 0.05;
     if (map.fits) {
       const gpu = only?.id ?? CARDS.find(c => c.gb === gb)!.id;
@@ -268,7 +269,10 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
   if (opts.seqLen != null && !seq.applies) caveats.push('seq_len was ignored: this graph\'s input is not a token sequence.');
   const model = seq.model;
 
-  const plan = buildPlan(model, { run: { batchSize: batch, epochs }, ...(opts.samples ? { workload: { samples: opts.samples, source: 'size_training_job samples argument' } } : {}) });
+  // Pinned to eager: sizerFor removes the score term itself, from the plan's
+  // own attentionScoresGbFor. The bundle has defaulted to SDPA since neurarch
+  // #285, and an SDPA plan here would have the scores removed twice.
+  const plan = buildPlan(model, { attention: 'eager', run: { batchSize: batch, epochs }, ...(opts.samples ? { workload: { samples: opts.samples, source: 'size_training_job samples argument' } } : {}) });
   const head = {
     model: { name: plan.model.name, params: plan.model.params, layers: plan.model.layers, fingerprint: plan.model.fingerprint },
     job: { batchSize: batch, seqLen: seq.seqLen, attention, gpu: label, epochs, samples: opts.samples ?? null },
@@ -382,6 +386,7 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
   let cost: SizeJobResult['cost'] = null;
   if (priceCard) {
     const priced = buildPlan(model, {
+      attention: 'eager',
       run: { gpu: priceCard.planName, batchSize: batch, epochs },
       ...(opts.samples ? { workload: { samples: opts.samples, source: 'size_training_job samples argument' } } : {}),
     });

@@ -43,20 +43,32 @@ export interface ModelPlan {
     refusedRunUsd: number | null;
     fitsGpu: string | null;
     gpuFits: { T4: boolean | null; A100_40: boolean | null; H100_80: boolean | null };
-    /** Training peak at the plan's batch, GB, with eager attention's stored scores included. */
+    /** Training peak at the plan's batch, GB. Includes stored attention scores only when `attention` is eager. */
     peakGb: number;
     /** The activation term alone, GB; null when no shape propagated. */
     activationGb: number | null;
     smallestFitGpu: string | null;
     maxBatch: { T4: number | null; A100_40: number | null; H100_80: number | null };
     twoCardSplit: TwoCardSplit | null;
+    /** The attention mode the peak was computed for (the bundle defaults to sdpa). */
+    attention: PlanAttention;
+    /** GB of stored attention scores at the plan's batch; counted in peakGb only under eager. */
+    attentionScoresGb: number | null;
+    /** Tokens per sample a token model was sized at, or null for a non-token input. */
+    seqLen: number | null;
     assumptions: string;
   };
   [key: string]: unknown;
 }
 
+export type PlanAttention = 'sdpa' | 'flash' | 'eager';
+
 export interface BuildPlanOptions {
   base?: unknown;
+  /** Default sdpa (no stored scores). Pass eager for a peak that includes them. */
+  attention?: PlanAttention;
+  /** Tokens per sample for a token model; 'default' applies the bundle's 2048-token default. Omitted: the graph's own input. */
+  seqLen?: number | 'default';
   policy?: unknown;
   workload?: { samples: number; source: string };
   /** `gpu` must be one of the bundle's card names, e.g. "A100 (40GB)"; anything else prices on an A10G. */
@@ -75,8 +87,8 @@ export function maxBatchFor(
   gb: number,
 ): number | null;
 
-/** A greedy contiguous split of the graph across cards of the given sizes. Counts stored attention scores. */
-export function deviceMapFor(model: unknown, gpus: number[], opts?: { batchSize?: number }): DeviceMap;
+/** A greedy contiguous split of the graph across cards of the given sizes. Counts stored attention scores only under eager (default sdpa). */
+export function deviceMapFor(model: unknown, gpus: number[], opts?: { batchSize?: number; attention?: PlanAttention }): DeviceMap;
 
 /** The three fitted factors of the training-peak model. */
 export const OPTIMIZER_K: number;

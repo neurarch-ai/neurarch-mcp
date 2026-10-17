@@ -13,7 +13,7 @@ describe('sizeJob is the plan, not a second computation', () => {
   it('under eager attention it returns the plan\'s own peak, max batch and split', async () => {
     for (const name of ['gpt2', 'phi3-mini']) {
       const m = await template(name);
-      const p = buildPlan(m, { run: { batchSize: 32 } });
+      const p = buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
       const s = sizeJob(m, { batchSize: 32, attention: 'eager' });
       expect(s.memory!.peakGb, name).toBeCloseTo(p.cost.peakGb, 2);
       expect(s.maxBatch!.T4).toBe(p.cost.maxBatch.T4);
@@ -21,6 +21,17 @@ describe('sizeJob is the plan, not a second computation', () => {
       expect(s.maxBatch!['H100-80']).toBe(p.cost.maxBatch.H100_80);
       expect(CARDS.find(c => c.id === s.smallestFitGpu)?.planName).toBe(p.cost.smallestFitGpu);
       expect(s.twoCardSplit?.gpu ?? null).toBe(p.cost.twoCardSplit ? CARDS.find(c => c.planName === p.cost.twoCardSplit!.gpu)!.id : null);
+    }
+  });
+
+  it('under SDPA its score removal lands on the plan\'s own SDPA peak', async () => {
+    for (const name of ['gpt2', 'phi3-mini']) {
+      const m = await template(name);
+      const p = buildPlan(m, { run: { batchSize: 32 } });
+      const s = sizeJob(m, { batchSize: 32 });
+      expect(s.memory!.peakGb, name).toBeCloseTo(p.cost.peakGb, 2);
+      expect(s.maxBatch!.T4).toBe(p.cost.maxBatch.T4);
+      expect(s.maxBatch!['H100-80']).toBe(p.cost.maxBatch.H100_80);
     }
   });
 
