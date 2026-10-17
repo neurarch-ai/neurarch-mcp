@@ -1,6 +1,6 @@
 ---
 name: neurarch-skill
-description: Run an evidence-gated edit loop over a Neurarch model graph through the neurarch-mcp MCP server. Use when an agent needs to inspect, explain, audit, extend, refactor, or debug a neural-network architecture stored as a .neurarch.json graph; summarize a model; locate parameter or compute hotspots; trace dependencies and blast radius before a change; diff two model versions; add, modify, rewire, or delete layers and connections; validate structural invariants; or persist an edited graph, without guessing shapes, parameter counts, layer names, or layer vocabulary from training code.
+description: Size a training job before it launches, then run an evidence-gated edit loop over a Neurarch model graph through the neurarch-mcp MCP server. Use when an agent is about to submit or launch a training job and needs its peak memory, the smallest GPU that holds it, the max batch per card or the run's cost; or when it needs to inspect, explain, audit, extend, refactor, or debug a neural-network architecture stored as a .neurarch.json graph; summarize a model; locate parameter or compute hotspots; trace dependencies and blast radius before a change; diff two model versions; add, modify, rewire, or delete layers and connections; validate structural invariants; or persist an edited graph, without guessing shapes, parameter counts, layer names, or layer vocabulary from training code.
 ---
 
 # Neurarch Graph Loop
@@ -11,6 +11,10 @@ Use the Neurarch model graph as the single source of truth for a network's struc
 
 - Read [references/neurarch-mcp-tools.md](references/neurarch-mcp-tools.md) before the first neurarch-mcp operation in a session and whenever a required capability or payload is unclear.
 - Read [references/graph-conventions.md](references/graph-conventions.md) before creating a layer or substantially rewiring a graph.
+
+## Before a training job launches
+
+Before submitting or launching any training job (a scheduler submission, a cloud GPU reservation, a `python train.py` on a rented card), call `size_training_job` with the job's batch size and the card it will reserve. Quote its verdict line, and if it says the job will not fit, change the batch or the card before launching. Then call `history` with the fingerprint it returns, for what this structure measured last time it ran. Only after that, check whether the graph forward-passes (`lint_model`, `check_design`). The sizing number is a calibrated estimate, not a measurement; say so when you report it.
 
 ## Operating contract
 

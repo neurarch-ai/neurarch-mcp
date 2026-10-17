@@ -7,6 +7,35 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- **`size_training_job`**, the tool to call before a job takes a GPU
+  reservation. Given the model, a batch size and optionally the card
+  (`"A100-40"`, `"8xH100"`), the sequence length and the attention
+  implementation, it returns the training peak with its weights-and-optimizer,
+  activation and attention-score parts, the smallest card that holds it, the
+  largest batch on each of seven cards, a two-card split when one card does
+  not, one run's cost, and a verdict line (`will not fit a T4: needs ~21 GB
+  with headroom (peak 18 GB) at batch 32, seq 2048, use L4 or batch <= 21`).
+  It is a wrapper over the app's own `buildPlan`, vendored as
+  `src/vendor/plan.bundle.mjs` (a byte-for-byte copy of the app's
+  `lib/modelPlan.bundle.mjs`), so the number is the one the CI bot and
+  `POST /api/v1/plan` print, computed offline. That number is the 2026-10-17
+  memory refit: 141 measured runs across 44 architectures, held-out median
+  error 8% above 1 GB, fits / does-not-fit verdict agreeing with measurement
+  98% of the time. It adds two things the plan does not: the stored attention
+  scores are removed under SDPA (the default) and flash, and an N-card request
+  is read both as plain DDP and as sharded. A graph that feeds a hidden-state
+  tensor into a token embedding (several bundled LLM references declare their
+  input as `[1, L, D]`) is refused rather than sized at terabytes.
+
+### Changed
+- **Sizing leads.** `size_training_job` is first in the core listing and in
+  the README, AGENTS.md, the skill and the `pre_train_checklist` prompt; the
+  structural checks follow it as "and whether it forward-passes".
+  `rank_designs` left the core listing (still callable by name, and listed
+  under `--tools=full`), and several schema descriptions were trimmed so the
+  listing stays under its token caps.
+- Vendored `engine` and `verifier` bundles refreshed from neurarch-ai/neurarch
+  `11c02b72`.
 - **`NEURARCH_TRACE=1 python train.py`** (neurarch-trace 0.2.0). No target, no
   `--input`, no edit to the script. The install puts one line at the root of
   site-packages, Python runs it before the first line of any script in the

@@ -8,14 +8,48 @@ you and, more usefully, of when its answers are worth trusting.
 
 Two shipped artifacts from one repo:
 
-- **`neurarch-mcp`** (npm, Node 20+) — an MCP server that turns a PyTorch model
+- **`neurarch-mcp`** (npm, Node 20+): an MCP server that turns a PyTorch model
   into a structured graph and answers questions about it with computation
-  instead of inference. Every tool but `plan` and `history` runs locally, needs
-  no key and no account, and opens no socket.
-- **`neurarch-trace`** (PyPI, torch >= 2.0) — runs one forward pass and writes
+  instead of inference, first of all what a training job on it needs. Every
+  tool but `plan` and `history` runs locally, needs no key and no account, and
+  opens no socket.
+- **`neurarch-trace`** (PyPI, torch >= 2.0): runs one forward pass and writes
   the graph with real per-layer shapes.
 
-## The rule that matters
+## Before you launch a training job
+
+**Call `size_training_job` before you submit or launch any training job**, with
+the batch size and the card you are about to reserve:
+
+```
+size_training_job { batch_size: 32, gpu: "A100-40" }            # the server's model
+size_training_job { model_path: "Model.neurarch.json", batch_size: 256, gpu: "8xH100" }
+size_training_job { hf_id: "Qwen/Qwen2.5-0.5B", batch_size: 8, seq_len: 4096 }   # needs --hf
+```
+
+It returns the training peak at that batch (weights and optimizer state,
+activations, stored attention scores), the smallest card that holds it, the
+largest batch each card holds, a two-card split when one card does not, one
+run's cost, and a verdict line you can quote: `fits an A100-40 with 22%
+headroom` or `will not fit an A100-40: needs ~55 GB ... use A100-80 or batch <=
+22`. If the verdict says it will not fit, change the batch or the card before
+launching, not after the OOM.
+
+Pass `attention: "eager"` if the job uses eager attention; the default is SDPA,
+which keeps no score matrix. The number is a calibrated estimate under AdamW
+with bf16 autocast (141 measured runs, 44 architectures, held-out median error
+8% above 1 GB, card verdict agrees with measurement 98% of the time), not a
+measurement; say so when you quote it.
+
+Then, in this order:
+
+1. `history` with the fingerprint the sizing result returns: what this
+   structure measured the last time it trained in this organisation.
+2. Whether it forward-passes: `lint_model`, then `check_design`. Agents rarely
+   write a structurally illegal model, so this is the second line, not the
+   first; the failure we saw a structure-focused agent hit was an OOM.
+
+## The rule that matters for findings
 
 **Do not act on a finding from a `.py` file. Trace the model first.**
 
@@ -64,12 +98,13 @@ the same package.
 
 | Question | Tool |
 |---|---|
+| What will this job need, and on which card? | `size_training_job` |
 | What is this model? | `describe_architecture`, `get_model_summary`, `mermaid_diagram` |
 | Where is the budget? | `param_count_by_block`, `flops_by_block`, `list_blocks`, `get_block` |
 | Will it run? | `validate_model`, `lint_model`, `check_design` |
 | What does this edit break? | `layer_impact`, `find_path`, `list_connections`, `diff_models` |
 | How do I fix this finding? | `suggest_fix` |
-| Which candidate deserves the GPU? | `rank_designs` |
+| Order k candidates (blocked last, ties stay ties) | `rank_designs` |
 | Should I spend the money? | `plan` |
 | What happened last time this trained? | `history` |
 | Detail on one layer | `get_layer`, `find_layers`, `compare_layers`, `list_hyperparams` |
@@ -84,9 +119,10 @@ That is not in the weights and not in the repository.
 
 ## When you are asked "is this design worth training"
 
-Answer with `plan`, not with prose. It returns the parameter count, whether the
-graph forward-passes, which GPU it fits, what a run costs, and the blockers. In
-CI or a training entry point the same verdict is available without an agent:
+Answer with `size_training_job` and `plan`, not with prose. Sizing is offline
+and says what the run needs and costs; `plan` is the card the CI bot posts, with
+the repository's own rules and the history line. In CI or a training entry
+point the same verdict is available without an agent:
 
 ```bash
 NEURARCH_TRACE=1 NEURARCH_TRACE_PLAN=1 NEURARCH_TRACE_FAIL_ON_BLOCK=1 python train.py
@@ -102,8 +138,11 @@ npm ci && npm run typecheck && npm run build && npm test    # the Node server
 cd python/neurarch-trace && pytest tests -q                 # the tracer
 ```
 
-- `src/vendor/verifier.bundle.mjs` is generated from the Neurarch app, not
-  edited here. A stale bundle is the failure mode that has cost the most time in
+- `src/vendor/*.bundle.mjs` are generated from the Neurarch app, not edited
+  here. `engine` and `verifier` come from `npm run build:mcp-engine` /
+  `build:mcp-verifier` there; `plan.bundle.mjs` is a byte-for-byte copy of its
+  committed `lib/modelPlan.bundle.mjs` (`npm run build:plan`), and
+  `plan.contract.test.ts` pins its peak on two app templates. A stale bundle is the failure mode that has cost the most time in
   this repo: the rules silently drift from the ones the app and CI enforce.
 - `python/neurarch-trace/neurarch_autopatch.pth` must reach the root of
   site-packages or `NEURARCH_TRACE=1` does nothing and says nothing. The

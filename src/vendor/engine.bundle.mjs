@@ -7992,25 +7992,6 @@ function propagateShapes(model) {
   }
   return { shapes, issues };
 }
-
-// src/utils/lintGraph.ts
-function advisorSeverity(sev) {
-  return sev === "error" ? "block" : sev === "warning" ? "warn" : "info";
-}
-var SHAPE_SEVERITY = {
-  "head-dim-divisibility": "block",
-  "gqa-head-divisibility": "block",
-  "merge-shape-mismatch": "block",
-  "compute-error": "block",
-  // A type the registry doesn't know halts propagation, making everything
-  // downstream unverifiable, and the trainer codegen drops the layer. Grounded
-  // run 2026-08-20: such a design trained to below-random accuracy with a
-  // clean static verdict. Unverifiable must never read as fine.
-  "unknown-layer-type": "block",
-  "invalid-output-shape": "warn",
-  "attention-in-mismatch": "warn"
-};
-var SHAPE_RULE_IDS = Object.keys(SHAPE_SEVERITY);
 var FLOW_DEPENDENT_SHAPE_KINDS = /* @__PURE__ */ new Set([
   "invalid-output-shape",
   "merge-shape-mismatch",
@@ -8037,6 +8018,25 @@ function downstreamOfInferredEdges(model) {
   for (const c of model.components) if (seen.has(c.id) && c.name) names.add(c.name);
   return names;
 }
+
+// src/utils/lintGraph.ts
+function advisorSeverity(sev) {
+  return sev === "error" ? "block" : sev === "warning" ? "warn" : "info";
+}
+var SHAPE_SEVERITY = {
+  "head-dim-divisibility": "block",
+  "gqa-head-divisibility": "block",
+  "merge-shape-mismatch": "block",
+  "compute-error": "block",
+  // A type the registry doesn't know halts propagation, making everything
+  // downstream unverifiable, and the trainer codegen drops the layer. Grounded
+  // run 2026-08-20: such a design trained to below-random accuracy with a
+  // clean static verdict. Unverifiable must never read as fine.
+  "unknown-layer-type": "block",
+  "invalid-output-shape": "warn",
+  "attention-in-mismatch": "warn"
+};
+var SHAPE_RULE_IDS = Object.keys(SHAPE_SEVERITY);
 var ALL_RULE_IDS = [
   .../* @__PURE__ */ new Set([...ADVISOR_RULE_IDS, ...SHAPE_RULE_IDS])
 ];
@@ -8090,11 +8090,13 @@ function edgeProvenance(model) {
   const edges = model?.connections ?? [];
   const constructionOrder = edges.filter((c) => c.inferred === "construction-order").length;
   const unmodelledMerge = edges.filter((c) => c.inferred === "unmodelled-merge").length;
+  const unmodelledOp = edges.filter((c) => c.inferred === "unmodelled-op").length;
   return {
     total: edges.length,
-    inferred: constructionOrder + unmodelledMerge,
+    inferred: constructionOrder + unmodelledMerge + unmodelledOp,
     constructionOrder,
-    unmodelledMerge
+    unmodelledMerge,
+    unmodelledOp
   };
 }
 

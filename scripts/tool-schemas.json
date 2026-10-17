@@ -1,4 +1,54 @@
 {
+  "size_training_job": {
+    "type": "object",
+    "properties": {
+      "batch_size": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Global batch size."
+      },
+      "gpu": {
+        "type": "string",
+        "description": "\"A100-40\", \"H100\", \"8xH100\". Omit for the cheapest that fits."
+      },
+      "seq_len": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Tokens per sample (default 2048)."
+      },
+      "attention": {
+        "type": "string",
+        "enum": [
+          "sdpa",
+          "flash",
+          "eager"
+        ],
+        "description": "Default sdpa."
+      },
+      "hf_id": {
+        "type": "string",
+        "description": "Hugging Face org/name to size instead. Needs --hf."
+      },
+      "epochs": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "To price. Default 10."
+      },
+      "samples": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Per epoch, to price (default 50,000)."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+      }
+    },
+    "required": [
+      "batch_size"
+    ],
+    "additionalProperties": false
+  },
   "get_model_summary": {
     "type": "object",
     "properties": {
@@ -41,7 +91,7 @@
     "properties": {
       "type": {
         "type": "string",
-        "description": "Exact component type (e.g. \"conv2d\", \"linear\", \"multiHeadAttention\")."
+        "description": "Exact type, e.g. \"conv2d\"."
       },
       "namePattern": {
         "type": "string",
@@ -49,15 +99,15 @@
       },
       "scope": {
         "type": "string",
-        "description": "Scope prefix, e.g. \"encoder.layer.3\" (matches that scope and anything nested under it)."
+        "description": "Scope prefix, e.g. \"encoder.layer.3\" (nested included)."
       },
       "augmentation": {
         "type": "string",
-        "description": "Only layers carrying this augmentation overlay, e.g. \"freeze\", \"quantize_int8\", \"gradient_checkpoint\", \"amp\"."
+        "description": "Augmentation overlay, e.g. \"freeze\"."
       },
       "sortByParams": {
         "type": "boolean",
-        "description": "When true, rank results by estimated parameter count (largest first) before applying limit."
+        "description": "Rank by parameter count, largest first."
       },
       "limit": {
         "type": "number",
@@ -343,24 +393,24 @@
           "properties": {
             "id": {
               "type": "string",
-              "description": "Label for this candidate in the result. Defaults to the path or candidate-N."
+              "description": "Label in the result."
             },
             "model_path": {
               "type": "string",
-              "description": "A .py or .neurarch.json path, or zoo:<id> / hf:<org/name>."
+              "description": "Path, zoo:<id> or hf:<org/name>."
             },
             "model": {
               "type": "object",
-              "description": "An inline graph ({components, connections}) instead of a path."
+              "description": "Inline graph instead of a path."
             }
           },
           "additionalProperties": false
         },
-        "description": "The designs to order. Each needs either model_path or model."
+        "description": "Designs to order; each needs model_path or model."
       },
       "include_current": {
         "type": "boolean",
-        "description": "Also rank the model this server was started with, as \"current\". Default false."
+        "description": "Also rank this server's model as \"current\"."
       },
       "tie_break": {
         "type": "string",
@@ -369,7 +419,7 @@
           "cost",
           "params"
         ],
-        "description": "Break a measured tie: \"cost\" (cheapest first) or \"params\" (smallest first). Never crosses a measured rank. Default \"none\"."
+        "description": "Break a measured tie by cost or params. Never crosses a measured rank."
       },
       "model_path": {
         "type": "string",
@@ -400,7 +450,7 @@
     "properties": {
       "query": {
         "type": "string",
-        "description": "Substring match on id, title, type or domain (case-insensitive)."
+        "description": "Substring of id, title, type or domain."
       },
       "domain": {
         "type": "string",
@@ -408,7 +458,7 @@
       },
       "attention": {
         "type": "string",
-        "description": "Only entries using this attention type, e.g. \"groupedQueryAttention\"."
+        "description": "Attention type, e.g. \"groupedQueryAttention\"."
       },
       "model_path": {
         "type": "string",
@@ -463,7 +513,7 @@
     "properties": {
       "rule": {
         "type": "string",
-        "description": "Only this rule id (e.g. head-dim-divisibility). Default: every finding."
+        "description": "Only this rule id."
       },
       "layer": {
         "type": "string",
@@ -480,7 +530,7 @@
       },
       "save_to": {
         "type": "string",
-        "description": "Write the patched file here (exact fixes only). Requires --write; never the source path itself."
+        "description": "Write the patched file here (exact fixes only). Requires --write."
       },
       "model_path": {
         "type": "string",
@@ -502,20 +552,20 @@
           "type": "string"
         },
         "minItems": 1,
-        "description": "Input dims, batch first, one per model input: [\"1,3,224,224\"] or [\"1,128\"]. Append \":long\" for token ids."
+        "description": "Input dims, batch first, one per input: [\"1,3,224,224\"]. \":long\" for token ids."
       },
       "dtype": {
         "type": "string",
-        "description": "Default dtype for inputs (float32; long for hf: targets)."
+        "description": "Input dtype (float32; long for hf:)."
       },
       "depth": {
         "type": "integer",
         "minimum": 1,
-        "description": "Stop descending at this module depth (default: leaf modules)."
+        "description": "Max module depth (default: leaves)."
       },
       "name": {
         "type": "string",
-        "description": "Graph name (default: the class or repo name)."
+        "description": "Graph name."
       },
       "save_to": {
         "type": "string",
@@ -525,7 +575,7 @@
         "type": "integer",
         "minimum": 5,
         "maximum": 600,
-        "description": "Kill the trace after this many seconds (default 120)."
+        "description": "Timeout, seconds (default 120)."
       },
       "model_path": {
         "type": "string",
@@ -536,6 +586,44 @@
       "target",
       "input"
     ],
+    "additionalProperties": false
+  },
+  "plan": {
+    "type": "object",
+    "properties": {
+      "policy": {
+        "type": "object",
+        "description": "House rules (max_params, max_memory_gb, must_fit, forbid_types, max_cost_usd, ...). Replaces .neurarch.yml.",
+        "additionalProperties": true
+      },
+      "base_path": {
+        "type": "string",
+        "description": "A second model to diff against (a path, zoo:<id> or hf:<org/name>)."
+      },
+      "spec": {
+        "type": "object",
+        "description": "A change spec: { base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }. Adds a change section with a spec id and a gate on memory, fit and policy (never on adapter quality).",
+        "additionalProperties": true
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+      }
+    },
+    "additionalProperties": false
+  },
+  "history": {
+    "type": "object",
+    "properties": {
+      "fingerprint": {
+        "type": "string",
+        "description": "8 hex characters, from a plan result (plan.model.fingerprint). Skips loading a graph."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Optional: answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+      }
+    },
     "additionalProperties": false
   }
 }

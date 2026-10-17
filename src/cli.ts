@@ -51,19 +51,21 @@ const COMMANDS = new Set<Command>(['lint', 'check']);
  *
  * The ORDER is the listing order (`selectTools` reads this array, not the
  * registry), and it is the order the tools are meant to be reached for. An
- * agent picks by scanning a list, so the list is the recommendation: trace
- * first because a static parse of a real repository is the weak path
- * (recognisable on 41% of 116 real files, zero true findings hand-judged),
- * then plan, then the local ladder.
+ * agent picks by scanning a list, so the list is the recommendation: size the
+ * job first, because the failure an agent actually hits before a training run
+ * is running out of memory on the card it reserved, not an illegal structure;
+ * then trace, because a static parse of a real repository is the weak path
+ * (recognisable on 41% of 116 real files, zero true findings hand-judged);
+ * then plan, then the local legality ladder.
  */
 export const CORE_TOOLS: readonly string[] = [
+  'size_training_job',
   'trace_model',
   'plan',
   'history',
   'check_design',
   'lint_model',
   'describe_architecture',
-  'rank_designs',
   'suggest_fix',
   'layer_impact',
   'get_layer',
@@ -186,6 +188,7 @@ export interface ListedTool {
  * costs a missing hint, not a broken tool.
  */
 const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
+  size_training_job: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, fits: { type: ['boolean', 'null'] } } },
   plan: { type: 'object', additionalProperties: true, properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
   history: { type: 'object', additionalProperties: true, properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
   check_design: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },

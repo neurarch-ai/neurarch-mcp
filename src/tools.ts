@@ -14,6 +14,7 @@ import { checkDesign, provenanceForRules } from './lib/checkDesign.js';
 import { lintModelGraph, edgeProvenance, type EngineFinding } from './vendor/engine.bundle.mjs';
 import { EXTRA_TOOLS } from './extraTools.js';
 import { LEDGER_TOOLS } from './ledgerTools.js';
+import { SIZING_TOOLS } from './sizingTools.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
 export interface ToolContext {
@@ -149,11 +150,11 @@ const findLayers: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      type:         { type: 'string', description: 'Exact component type (e.g. "conv2d", "linear", "multiHeadAttention").' },
+      type:         { type: 'string', description: 'Exact type, e.g. "conv2d".' },
       namePattern:  { type: 'string', description: 'Regex source matched against layer name.' },
-      scope:        { type: 'string', description: 'Scope prefix, e.g. "encoder.layer.3" (matches that scope and anything nested under it).' },
-      augmentation: { type: 'string', description: 'Only layers carrying this augmentation overlay, e.g. "freeze", "quantize_int8", "gradient_checkpoint", "amp".' },
-      sortByParams: { type: 'boolean', description: 'When true, rank results by estimated parameter count (largest first) before applying limit.' },
+      scope:        { type: 'string', description: 'Scope prefix, e.g. "encoder.layer.3" (nested included).' },
+      augmentation: { type: 'string', description: 'Augmentation overlay, e.g. "freeze".' },
+      sortByParams: { type: 'boolean', description: 'Rank by parameter count, largest first.' },
       limit:        { type: 'number', description: 'Max results (default 100).' },
     },
     additionalProperties: false,
@@ -732,6 +733,7 @@ function bucketize(
 }
 
 export const TOOLS: ToolDef[] = [
+  ...SIZING_TOOLS,
   getModelSummary,
   describeArchitectureTool,
   getLayer,

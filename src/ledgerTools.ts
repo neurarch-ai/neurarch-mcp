@@ -160,8 +160,7 @@ export const planTool: ToolDef = {
       policy: {
         type: 'object',
         description:
-          'House rules: max_params, max_memory_gb, must_fit, forbid_types, require_types, max_layers, '
-          + 'max_cost_usd. Hard lines block, budgets warn. Replaces the .neurarch.yml lookup.',
+          'House rules (max_params, max_memory_gb, must_fit, forbid_types, max_cost_usd, ...). Replaces .neurarch.yml.',
         additionalProperties: true,
       },
       base_path: {
@@ -171,12 +170,8 @@ export const planTool: ToolDef = {
       spec: {
         type: 'object',
         description:
-          'A change spec: what is allowed to move on this base and under which constraints. '
-          + '{ base?, adapter?: { peft: lora|qlora|dora, rank, targets[] }, quant?: fp32|fp16|int8|int4, '
-          + 'serving?: { gpu, promptTokens, genTokens, batchSize }, constraints?: { must_fit, max_memory_gb, '
-          + 'max_cost_usd, allow_gpu } }. The card gains a change section with its own spec id (a join key '
-          + 'beside the structural fingerprint, never inside it) and a gate that approves or refuses on '
-          + 'memory, fit and policy. The gate never says whether an adapter will train well.',
+          'A change spec: { base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }. '
+          + 'Adds a change section with a spec id and a gate on memory, fit and policy (never on adapter quality).',
         additionalProperties: true,
       },
     },

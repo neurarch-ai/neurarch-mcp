@@ -4032,6 +4032,32 @@ function propagateShapes(model) {
   }
   return { shapes, issues };
 }
+var FLOW_DEPENDENT_SHAPE_KINDS = /* @__PURE__ */ new Set([
+  "invalid-output-shape",
+  "merge-shape-mismatch",
+  "attention-in-mismatch",
+  "compute-error",
+  "linear-in-mismatch"
+]);
+function downstreamOfInferredEdges(model) {
+  const roots = model.connections.filter((c) => c.inferred).map((c) => c.to);
+  if (roots.length === 0) return /* @__PURE__ */ new Set();
+  const next = /* @__PURE__ */ new Map();
+  for (const c of model.connections) next.set(c.from, [...next.get(c.from) ?? [], c.to]);
+  const seen = new Set(roots);
+  const queue = [...roots];
+  while (queue.length) {
+    for (const to of next.get(queue.shift()) ?? []) {
+      if (!seen.has(to)) {
+        seen.add(to);
+        queue.push(to);
+      }
+    }
+  }
+  const names = /* @__PURE__ */ new Set();
+  for (const c of model.components) if (seen.has(c.id) && c.name) names.add(c.name);
+  return names;
+}
 
 // src/utils/paramEstimator.ts
 function num(v, fallback = 0) {
@@ -5334,7 +5360,9 @@ function buildPreflightReport(model, opts) {
   const comps = model.components.filter((c) => c.type !== "stickyNote");
   const realLayers = comps.filter((c) => c.type !== "input" && c.type !== "output");
   const { shapes, issues: shapeIssues } = propagateShapes(model);
+  const unreliableFlow = downstreamOfInferredEdges(model);
   for (const s of shapeIssues) {
+    if (FLOW_DEPENDENT_SHAPE_KINDS.has(s.kind) && unreliableFlow.has(s.componentName ?? "")) continue;
     findings.push({
       id: `shape-${s.kind}-${s.componentId}`,
       // `kind` is the stable rule id the lint engine and lib/ruleProvenance.ts
