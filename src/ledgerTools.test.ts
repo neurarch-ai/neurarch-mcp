@@ -224,6 +224,14 @@ describe('plan', () => {
     expect(r.sentTo).toBe(`${base}/api/v1/plan`);
   });
 
+  it('forwards seq_len when given and leaves it out when not', async () => {
+    reply = okReply;
+    await call('plan', {});
+    expect('seq_len' in seen[0].body).toBe(false);
+    await call('plan', { seq_len: 4096 });
+    expect(seen[1].body.seq_len).toBe(4096);
+  });
+
   it('sends no Authorization header when there is no key, and says the card has no history line', async () => {
     reply = okReply;
     const r = await call('plan', {});
