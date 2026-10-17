@@ -11,8 +11,9 @@
  * from "always in context" to "one read away".
  */
 export const SHORT: Record<string, string> = {
-  plan: 'Will it run, what it costs, which GPUs it fits, which of your .neurarch.yml rules it breaks, and what this structure scored last time it trained here. Sends the graph to /api/v1/plan. Start here.',
-  history: 'What this exact structure scored last time it trained in your organisation, by fingerprint. Sends the fingerprint, never the graph. Needs NEURARCH_API_KEY.',
+  size_training_job: 'Call BEFORE launching any training job: peak memory at your batch, smallest card that fits, max batch per card, two-card split, run cost. Calibrated, 8% median error. Offline.',
+  plan: 'The card the CI bot posts: memory, GPU fit, cost, whether it runs, your .neurarch.yml rules, last run here. Sends the graph to /api/v1/plan.',
+  history: 'What this exact structure measured last time it trained in your organisation. Sends the fingerprint, never the graph. Needs NEURARCH_API_KEY.',
   get_model_summary: 'Layer count, total params, dominant layer types, input/output shape. Cheapest orientation.',
   describe_architecture: 'One-call orientation: pipeline order, depth, IO shapes, params and MACs, top hotspots, validation. Start here.',
   get_layer: 'Everything about one layer by name: type, params, shapes, upstream and downstream.',
@@ -27,19 +28,19 @@ export const SHORT: Record<string, string> = {
   diff_models: 'Structural diff against another .neurarch.json: layers added, removed, modified; connection changes.',
   validate_model: 'Is this a well-formed graph: cycles, dangling refs, duplicate ids or names, orphans. First rung of the ladder.',
   lint_model: 'The structural design rules (head-dim and GQA divisibility, norm/activation order, dropout ranges, missing residuals) with provenance for the measured ones. Second rung. Offline.',
-  check_design: 'The full verdict: will it train, what it costs, where it can run, and which decisions are still the human\'s. Third rung. Offline, ~10ms. verbose:true adds every stage\'s data.',
+  check_design: 'The full verdict: will it train, cost, where it can run, decisions still the human\'s. Third rung. Offline. verbose:true adds stage data.',
   find_path: 'Shortest directed path between two layers, or null.',
   list_connections: 'The edge list, optionally filtered by from/to.',
   list_hyperparams: 'Model-level hyperparameters the user set in the app.',
   get_design_notes: 'Pinned design rationale from the app, optionally per layer.',
-  rank_designs: 'Order candidate designs for a training budget: blocked (will not forward-pass) last, legal ones only by outcome-backed rules, ties stay ties, calibration in every result.',
+  rank_designs: 'Order candidate designs: ones that will not forward-pass last; legal ones by outcome-backed rules only, so ties stay ties. Not a quality prediction.',
   export_pytorch: 'The graph as a runnable nn.Module. save_to needs --write and never targets the source file.',
   list_architectures: 'Search 81 bundled reference architectures (DeepSeek-V3, Qwen2.5, Llama, Whisper, CLIP, BERT, ViT, ResNet...). Then model_path "zoo:<id>" on any tool.',
   load_architecture: 'Open one reference architecture and describe it; save_to (with --write) writes it as .neurarch.json.',
   load_hf_model: 'A Hugging Face repo as a graph from its config.json (the one network call; listed only under --hf). Says whether it used the real config or a family template.',
   find_models: 'Walk a directory for nn.Module definitions and saved graphs; says which parse fully, partially, or need a runtime trace.',
   suggest_fix: 'Lint findings as unified diffs against the .py: exact where a number or order is pinned, proposal where a layer is missing. Apply, then lint again.',
-  trace_model: 'Run the model once in Python with hooks (neurarch-trace) for a graph with real shapes; needs the input dims. The way in for a real repository: the static parser is recognisable on 41% of real files.',
+  trace_model: 'Run the model once in Python (neurarch-trace) for a graph with real shapes; needs input dims. The way in for a real repository: static parsing reads 41% of real files.',
   add_layer: 'Insert a new layer, optionally wired after an existing one.',
   modify_layer: 'Shallow-merge params, rename, or re-scope a layer. Returns a before/after diff.',
   add_connection: 'Wire two existing layers.',
@@ -49,6 +50,7 @@ export const SHORT: Record<string, string> = {
 };
 
 export const TITLES: Record<string, string> = {
+  size_training_job: 'Size a training job',
   plan: 'Plan this design',
   history: 'Training history',
   get_model_summary: 'Model summary',

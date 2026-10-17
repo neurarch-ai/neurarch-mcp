@@ -21,7 +21,8 @@ export interface PromptDef {
 }
 
 const GROUND_RULES = `Ground rules for this session:
-- Every number you state (parameters, FLOPs, shapes, layer counts) must come from a tool result in this conversation, never from memory of similar models.
+- Every number you state (parameters, FLOPs, shapes, layer counts, memory) must come from a tool result in this conversation, never from memory of similar models.
+- Before any training job is launched, size it with size_training_job (batch, card, attention) and quote its verdict; its memory number is a calibrated estimate, so say so.
 - Climb the ladder in order and stop at the first rung that fails: validate_model (is it a graph), lint_model (does it break a design rule), check_design (will it train, what will it cost, where can it run).
 - Before recommending any change to a layer, call layer_impact on it and say which downstream layers are shape-sensitive or carry weights.
 - Quote the provenance lint_model returns for a rule when you cite it; a rule with no measurement behind it is a convention, and say so.`;
@@ -46,18 +47,20 @@ Procedure:
   {
     name: 'pre_train_checklist',
     title: 'Pre-training checklist',
-    description: 'The checks worth running before spending GPU time: structural, design rules, cost, GPU fit, and what is still unknown about the graph.',
+    description: 'The checks worth running before spending GPU time: memory and GPU fit at your batch, cost, what this structure measured last time, then whether it forward-passes.',
     render: () => `Run the pre-training checklist for the model this server is attached to.
 
 ${GROUND_RULES}
 
 Produce a checklist with a pass / fail / unknown mark per line, each line backed by the tool that decided it:
+- Fits the card the job will reserve at its batch (size_training_job: quote the verdict, the peak and its parts, the max batch on that card, and the smallest card that holds it; ask for the batch and card if you do not know them)
+- One run's cost (size_training_job cost, with its assumptions)
+- What this structure measured the last time it trained (history, with the fingerprint size_training_job returned; "not read" if there is no key)
 - Graph is well-formed (validate_model)
 - No blocking design rule (lint_model, severity block)
 - No warning worth fixing first (lint_model, severity warn; list them)
 - Forward pass will run (check_design preflight stage)
-- Estimated parameters and training cost (check_design train stage)
-- Fits the intended GPU (check_design; if the stage reports the smallest GPU it fits, say which)
+- Estimated parameters (check_design train stage)
 - Shapes are known end to end (get_model_summary: if the model came from Python source, shapes are unknown and this line is "unknown", with the fix: trace it with neurarch-trace or export from the app)
 - Decisions still owed by the human (check_design.decision)
 Then say in one sentence whether you would start the run, and what you would change first if not.`,
@@ -72,7 +75,7 @@ Then say in one sentence whether you would start the run, and what you would cha
 ${GROUND_RULES}
 
 Procedure:
-1. describe_architecture and param_count_by_block / flops_by_block to find where the budget actually lives. Do not guess at it.
+1. describe_architecture and param_count_by_block / flops_by_block to find where the budget actually lives. Do not guess at it. If the budget is memory or a card, size_training_job gives the peak, its parts and the max batch per card first: a smaller batch or SDPA attention may meet it with no edit at all.
 2. Propose at most three concrete variants (for example: fewer blocks, narrower embedding, fewer heads with the same head_dim, a lighter head). For each, call layer_impact on the layers it changes and state the blast radius.
 3. ${writeEnabled
         ? 'Apply each variant with the write tools in turn, lint_model and check_design it, and record its parameter count and cost. Restore the original between variants (delete/re-add or modify_layer back). Do not save_model until the user picks one.'

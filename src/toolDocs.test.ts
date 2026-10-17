@@ -17,6 +17,8 @@ describe('tool descriptions', () => {
     // set: two tools an agent should reach for first are worth ~0.7k a turn,
     // and the cap is raised deliberately rather than quietly. It is still a
     // cap: the next tool pays for itself out of somebody else's description.
+    // size_training_job did (~0.35k): rank_designs left the core listing, and
+    // the plan, trace, rank and find_layers schemas were trimmed to fit.
     const core = JSON.stringify(listedTools(true, 'core')).length / 4;
     const full = JSON.stringify(listedTools(true, 'full')).length / 4;
     expect(core).toBeLessThan(4800);

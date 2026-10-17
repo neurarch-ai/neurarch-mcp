@@ -90,6 +90,10 @@ Environment:
   NEURARCH_API        Override the API host (default https://www.neurarch.com).
                       The same variable neurarch-trace uses.
 
+  Before a training job launches, size_training_job answers what it needs:
+  the calibrated training peak at the batch, the smallest card, max batch per
+  card, a two-card split and one run's cost. Offline.
+
   Two tools reach the network when you call them, and they say so in their
   descriptions: plan POSTs the graph to /api/v1/plan for the same card the CI
   bot posts, and history sends an 8-character structural fingerprint (never the

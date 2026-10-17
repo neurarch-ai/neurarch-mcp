@@ -1,6 +1,6 @@
 # neurarch-mcp
 
-**PyTorch MCP server: lint, verify and rank a neural network design before you train it, from Claude Code, Cursor, Claude Desktop, VS Code, Windsurf or Codex.**
+**Before a training job takes a GPU reservation, your agent learns what it actually needs and what it will cost. An MCP server for Claude Code, Cursor, Claude Desktop, VS Code, Windsurf and Codex.**
 
 [![CI](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
@@ -11,9 +11,11 @@
 [![smithery badge](https://smithery.ai/badge/neurarch-ai/neurarch-mcp)](https://smithery.ai/servers/neurarch-ai/neurarch-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 
-Your coding agent reads your model as source text, so it guesses at shapes, parameter counts, and what an edit breaks. `neurarch-mcp` hands it the structured graph instead, plus the verifier: **the design rules, the full readiness / cost / deployment verdict, and which of several candidate designs is worth the GPU time.** Trace the model to get real shapes, or point it at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account.
+Call `size_training_job` before a job launches and the agent learns, for the model, batch and card in front of it: **the peak memory** (weights and optimizer state, activations, stored attention scores, each shown), **the smallest card that holds it**, **the largest batch each card holds**, a two-card split when one card does not, **what one run costs**, and a one-line verdict such as `will not fit a T4: needs ~21 GB with headroom (peak 18 GB) at batch 32, seq 2048, use L4 or batch <= 21`. `history` adds **what that structure measured the last time it ran** in your organisation. Then whether it forward-passes: the structural checks the CI bot runs (`lint_model`, `check_design`), offline too. It answers the same whether a person or an agent wrote the job, which is the question the person who owns the GPU bill is asking.
 
-The two that do not are the point of the other half of this README. A frontier model can read your architecture and reason about it; what it structurally cannot do is tell you **what happened the last time this exact structure trained here**. That is not in the weights and not in the repository. `plan` and `history` read it from your organisation's ledger, and they are the only tools in this package that open a socket.
+The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.26 x 16 bytes per parameter, plus 1.57 x the bf16 size of every layer output, plus 3.47 x the bf16 size of stored attention scores (eager attention only; SDPA and flash keep none). Fitted on 141 measured runs across 44 architectures. Held out one architecture at a time, the median error is 8% on runs above 1 GB, and the fits / does-not-fit verdict on 16, 24, 40 and 80 GB cards agrees with measurement 98% of the time. Recurrent cells are under-counted, and the tool says so when the graph has one.
+
+Get the graph by tracing the model for real shapes, or point the server at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account. The two that do not, `plan` and `history`, read what a frontier model structurally cannot know: what happened the last time this exact structure trained here. That is not in the weights and not in the repository. They are the only tools in this package that open a socket.
 
 [![neurarch-mcp answering a model-structure question, every number from a tool call](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo.gif)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
 
@@ -33,7 +35,26 @@ Per-client config for Claude Desktop, Cursor, VS Code, Windsurf and Codex is [be
 
 ## What it looks like
 
-A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json):
+An agent about to launch a fine-tune on a T4, against [`src/test/templates/phi3-mini.neurarch.json`](./src/test/templates/phi3-mini.neurarch.json) (a 310M-parameter Phi-3 block, one of the Neurarch app's templates). The output is the tool's, trimmed:
+
+```
+Agent ▸ (calls size_training_job { batch_size: 32, gpu: "T4" })
+  verdict        will not fit a T4: needs ~21 GB with headroom (peak 18 GB) at batch 32,
+                 seq 2048, use L4 or batch <= 21
+  memory         peak 17.91 GB = 6.26 weights + optimizer state, 11.66 activations
+                 (SDPA: the 29.81 GB of attention scores eager would keep are not counted)
+  maxBatch       T4 21, L4 40, A10G 40, A100-40 78, L40S 97, A100-80 173, H100-80 173
+  cost           $9.68 on a T4, 10 epochs over 50,000 samples (assumed; pass samples)
+  forwardPasses  legal, no blockers
+  lastRun        fingerprint 4e0b97b4: call history for what it measured last time
+
+  (same job, attention: "eager", gpu: "A100-40")
+  verdict        will not fit an A100-40: needs ~55 GB with headroom (peak 48 GB) at batch 32,
+                 seq 2048, use A100-80 or batch <= 22
+  twoCardSplit   2 x A100-40: embed..attn 34.45 GB | residual_1..lm_head 13.27 GB
+```
+
+A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json), about where the budget lives:
 
 ```
 You ▸ Where does the parameter budget live, and is it safe to drop block_1?
@@ -53,7 +74,7 @@ Claude ▸ (calls describe_architecture)
   embedding/head would do far more.
 ```
 
-And the one this server is built around. Point it at [`examples/tiny-vit.py`](./examples/tiny-vit.py), plain PyTorch source with a bug planted in it, and ask *"lint this model"*:
+And whether it forward-passes. Point it at [`examples/tiny-vit.py`](./examples/tiny-vit.py), plain PyTorch source with a bug planted in it, and ask *"lint this model"*:
 
 ```
 block  head-dim-divisibility [attn:multiHeadAttention]: embed dim (258) must be
@@ -72,7 +93,7 @@ That is a runtime crash sitting in source that reads fine, found offline in mill
 
 A `.neurarch.json` saved from the [Neurarch app](https://neurarch.com) (**File → Save**) is the fourth, and carries shapes, groups and design notes. Add `--watch` so the agent sees app-side saves without a restart.
 
-**The flow this server is built around**, in one line each: `trace_model` for a graph with real shapes, `plan` for the card that says whether to spend the GPU time, `lint_model` / `check_design` for the offline detail behind it, `suggest_fix` for the edit. Everything else answers a question one of those raised.
+**The flow this server is built around**, in one line each: `size_training_job` before any job launches, `history` for what that structure measured last time, `trace_model` for a graph with real shapes, `plan` for the card the CI bot posts, `lint_model` / `check_design` for whether it forward-passes, `suggest_fix` for the edit. Everything else answers a question one of those raised.
 
 ### What the static parser can read
 
@@ -84,29 +105,35 @@ Every read tool also takes an optional `model_path`, so **one server covers a wh
 
 ## Tools
 
-### Start here: the plan card, and the memory behind it
+### Start here: size the job before it launches
 
-These two are the front door, and the only two tools in this package that reach the network. `plan` is the artifact: the same card the [Neurarch CI bot](https://github.com/neurarch-ai/neurarch-bot) posts on a pull request and the `neurarch-trace` CLI prints, so the agent and the reviewer read the same words about the same graph.
+| Tool | Answers |
+|---|---|
+| `size_training_job` | **What a training job needs before it takes a GPU reservation.** Inputs: the model (the server's, `model_path` to a `.py`, a traced `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`, or `hf_id`), `batch_size`, and optionally `gpu` (`"A100-40"`, `"H100"`, `"8xH100"`), `seq_len`, `attention` (`sdpa` default, `flash`, `eager`), `epochs` and `samples` for the price. Returns the training peak at that batch with its weights-and-optimizer, activation and attention-score parts; the smallest card that holds it with 1.15x headroom; the largest batch on each of T4, L4, A10G, L40S, A100-40, A100-80 and H100-80; a two-card split when one card does not hold it; one run's cost on the requested card or the cheapest that fits; a verdict line; whether the graph forward-passes; the structural fingerprint for `history`; and the held-out accuracy sentence. An N-card request is read both as plain DDP (a full copy per card at the per-device batch) and as sharded FSDP / ZeRO-3. Computed by the same `buildPlan` the Neurarch app, the CI bot and `POST /api/v1/plan` run, vendored, offline. A graph that feeds a hidden-state or image tensor into a token embedding is refused rather than sized, because the number would be wrong by the hidden width. |
+
+### The plan card, and the memory behind it
+
+These two are the only two tools in this package that reach the network. `plan` is the artifact: the same card the [Neurarch CI bot](https://github.com/neurarch-ai/neurarch-bot) posts on a pull request and the `neurarch-trace` CLI prints, so the agent and the reviewer read the same words about the same graph.
 
 | Tool | Answers | Sends |
 |---|---|---|
 | `plan` | **Will it run, what will it cost, which GPUs does it fit, which of your repository's own rules does it break, what changed against a base design, and what happened last time this structure trained here.** `text` comes back verbatim. Policy lines are read from the repository's `.neurarch.yml` (the same file the CI bot reads, merged the same way) unless you pass `policy`; `base_path` adds a diff. `NEURARCH_API_KEY` is optional and adds the history line. `share` is pinned to false: an agent cannot publish your design. | The graph, to `POST /api/v1/plan`. This is the one tool that sends the model. |
-| `history` | **What this exact structure scored the last time it trained inside your organisation**: metric, epochs, wall time, cost, newest first, at most 20. Keyed by the graph's 8-character structural fingerprint, so it answers about the shape rather than the file and two people who arrived at the same architecture see the same runs. Pass `model_path`, or a `fingerprint` straight from a plan result. | The fingerprint and your key. **Never the graph.** |
+| `history` | **What this exact structure measured the last time it trained inside your organisation**: metric, epochs, wall time, cost, newest first, at most 20. Keyed by the graph's 8-character structural fingerprint, so it answers about the shape rather than the file and two people who arrived at the same architecture see the same runs. Pass `model_path`, or a `fingerprint` straight from a plan result. | The fingerprint and your key. **Never the graph.** |
 
 Why these exist: a frontier model reading your code can reason about the architecture, and cannot know that this shape trained here three days ago and reached 98.65% in 34 seconds for under a cent. That fact is not in the weights, not in the repository, and not derivable from the graph.
 
 **Without `NEURARCH_API_KEY`, `history` makes no request and says so.** It does not return an empty list: an unread ledger and an empty one are different answers, and only one of them means nobody has trained this. Keys come from [neurarch.com/developer](https://www.neurarch.com/developer).
 
-### Then the offline ladder
+### Then whether it forward-passes: the offline ladder
 
-Four tools grade the model, and they are a ladder worth climbing in order. Each is free, offline and instant; `check_design` runs five pipeline stages, so an agent that starts at the top still pays for an answer two thirds of which a cheaper tool had.
+Across three datasets we found agents rarely write a structurally illegal model, and the one failure a structure-focused agent hit in our experiment was an out-of-memory, which is why sizing comes first. When the structure is in question, these grade it, and they are a ladder worth climbing in order. Each is free, offline and instant; `check_design` runs five pipeline stages, so an agent that starts at the top still pays for an answer two thirds of which a cheaper tool had.
 
 | | Tool | Answers |
 |---|---|---|
 | 1 | `validate_model` | Is this a well-formed graph at all: cycles, dangling refs, duplicate names, orphans. |
 | 2 | `lint_model` | Does it break a design rule: attention head-dim and GQA divisibility, norm/activation ordering, dropout and feature ranges, missing residuals in deep stacks, the shape rules decidable statically. Returns `provenance`: for every rule that fired and has a published measurement behind it, the measurement. A rule with no number is absent rather than dressed up. |
 | 3 | `check_design` | Will it train, what will it cost, where can it run: readiness, parameter and cost estimates, the best deployment target and its latency, and the decisions still left to the human. Same code path as the app and `POST /api/v1/check`. |
-| 4 | `rank_designs` | **Which of k candidate designs deserves the training budget.** Candidates are paths, `zoo:`/`hf:` refs or inline graphs. Blocked ones (a pre-flight finding that means the graph will not forward-pass) rank last and come back as reclaimable budget; that part is measured, 96 of 96 blocked graphs crashed PyTorch forward and 80 of 80 passes ran. Legal candidates are ordered only by rules with a trained outcome behind them, and **a tie stays a tie**: `recommended` is null when nothing measured separates the top, which is the common answer. Params, cost and GPU fit are returned per candidate for you to break ties on your own budget; they never order on their own, but `tie_break: "cost"` or `"params"` will break a measured tie on them, echoed and labelled as your rule with `measuredRank` kept. `calibration` ships inside every result (pairwise accuracy 51.4% at 8.3% coverage, in-sample, not quotable; out of sample the score abstained on 11 of 15 pairs while Claude Opus 5 reading the code got 12 of 15 and always picking the larger design got 11 of 15), so the ordering cannot be read as a quality prediction. |
+| 4 | `rank_designs` | Orders k candidate designs. Candidates are paths, `zoo:`/`hf:` refs or inline graphs. Blocked ones (a pre-flight finding that means the graph will not forward-pass) rank last and come back as reclaimable budget; that part is measured, 96 of 96 blocked graphs crashed PyTorch forward and 80 of 80 passes ran. Legal candidates are ordered only by rules with a trained outcome behind them, and **a tie stays a tie**: `recommended` is null when nothing measured separates the top, which is the common answer. Params, cost and GPU fit are returned per candidate for you to break ties on your own budget; they never order on their own, but `tie_break: "cost"` or `"params"` will break a measured tie on them, echoed and labelled as your rule with `measuredRank` kept. `calibration` ships inside every result (pairwise accuracy 51.4% at 8.3% coverage, in-sample, not quotable; out of sample the score abstained on 11 of 15 pairs while Claude Opus 5 reading the code got 12 of 15 and always picking the larger design got 11 of 15), so the ordering cannot be read as a quality prediction. |
 
 | 5 | `suggest_fix` | **The finding as a change to the file.** A unified diff per finding: `exact` where the rule pins a number or an order (the head-dim crash above becomes a 7-line diff that changes every `258` to `256`), `proposal` where a layer is missing. Apply, then lint again. |
 
@@ -302,7 +329,8 @@ A new tool is a small, self-contained PR: see [CONTRIBUTING.md](./CONTRIBUTING.m
 ## What this is not
 
 - **Not a generic codebase indexer.** It reads model definitions (`.py`, `.neurarch.json`, `zoo:`, `hf:`), not your whole tree. For codebase structure, use [GitNexus](https://github.com/abhigyanpatwari/GitNexus) or similar.
-- **Not a trainer.** It tells you whether a run would start, what it would cost and where the result could be served; it never spends your GPU time. `check_design` says when a decision is yours.
+- **Not a trainer.** It tells you what a run needs, whether it would start, what it would cost and where the result could be served; it never spends your GPU time.
+- **Not a measurement.** `size_training_job` is a calibrated estimate (8% median error held out, above 1 GB); it is not a profiler, and a job using an optimizer other than AdamW, or no bf16 autocast, will differ. `check_design` says when a decision is yours.
 - **Not connected to your Neurarch workspace.** It reads files. Live editing happens in the [Neurarch app](https://neurarch.com); `--watch` follows its saves.
 
 ## Issues & Feedback

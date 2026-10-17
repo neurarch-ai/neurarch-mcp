@@ -2,7 +2,14 @@
 
 Capability map for the official [neurarch-mcp](https://github.com/neurarch-ai/neurarch-mcp) server. The connected server's tool schemas are authoritative for exact payloads; this file tells you which tool answers which question and in what order to prefer them. MCP hosts may prefix tool names (for example `mcp__neurarch__get_layer`); match the terminal name.
 
-## Orientation (call these first)
+## Before any training job launches (call this first)
+
+| Tool | Use for |
+|:--|:--|
+| `size_training_job` | Call BEFORE submitting or launching any training job. Takes `batch_size`, optional `gpu` ("A100-40", "H100", "8xH100"), `seq_len`, `attention` (sdpa default, flash, eager). Returns the training peak with its parts, the smallest card that holds it, max batch per card, a two-card split when one card does not, one run's cost, a verdict line, whether the graph forward-passes, and the fingerprint for `history`. A calibrated estimate under AdamW with bf16 autocast (held-out median error 8% above 1 GB, card verdict 98% agreement); quote it as an estimate. |
+| `history` | What this structure measured the last time it trained in the organisation, by the fingerprint `size_training_job` returns. Needs `NEURARCH_API_KEY`; sends the fingerprint, never the graph. |
+
+## Orientation
 
 | Tool | Use for |
 |:--|:--|
@@ -62,7 +69,7 @@ If these six tools are absent, the server is read-only. Stop before mutating and
 
 | Question | Tool | Notes |
 |:--|:--|:--|
-| Which of these candidate designs deserves the training budget? | `rank_designs` | Blocked candidates last; ties stay ties; `recommended` is null when nothing measured separates the top. Read `calibration` before quoting the order. |
+| Order several candidate designs | `rank_designs` | Blocked candidates last; ties stay ties; `recommended` is null when nothing measured separates the top. Read `calibration` before quoting the order. |
 | Give me the graph as code | `export_pytorch` | Returns source; `save_to` only under `--write`, never over the file the server was started from. |
 | What published architecture is this closest to? | `list_architectures`, `load_architecture` | 81 bundled graphs; then `model_path: "zoo:<id>"` on any read tool. |
 | What does this Hugging Face model look like? | `load_hf_model` | Listed only under `--hf`; the one network call. `configSource: "fallback"` means a family template, not the real dimensions. |

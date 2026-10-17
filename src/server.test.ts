@@ -333,14 +333,17 @@ describe('model_source and zoo: routing', () => {
     expect(tools.length).toBe(CORE_TOOLS.length);
     expect(tools.length).toBeLessThan(TOOLS.length);
     // The listing order is the recommendation, so it is the CORE_TOOLS order
-    // and not the registry's: an agent picks by scanning, and trace-then-plan
-    // is the path a real repository should take.
+    // and not the registry's: an agent picks by scanning, and size-then-trace-
+    // then-plan is the path a job about to take a GPU should take.
     expect(tools.map(t => t.name)).toEqual([...CORE_TOOLS]);
-    expect(tools.map(t => t.name).slice(0, 2)).toEqual(['trace_model', 'plan']);
-    expect(tools.map(t => t.name)).toContain('rank_designs');
+    expect(tools.map(t => t.name).slice(0, 3)).toEqual(['size_training_job', 'trace_model', 'plan']);
+    // Ranking left the headline listing; it is still one call away by name.
+    expect(tools.map(t => t.name)).not.toContain('rank_designs');
     expect(tools.map(t => t.name)).not.toContain('list_connections');
     const r = await client.callTool({ name: 'list_connections', arguments: {} });
     expect(r.isError).toBeFalsy();
+    const ranked = await client.callTool({ name: 'rank_designs', arguments: { candidates: [{ model: model }], include_current: true } });
+    expect(ranked.isError).toBeFalsy();
   });
 });
 
