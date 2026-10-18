@@ -234,7 +234,7 @@ The [`neurarch`](https://www.npmjs.com/package/neurarch) CLI runs the estimate t
 
 ![npx neurarch rightsize over six sample jobs: four over, one right-sized, one under](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/rightsize.gif)
 
-<sub>Real output: `rightsize` from `neurarch` 0.1.1 on the `examples/jobs.sample.csv` it ships, columns cut; the data-fit block trimmed, sentences the CLI's own.</sub>
+<sub>Real output, every string verbatim: `rightsize` from `neurarch` 0.1.1 on the `examples/jobs.sample.csv` it ships, with columns cut; the data-fit run cut to its data-fit block, long sentences wrapped and none reworded.</sub>
 
 ### A Claude Code hook: refuse the launch that will not fit
 
