@@ -5218,14 +5218,6 @@ var BY_ID = new Map(GPU_HARDWARE.map((g) => [g.id, g]));
 function gpuById(id) {
   return BY_ID.get(id);
 }
-var PRECISION_BYTES = {
-  fp32: 4,
-  bf16: 2,
-  fp16: 2,
-  fp8: 1,
-  int8: 1,
-  int4: 0.5
-};
 function peakFlopsPerSec(gpu, precision = "bf16") {
   return (precision === "fp32" ? gpu.fp32TFLOPS : gpu.bf16TFLOPS) * 1e12;
 }
@@ -5898,146 +5890,6 @@ var GPU_SPECS = GPU_HARDWARE.filter((g) => g.tier !== "apple" && g.tier !== "tpu
   peakFP32TFLOPS: g.fp32TFLOPS,
   memBandwidthGBs: g.memBandwidthGBs
 }));
-var UTILIZATION_FACTOR = 0.4;
-var BANDWIDTH_UTILIZATION = 0.8;
-var BACKWARD_MULTIPLIER = 2;
-function paramCountFor(c) {
-  const p = c.params || {};
-  const n2 = (v, fb = 0) => {
-    const x = typeof v === "number" ? v : Number(v);
-    return isFinite(x) && x > 0 ? x : fb;
-  };
-  switch (c.type) {
-    case "linear": {
-      const inF = n2(p.inFeatures);
-      const outF = n2(p.outFeatures);
-      const bias = p.bias === false ? 0 : 1;
-      return inF * outF + bias * outF;
-    }
-    case "conv2d":
-    case "conv3d":
-    case "transposeConv2d":
-    case "dilatedConv2d": {
-      const Cin = n2(p.inChannels);
-      const Cout = n2(p.outChannels);
-      const k = n2(p.kernelSize, 3);
-      const kSpatial = c.type === "conv3d" ? k * k * k : k * k;
-      const groups = n2(p.groups, 1);
-      return Cin / groups * Cout * kSpatial + Cout;
-    }
-    case "conv1d": {
-      const Cin = n2(p.inChannels);
-      const Cout = n2(p.outChannels);
-      const k = n2(p.kernelSize, 3);
-      return Cin * Cout * k + Cout;
-    }
-    case "depthwiseConv2d": {
-      const Cin = n2(p.inChannels);
-      const dm = n2(p.depthMultiplier, 1);
-      const k = n2(p.kernelSize, 3);
-      return Cin * dm * k * k + Cin * dm;
-    }
-    case "separableConv2d": {
-      const Cin = n2(p.inChannels);
-      const Cout = n2(p.outChannels, Cin);
-      const k = n2(p.kernelSize, 3);
-      return Cin * k * k + Cin * Cout + Cout;
-    }
-    case "embedding": {
-      const vocab = n2(p.numEmbeddings ?? p.vocabSize);
-      const dim = n2(p.embeddingDim ?? p.embedDim);
-      return vocab * dim;
-    }
-    case "embeddingBag": {
-      const vocab = n2(p.vocabSize);
-      const dim = n2(p.embeddingDim);
-      return vocab * dim;
-    }
-    case "positionalEncoding":
-    case "learnedPositionalEmbedding": {
-      const maxLen = n2(p.maxLen, 512);
-      const dim = n2(p.embedDim ?? p.embeddingDim ?? p.dModel, 768);
-      return maxLen * dim;
-    }
-    case "multiHeadAttention":
-    case "selfAttention":
-    case "causalAttention": {
-      const dim = n2(p.embedDim ?? p.hiddenDim, 768);
-      return 4 * dim * dim + 4 * dim;
-    }
-    case "groupedQueryAttention": {
-      const dim = n2(p.embedDim, 768);
-      const heads = n2(p.numHeads, 8);
-      const kvHeads = n2(p.numKVHeads, heads);
-      const headDim = n2(p.headDim, heads > 0 ? dim / heads : 64);
-      const qDim = heads * headDim;
-      const kvDim = kvHeads * headDim;
-      return dim * qDim + 2 * dim * kvDim + qDim * dim;
-    }
-    case "feedForward": {
-      const dim = n2(p.embedDim ?? p.hiddenDim, 768);
-      const ffDim = n2(p.ffDim ?? p.intermediateSize, dim * 4);
-      return dim * ffDim + ffDim * dim + ffDim + dim;
-    }
-    case "swiglu": {
-      const dim = n2(p.embedDim, 768);
-      const ffDim = n2(p.intermediateSize ?? p.ffDim, dim * 8 / 3);
-      return 3 * dim * ffDim + ffDim + dim;
-    }
-    case "transformerBlock": {
-      const dim = n2(p.hiddenDim ?? p.embedDim, 768);
-      const ffDim = n2(p.ffDim, dim * 4);
-      return 4 * dim * dim + 2 * dim * ffDim + 4 * dim;
-    }
-    case "lstm":
-    case "bidirectionalLSTM": {
-      const inF = n2(p.inFeatures);
-      const hidden = n2(p.hiddenSize);
-      const layers = n2(p.numLayers, 1);
-      const bidir = c.type === "bidirectionalLSTM" ? 2 : 1;
-      return bidir * layers * 4 * (inF + hidden + 1) * hidden;
-    }
-    case "gru":
-    case "bidirectionalGRU": {
-      const inF = n2(p.inFeatures);
-      const hidden = n2(p.hiddenSize);
-      const layers = n2(p.numLayers, 1);
-      const bidir = c.type === "bidirectionalGRU" ? 2 : 1;
-      return bidir * layers * 3 * (inF + hidden + 1) * hidden;
-    }
-    case "rnn": {
-      const inF = n2(p.inFeatures);
-      const hidden = n2(p.hiddenSize);
-      return (inF + hidden + 1) * hidden;
-    }
-    case "batchNorm":
-    case "layerNorm":
-    case "rmsNorm":
-    case "instanceNorm":
-    case "groupNorm": {
-      const ns = p.normalizedShape;
-      const num2 = Array.isArray(ns) ? ns.reduce((a, b) => a * b, 1) : n2(ns, 0);
-      return c.type === "rmsNorm" ? num2 : 2 * num2;
-    }
-    case "rope":
-    case "alibi":
-      return 0;
-    // No learned params
-    case "patchEmbed": {
-      const Cin = n2(p.inChans, 3);
-      const dim = n2(p.embedDim, 768);
-      const patch = n2(p.patchSize, 16);
-      return Cin * dim * patch * patch + dim;
-    }
-    default:
-      return 0;
-  }
-}
-function activationBytesFor(c, outputShape, bytesPerValue) {
-  if (!outputShape || outputShape.length === 0) return 0;
-  const elements = outputShape.reduce((a, b) => a * b, 1);
-  return elements * bytesPerValue;
-}
 function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
   const p = c.params || {};
   const n2 = (v, fb = 0) => {
@@ -6092,183 +5944,6 @@ function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
 }
 function kvBytesPerTokenForModel(model, bytesPerValue = 2, seqLen) {
   return model.components.reduce((s, c) => s + kvCachePerTokenFor(c, bytesPerValue, seqLen), 0);
-}
-var SCORE_ATTENTION_TYPES = /* @__PURE__ */ new Set([
-  "multiHeadAttention",
-  "selfAttention",
-  "causalAttention",
-  "groupedQueryAttention",
-  "localAttention",
-  "transformerBlock"
-]);
-function attentionScratchPerSampleFor(c, seqLen, bytesPerValue) {
-  if (!SCORE_ATTENTION_TYPES.has(c.type)) return 0;
-  const p = c.params || {};
-  if (p.flashAttention === true) return 0;
-  const num2 = (v, fb) => {
-    const x = typeof v === "number" ? v : Number(v);
-    return isFinite(x) && x > 0 ? x : fb;
-  };
-  const heads = num2(p.numHeads, 8);
-  const window = c.type === "localAttention" ? num2(p.windowSize, seqLen) : seqLen;
-  const keyPositions = Math.min(seqLen, window);
-  return heads * seqLen * keyPositions * bytesPerValue;
-}
-function estimateModelCost(arch, inputs) {
-  const bpv = PRECISION_BYTES[inputs.precision] ?? 2;
-  const seqLen = inputs.seqLen ?? 1;
-  const batch = inputs.batchSize;
-  const layers = [];
-  for (const c of arch.components) {
-    const inputShape = c.inputShape ?? [];
-    const outputShape = c.outputShape ?? [];
-    const paramCount2 = paramCountFor(c);
-    const flopsMAC2 = estimateLayerFlops(c.type, c.params || {}, inputShape, outputShape);
-    const activationBytes2 = activationBytesFor(c, outputShape, bpv);
-    const bytesMoved = paramCount2 * bpv + activationBytes2;
-    layers.push({
-      componentId: c.id,
-      name: c.name,
-      type: c.type,
-      paramCount: paramCount2,
-      flopsMAC: flopsMAC2,
-      activationBytes: activationBytes2,
-      kvCachePerToken: kvCachePerTokenFor(c, bpv, seqLen),
-      arithmeticIntensity: bytesMoved > 0 ? flopsMAC2 * 2 / bytesMoved : 0,
-      attentionScratchBytes: attentionScratchPerSampleFor(c, seqLen, bpv)
-    });
-  }
-  const sortedLayers = [...layers].sort((a, b) => b.flopsMAC - a.flopsMAC);
-  const paramCount = layers.reduce((s, l) => s + l.paramCount, 0);
-  const paramBytes = paramCount * bpv;
-  const activationBytes = layers.reduce((s, l) => s + l.activationBytes, 0);
-  const activationBytesWithBatch = activationBytes * batch;
-  const attentionScratchBytes = layers.reduce((s, l) => s + l.attentionScratchBytes, 0);
-  const attentionScratchBytesWithBatch = attentionScratchBytes * batch;
-  const kvCacheBytesPerSeq = layers.reduce((s, l) => s + l.kvCachePerToken, 0) * seqLen;
-  const flopsMAC = layers.reduce((s, l) => s + l.flopsMAC, 0);
-  const flopsForwardPerStep = flopsMAC * 2 * batch;
-  const flopsBackwardPerStep = flopsForwardPerStep * BACKWARD_MULTIPLIER;
-  const flopsTotalPerStep = flopsForwardPerStep + flopsBackwardPerStep;
-  const peftMode = inputs.peft ?? "none";
-  const loraRank = inputs.loraRank ?? 8;
-  const adapterShare = peftMode === "none" ? 1 : Math.min(0.05, 5e-3 * (loraRank / 8));
-  const trainableParamCount = peftMode === "none" ? paramCount : Math.ceil(paramCount * adapterShare);
-  const baseWeightBytes = peftMode === "qlora" ? paramCount * 0.5 : paramCount * bpv;
-  const adapterWeightBytes = peftMode === "none" ? 0 : trainableParamCount * bpv;
-  const weightsBytes = baseWeightBytes + adapterWeightBytes;
-  const gradBytes = trainableParamCount * 4;
-  let optimizerBytes = 0;
-  switch (inputs.optimizer) {
-    case "adam":
-    case "adamw":
-      optimizerBytes = trainableParamCount * 4 * 2 + trainableParamCount * 4;
-      break;
-    case "adamw-8bit":
-      optimizerBytes = trainableParamCount * 1 * 2 + trainableParamCount * 4;
-      break;
-    case "lion":
-      optimizerBytes = trainableParamCount * 4 + trainableParamCount * 4;
-      break;
-    case "lion-8bit":
-      optimizerBytes = trainableParamCount * 1 + trainableParamCount * 4;
-      break;
-    case "schedulefree-adamw":
-      optimizerBytes = trainableParamCount * 4 + trainableParamCount * 4;
-      break;
-    case "sophia":
-      optimizerBytes = trainableParamCount * 4 * 2 + trainableParamCount * 4;
-      break;
-    case "muon":
-      optimizerBytes = trainableParamCount * 4 + trainableParamCount * 4;
-      break;
-    case "sgd":
-      optimizerBytes = 0;
-      break;
-  }
-  const activationPoolWithBatch = activationBytesWithBatch + attentionScratchBytesWithBatch;
-  const activationsForBackward = inputs.gradientCheckpointing ? activationPoolWithBatch * 0.5 : activationPoolWithBatch;
-  const trainingTotal = weightsBytes + gradBytes + optimizerBytes + activationsForBackward;
-  const inferenceActivations = activationBytesWithBatch + attentionScratchBytesWithBatch;
-  const inferenceTotal = weightsBytes + inferenceActivations + kvCacheBytesPerSeq * batch;
-  const stepCalibration = inputs.calibration?.stepSecondsMultiplier ?? 1;
-  const memCalibration = inputs.calibration?.peakMemoryMultiplier ?? 1;
-  const calibratedTrainingTotal = trainingTotal * memCalibration;
-  const calibratedInferenceTotal = inferenceTotal * memCalibration;
-  const trainTrafficBytes = 2 * weightsBytes + // weights read on forward + backward
-  2 * gradBytes + // grads written, then read by optimizer
-  2 * optimizerBytes + // optimizer state read + write
-  2 * activationsForBackward;
-  const inferTrafficBytes = weightsBytes + inferenceActivations + kvCacheBytesPerSeq * batch;
-  const perGpu = GPU_SPECS.map((gpu) => {
-    const hw = GPU_HARDWARE.find((g) => g.id === gpu.id);
-    const rooflineOpts = {
-      computeUtilization: UTILIZATION_FACTOR,
-      memoryUtilization: BANDWIDTH_UTILIZATION
-    };
-    const train = rooflineTime(flopsTotalPerStep, trainTrafficBytes, hw, rooflineOpts);
-    const infer = rooflineTime(flopsForwardPerStep, inferTrafficBytes, hw, rooflineOpts);
-    const trainingStepSeconds = train.seconds * stepCalibration;
-    const inferenceStepSeconds = infer.seconds * stepCalibration;
-    const usableBytes = gpu.memoryGB * 1024 ** 3 * 0.85;
-    const fitsTraining = calibratedTrainingTotal <= usableBytes;
-    const fitsInference = calibratedInferenceTotal <= usableBytes;
-    const trainingHeadroomPct = (usableBytes - calibratedTrainingTotal) / usableBytes * 100;
-    const trainingNote = fitsTraining ? `Fits with ${trainingHeadroomPct.toFixed(0)}% headroom` : `OOM by ${formatBytes(calibratedTrainingTotal - usableBytes)}`;
-    const inferenceNote = fitsInference ? `Fits, ${formatBytes(usableBytes - calibratedInferenceTotal)} free` : `OOM by ${formatBytes(calibratedInferenceTotal - usableBytes)}`;
-    return {
-      gpu,
-      trainingStepSeconds,
-      inferenceStepSeconds,
-      trainingBoundBy: train.boundBy,
-      inferenceBoundBy: infer.boundBy,
-      fitsTraining,
-      fitsInference,
-      trainingHeadroomPct,
-      trainingNote,
-      inferenceNote
-    };
-  });
-  return {
-    layers: sortedLayers,
-    totals: {
-      paramCount,
-      trainableParamCount,
-      paramBytes,
-      activationBytes,
-      activationBytesWithBatch,
-      attentionScratchBytes,
-      attentionScratchBytesWithBatch,
-      kvCacheBytesPerSeq,
-      flopsMAC,
-      flopsForwardPerStep,
-      flopsBackwardPerStep,
-      flopsTotalPerStep
-    },
-    trainingMemory: {
-      weightsBytes,
-      gradBytes,
-      optimizerBytes,
-      activationsBytes: activationsForBackward,
-      totalBytes: trainingTotal
-    },
-    inferenceMemory: {
-      weightsBytes,
-      activationsBytes: inferenceActivations,
-      kvCacheBytes: kvCacheBytesPerSeq * batch,
-      totalBytes: inferenceTotal
-    },
-    perGpu
-  };
-}
-function formatBytes(bytes) {
-  if (!isFinite(bytes) || bytes <= 0) return ", ";
-  const sign = bytes < 0 ? "-" : "";
-  const abs = Math.abs(bytes);
-  if (abs >= 1024 ** 3) return `${sign}${(abs / 1024 ** 3).toFixed(2)} GB`;
-  if (abs >= 1024 ** 2) return `${sign}${(abs / 1024 ** 2).toFixed(1)} MB`;
-  if (abs >= 1024) return `${sign}${(abs / 1024).toFixed(1)} KB`;
-  return `${sign}${abs.toFixed(0)} B`;
 }
 
 // src/utils/quantizationPreview.ts
@@ -6487,23 +6162,20 @@ function resolveGpu(name) {
   if (/^h100/.test(key)) return gpuById("h100-sxm") ?? null;
   return GPU_HARDWARE.find((g) => squash(g.id).startsWith(key)) ?? null;
 }
-var HEADROOM = 1.3;
+var CHANGE_HEADROOM = 1.15;
+var HEADROOM = CHANGE_HEADROOM;
 function evaluateChangeSpec(model, spec, problems, ctx) {
   const blockers = [];
   const warnings = [];
   for (const p of problems) warnings.push({ title: `change: unreadable line (${p})`, stage: "change" });
   let trainableParams = ctx.params;
-  let trainMemGb = ctx.params > 0 ? ctx.fullFootprintGb : null;
-  if (spec.adapter && ctx.params > 0) {
-    const report = estimateModelCost(model, {
-      precision: "bf16",
-      batchSize: Math.max(1, ctx.batchSize),
-      optimizer: "adamw",
-      peft: spec.adapter.peft,
-      loraRank: spec.adapter.rank
-    });
-    trainableParams = report.totals.trainableParamCount;
-    trainMemGb = report.trainingMemory.totalBytes / 1e9;
+  let trainMemGb = null;
+  if (ctx.params > 0) {
+    const peak = ctx.trainingPeak(spec.adapter);
+    if (peak) {
+      trainableParams = peak.trainableParams;
+      trainMemGb = peak.peakGb;
+    }
   }
   const precision = spec.quant?.precision ?? "fp16";
   const weightBytes = ctx.params > 0 ? computeQuantPreview(model).totalBytes[precision] : null;
@@ -6827,7 +6499,7 @@ function readPolicy(input) {
   const raw = input;
   const policy = {};
   const problems = [];
-  const num2 = (k) => {
+  const num3 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     const n2 = typeof v === "string" ? Number(v) : v;
@@ -6855,11 +6527,11 @@ function readPolicy(input) {
     if (typeof raw.must_fit !== "string") problems.push("must_fit: expected a GPU name like A100-40GB");
     else policy.must_fit = raw.must_fit;
   }
-  const mm = num2("max_memory_gb");
+  const mm = num3("max_memory_gb");
   if (mm != null) policy.max_memory_gb = mm;
-  const ml = num2("max_layers");
+  const ml = num3("max_layers");
   if (ml != null) policy.max_layers = ml;
-  const mc = num2("max_cost_usd");
+  const mc = num3("max_cost_usd");
   if (mc != null) policy.max_cost_usd = mc;
   const ft = list("forbid_types");
   if (ft) policy.forbid_types = ft;
@@ -7371,6 +7043,7 @@ function buildPlanUnchecked(model, base, opts) {
     policy = { applied: false, violations: 0 };
   }
   let change = null;
+  const lora = f.params > 0 ? loraTargetsFor(model) : null;
   if (opts.spec != null) {
     const readSpec = readChangeSpec(opts.spec);
     if (!readSpec) {
@@ -7380,7 +7053,7 @@ function buildPlanUnchecked(model, base, opts) {
       change = evaluateChangeSpec(model, readSpec.spec, readSpec.problems, {
         baseFingerprint: architectureHashFromJson(model) ?? "",
         baseLegal: withheld ? null : f.blockers.length === 0,
-        fullFootprintGb: f.footprintGb,
+        trainingPeak: (adapter) => trainingPeakFor({ params: f.params, peakGb: f.peakGb, activationGb: f.activationGb, lora }, adapter),
         params: f.params,
         estCostUsd: f.estCostUsd,
         batchSize: f.batchSize
@@ -7409,7 +7082,7 @@ function buildPlanUnchecked(model, base, opts) {
     policy,
     history,
     change,
-    lora: f.params > 0 ? loraTargetsFor(model) : null
+    lora
   };
   plan.summary = summaryFor(f, plan, diff, Boolean(incomplete));
   return plan;
@@ -7426,7 +7099,7 @@ function historySentence(r) {
 function changeGateSentence(ch) {
   const e = ch.estimates;
   const bits = [ch.gate.ok ? "ok" : `REFUSED (${ch.gate.blockers.length} blocker${ch.gate.blockers.length === 1 ? "" : "s"})`];
-  if (e.trainMemGb != null) bits.push(`est train mem ${(e.trainMemGb * 1.3).toFixed(1)} GB${ch.spec.adapter ? ` (${fmtParamCount(e.trainableParams)} trainable)` : ""}`);
+  if (e.trainMemGb != null) bits.push(`est train mem ${(e.trainMemGb * CHANGE_HEADROOM).toFixed(1)} GB${ch.spec.adapter ? ` (${fmtParamCount(e.trainableParams)} trainable)` : ""}`);
   if (e.weightBytes != null) bits.push(`${ch.spec.quant?.precision ?? "fp16"} weights ${(e.weightBytes / 1e9).toFixed(2)} GB`);
   if (e.servingFits != null) bits.push(e.servingFits ? "serving fits" : "serving does NOT fit");
   if (ch.gate.warnings.length) bits.push(`${ch.gate.warnings.length} warning${ch.gate.warnings.length === 1 ? "" : "s"}`);
@@ -7557,6 +7230,26 @@ function loraTargetsFor(model, shapesIn) {
     },
     uncovered
   };
+}
+function peakInputsOf(plan) {
+  return { params: plan.model.params, peakGb: plan.cost.peakGb, activationGb: plan.cost.activationGb, lora: plan.lora };
+}
+function adapterParamsFor(lora, rank, targets = []) {
+  const want = targets.map((t) => t.toLowerCase()).filter((t) => t && t !== "all-linear" && t !== "all_linear");
+  const pick = (m) => want.some((t) => m.module.toLowerCase() === t || m.role === t || m.name.toLowerCase().endsWith(`.${t}`));
+  const named = want.length ? lora.modules.filter(pick) : [];
+  const modules = named.length ? named : lora.modules.filter((m) => m.role !== "head");
+  return modules.reduce((a, m) => a + m.lora.r8 / 8 * rank, 0);
+}
+function trainingPeakFor(p, adapter) {
+  if (!(p.params > 0)) return null;
+  if (!adapter) return { trainableParams: p.params, peakGb: p.peakGb };
+  if (!p.lora) return null;
+  const adapterParams = adapterParamsFor(p.lora, adapter.rank, adapter.targets ?? []);
+  if (!(adapterParams > 0)) return null;
+  const baseBytesPerParam = adapter.peft === "qlora" ? 0.5 : 2;
+  const peakGb = (p.activationGb ?? 0) + p.params * baseBytesPerParam / 1e9 + adapterParams * 16 * OPTIMIZER_K / 1e9;
+  return { trainableParams: Math.round(adapterParams), peakGb };
 }
 function renderLoraText(lora) {
   const pct = (x) => x < 0.01 ? "<0.01%" : `${x.toFixed(2)}%`;
@@ -7710,32 +7403,363 @@ function renderPlanMarkdown(plan) {
   L.push(`<sub>${plan.cost.assumptions}</sub>`);
   return L.join("\n");
 }
+
+// src/utils/oomDiagnosis.ts
+var UNIT = { b: 1e-9, kib: 1024 / 1e9, kb: 1e-6, mib: 1024 ** 2 / 1e9, mb: 1e-3, gib: 1024 ** 3 / 1e9, gb: 1, tib: 1024 ** 4 / 1e9 };
+var num2 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
+var SIZE = String.raw`([\d.,]+)\s*(B|KiB|KB|MiB|MB|GiB|GB|TiB)`;
+function grab(text, re) {
+  const m = re.exec(text);
+  if (!m) return null;
+  const v = num2(m[1], m[2]);
+  return Number.isFinite(v) ? v : null;
+}
+function parseOomMessage(text) {
+  if (!/out of memory/i.test(text)) return null;
+  const t = text.replace(/\s+/g, " ");
+  const triedGb = grab(t, new RegExp(String.raw`Tried to allocate ${SIZE}`, "i"));
+  const total2 = grab(t, new RegExp(String.raw`total capacity of ${SIZE}`, "i"));
+  if (total2 != null) {
+    const allocatedGb = grab(t, new RegExp(String.raw`${SIZE} is allocated by PyTorch`, "i"));
+    const reservedUnallocatedGb = grab(t, new RegExp(String.raw`${SIZE} is reserved by PyTorch but unallocated`, "i"));
+    let other = 0;
+    for (const m of t.matchAll(new RegExp(String.raw`Process \d+ has ${SIZE} memory in use`, "gi"))) {
+      const v = num2(m[1], m[2]);
+      if (Number.isFinite(v)) other += v;
+    }
+    const processInUseGb = grab(t, new RegExp(String.raw`this process has ${SIZE} memory in use`, "i"));
+    return {
+      triedGb,
+      totalGb: total2,
+      freeGb: grab(t, new RegExp(String.raw`of which ${SIZE} is free`, "i")),
+      processInUseGb,
+      allocatedGb,
+      reservedUnallocatedGb,
+      reservedGb: allocatedGb != null && reservedUnallocatedGb != null ? allocatedGb + reservedUnallocatedGb : null,
+      otherProcessesGb: processInUseGb != null ? other : 0,
+      format: "torch2"
+    };
+  }
+  const total1 = grab(t, new RegExp(String.raw`${SIZE} total capacity`, "i"));
+  if (total1 != null) {
+    const allocatedGb = grab(t, new RegExp(String.raw`${SIZE} already allocated`, "i"));
+    const reservedGb = grab(t, new RegExp(String.raw`${SIZE} reserved in total by PyTorch`, "i"));
+    return {
+      triedGb,
+      totalGb: total1,
+      freeGb: grab(t, new RegExp(String.raw`${SIZE} free`, "i")),
+      processInUseGb: null,
+      allocatedGb,
+      reservedUnallocatedGb: allocatedGb != null && reservedGb != null ? Math.max(0, reservedGb - allocatedGb) : null,
+      reservedGb,
+      otherProcessesGb: 0,
+      format: "torch1"
+    };
+  }
+  return { triedGb, totalGb: null, freeGb: null, processInUseGb: null, allocatedGb: null, reservedUnallocatedGb: null, reservedGb: null, otherProcessesGb: 0, format: "unknown" };
+}
+var FRAGMENTATION_SHARE = 0.1;
+var OTHER_PROCESS_GB = 1;
+var FITS_WITH_ROOM = 0.85;
+var GIANT_REQUEST_SHARE = 0.2;
+var HEADROOM2 = 1.15;
+var LATE_STEP = 5;
+var f2 = (x) => x >= 10 ? x.toFixed(1) : x.toFixed(2);
+function batchThatFits(facts, cardGb) {
+  const { footprintGb, activationPerSampleGb } = facts;
+  if (footprintGb == null || activationPerSampleGb == null || !(activationPerSampleGb > 0)) return null;
+  const b = Math.floor((cardGb / HEADROOM2 - footprintGb) / activationPerSampleGb);
+  return b >= 1 ? b : null;
+}
+function inferenceSizeFixes(facts, cardGb) {
+  const out = [];
+  const b = batchThatFits(facts, cardGb);
+  if (b != null && facts.batch != null && b < facts.batch) {
+    out.push({
+      action: `generate at batch ${b} and run the rest as further batches`,
+      because: `${b} is the largest batch whose weights plus KV cache fit ${f2(cardGb)} GB with ${Math.round((HEADROOM2 - 1) * 100)}% headroom`,
+      changesTraining: false
+    });
+  }
+  if (facts.activationPerSampleGb != null && facts.batch != null && facts.footprintGb != null) {
+    const kv = facts.activationPerSampleGb * facts.batch;
+    out.push({
+      action: "shorten the prompt or max_new_tokens, or quantize the KV cache to 8 bits",
+      because: `the KV cache is ${f2(kv)} GB of the predicted peak and grows with every token kept`,
+      changesTraining: false
+    });
+  }
+  if (facts.footprintGb != null && facts.footprintGb * HEADROOM2 > cardGb * 0.5) {
+    out.push({
+      action: 'split the weights across cards (tensor parallel, or device_map="auto")',
+      because: `the weights alone are ${f2(facts.footprintGb)} GB, more than half the card`,
+      changesTraining: false
+    });
+    out.push({
+      action: "load the weights in 8 or 4 bits",
+      because: "halving or quartering the weight bytes is the largest single saving",
+      changesTraining: true
+    });
+  }
+  return out;
+}
+function sizeFixes(facts, cardGb) {
+  if (facts.mode === "inference") return inferenceSizeFixes(facts, cardGb);
+  const out = [];
+  const b = batchThatFits(facts, cardGb);
+  if (b != null && facts.batch != null && b < facts.batch) {
+    const accum = Math.ceil(facts.batch / b);
+    out.push({
+      action: `batch ${b} with gradient accumulation of ${accum} steps`,
+      because: `${b} is the largest batch whose predicted peak fits ${f2(cardGb)} GB with ${Math.round((HEADROOM2 - 1) * 100)}% headroom; accumulating ${accum} steps keeps the effective batch at ${b * accum}`,
+      changesTraining: false
+    });
+  }
+  if (facts.activationPerSampleGb != null && facts.batch != null && facts.footprintGb != null) {
+    const act = facts.activationPerSampleGb * facts.batch;
+    out.push({
+      action: "turn on activation (gradient) checkpointing",
+      because: `activations are ${f2(act)} GB of the predicted peak at this batch; checkpointing recomputes most of them in the backward pass, at roughly a third more compute`,
+      changesTraining: false
+    });
+  }
+  if (facts.footprintGb != null && facts.footprintGb > cardGb * 0.5) {
+    out.push({
+      action: "shard the optimizer state and gradients across cards (FSDP or ZeRO), or use an 8-bit optimizer",
+      because: `weights, gradients and optimizer state alone are ${f2(facts.footprintGb)} GB, more than half the card`,
+      changesTraining: false
+    });
+    out.push({
+      action: "train adapters (LoRA) on a frozen base instead of every weight",
+      because: "the optimizer state then covers the adapters only",
+      changesTraining: true
+    });
+  }
+  return out;
+}
+function diagnoseOom(text, facts = {}) {
+  const m = parseOomMessage(text);
+  const evidence = [];
+  const card = m?.totalGb ?? null;
+  if (m?.triedGb != null) evidence.push(`the failing allocation asked for ${f2(m.triedGb)} GB`);
+  if (card != null) evidence.push(`the card has ${f2(card)} GB`);
+  if (m?.allocatedGb != null) evidence.push(`${f2(m.allocatedGb)} GB was held by live tensors`);
+  if (m?.reservedUnallocatedGb != null) evidence.push(`${f2(m.reservedUnallocatedGb)} GB was reserved by PyTorch but held no tensor`);
+  const inference = facts.mode === "inference";
+  if (facts.predictedPeakGb != null) {
+    evidence.push(inference ? `the plan predicts a ${f2(facts.predictedPeakGb)} GB inference peak at this batch (weights ${f2(facts.footprintGb ?? 0)} GB plus KV cache)` : `the plan predicts a ${f2(facts.predictedPeakGb)} GB training peak at this batch`);
+  }
+  const result = (cause, summary, fixes) => ({ cause, summary, evidence, fixes, message: m, mode: facts.mode === "inference" ? "inference" : "train" });
+  if (!m) {
+    return result("unknown", "This is not a CUDA out-of-memory message, or it has none of the numbers PyTorch prints with one.", []);
+  }
+  if (card != null && facts.predictedPeakGb != null && facts.predictedPeakGb * HEADROOM2 > card) {
+    return result(
+      "too-big-for-card",
+      `The job is bigger than this card: the predicted peak is ${f2(facts.predictedPeakGb)} GB (${f2(facts.predictedPeakGb * HEADROOM2)} GB with headroom) on a ${f2(card)} GB card.`,
+      sizeFixes(facts, card)
+    );
+  }
+  if (m.otherProcessesGb >= OTHER_PROCESS_GB) {
+    evidence.push(`other processes on the card held ${f2(m.otherProcessesGb)} GB`);
+    return result(
+      "other-process",
+      `Another process holds ${f2(m.otherProcessesGb)} GB of this card; the job itself may fit.`,
+      [{ action: "run the job on a card nothing else is using (check nvidia-smi), or stop the other process", because: `${f2(m.otherProcessesGb)} GB is held outside this process`, changesTraining: false }]
+    );
+  }
+  if (card != null && m.reservedUnallocatedGb != null && m.triedGb != null && (m.reservedUnallocatedGb >= m.triedGb || m.reservedUnallocatedGb >= card * FRAGMENTATION_SHARE)) {
+    return result(
+      "fragmentation",
+      `Memory is fragmented: ${f2(m.reservedUnallocatedGb)} GB is reserved and empty, ${m.reservedUnallocatedGb >= m.triedGb ? "more than" : "a large share next to"} the ${f2(m.triedGb)} GB request that failed.`,
+      [
+        { action: "set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True before the process starts", because: "it lets the allocator grow segments instead of needing one free block of the requested size", changesTraining: false },
+        { action: "keep tensor shapes steady between steps (pad or bucket sequence lengths)", because: "varying shapes leave differently sized holes in the cache", changesTraining: false }
+      ]
+    );
+  }
+  if (card != null && m.triedGb != null && m.triedGb >= card * GIANT_REQUEST_SHARE) {
+    if (facts.vocabSize && facts.seqLen && facts.batch) {
+      const logitsGb = facts.batch * facts.seqLen * facts.vocabSize * 4 / 1e9;
+      evidence.push(`fp32 logits for batch ${facts.batch} x ${facts.seqLen} tokens x ${facts.vocabSize} vocabulary are ${f2(logitsGb)} GB`);
+      if (logitsGb >= m.triedGb * 0.5) {
+        return result(
+          "large-logits",
+          `The failing ${f2(m.triedGb)} GB request matches the output logits: ${f2(logitsGb)} GB in fp32 over a ${facts.vocabSize.toLocaleString("en-US")}-token vocabulary.`,
+          [
+            { action: "compute the loss in chunks over the sequence (chunked or fused cross-entropy, e.g. Liger kernels or Cut Cross-Entropy)", because: "the full logits tensor is never materialised", changesTraining: false },
+            { action: "compute logits only for the positions the loss uses", because: "prompt tokens with no label do not need logits", changesTraining: false }
+          ]
+        );
+      }
+    }
+    return result(
+      "undeclared-memory",
+      `A single ${f2(m.triedGb)} GB request, ${Math.round(m.triedGb / card * 100)}% of the card, failed. That is one very large tensor: typically attention scores under eager attention, logits over a large vocabulary, or an unusually long sample.`,
+      [
+        { action: "use SDPA or flash attention instead of eager attention", because: "they do not store the full attention-score matrix for backward", changesTraining: false },
+        { action: "cap or bucket the sequence length, and check the longest sample in the dataset", because: "one long sample sets the size of that tensor", changesTraining: false }
+      ]
+    );
+  }
+  if (card != null && facts.predictedPeakGb != null && facts.predictedPeakGb <= card * FITS_WITH_ROOM) {
+    const late = facts.step != null && facts.step > LATE_STEP;
+    return result(
+      late ? "grows-during-run" : "undeclared-memory",
+      late ? `The plan says ${f2(facts.predictedPeakGb)} GB fits this ${f2(card)} GB card, and the job ran ${facts.step} steps first: memory grew during the run, from a leak or from a longer batch.` : `The plan says ${f2(facts.predictedPeakGb)} GB fits this ${f2(card)} GB card, so the job holds memory the model does not declare: an evaluation pass, a second model, eager attention, or a longer sequence than planned.`,
+      late ? [
+        { action: "log torch.cuda.max_memory_allocated() each step and look for a steady climb", because: "a climb is a leak (tensors kept across steps, e.g. a loss appended without .item()); a jump is one long batch", changesTraining: false },
+        { action: "check the longest sample in the dataset and cap or bucket it", because: "a data-dependent spike appears at the step that draws it", changesTraining: false }
+      ] : inference ? [
+        { action: "run generation under torch.inference_mode() (or torch.no_grad())", because: "without it every forward keeps activations for a backward pass that never comes", changesTraining: false },
+        { action: "confirm the prompt length, max_new_tokens and batch match what was planned", because: "the KV cache grows with all three", changesTraining: false }
+      ] : [
+        { action: "run the eval pass under torch.no_grad() and with its own smaller batch", because: "evaluation at the training batch can need more than training does", changesTraining: false },
+        { action: "confirm the sequence length and attention implementation match what was planned", because: "both multiply activation memory", changesTraining: false }
+      ]
+    );
+  }
+  return result(
+    "unknown",
+    facts.predictedPeakGb == null ? "The message alone does not say why. Give the model, batch and sequence length so the predicted peak can be compared with the card." : "The predicted peak is close to the card; small differences in what the run holds decide it.",
+    card != null ? sizeFixes(facts, card) : []
+  );
+}
+function renderOomText(d) {
+  const L = [`cause    ${d.cause}`, "", d.summary, ""];
+  if (d.evidence.length) L.push("read from", ...d.evidence.map((e) => `  - ${e}`), "");
+  if (d.fixes.length) {
+    L.push("fixes, least invasive first");
+    const changes = d.mode === "inference" ? "  (changes the model's outputs)" : "  (changes what is trained)";
+    d.fixes.forEach((f, i) => L.push(`  ${i + 1}. ${f.action}${f.changesTraining ? changes : ""}`, `     ${f.because}`));
+  }
+  return L.join("\n") + "\n";
+}
+
+// src/utils/inferenceMemory.ts
+var DEFAULT_INFERENCE_PRECISION = "bf16";
+var DEFAULT_GEN_TOKENS = 256;
+var DEFAULT_INFERENCE_BATCH = 1;
+var INFERENCE_NOT_COUNTED = [
+  "the prefill working set (one layer's activations and attention at the prompt length) and the logits over the prompt",
+  "the CUDA context and any framework reserve (vLLM, for one, preallocates a fixed share of the card for its cache)",
+  "a second model, vision tower or tokenizer-side buffers loaded beside this one"
+];
+function inferencePeakFor(model, opts) {
+  const precision = opts.precision ?? DEFAULT_INFERENCE_PRECISION;
+  const batch = Math.max(1, Math.floor(opts.batch ?? DEFAULT_INFERENCE_BATCH));
+  const promptTokens = Math.max(1, Math.floor(opts.promptTokens));
+  const genTokens = Math.max(0, Math.floor(opts.genTokens ?? DEFAULT_GEN_TOKENS));
+  const bytes = computeQuantPreview(model).totalBytes[precision === "bf16" ? "fp16" : precision];
+  if (!(bytes > 0)) return null;
+  const kvValueBytes = precision === "fp32" ? 4 : 2;
+  const tokens = promptTokens + genTokens;
+  const kvBytesPerToken = kvBytesPerTokenForModel(model, kvValueBytes, tokens);
+  const kvPerSequenceGb = kvBytesPerToken * tokens / 1e9;
+  const weightsGb = bytes / 1e9;
+  const kvGb = kvPerSequenceGb * batch;
+  const peakGb = weightsGb + kvGb;
+  const fits = PREFLIGHT_GPUS.map((g) => ({ gpu: g.name, gb: g.gb, fits: peakGb * FIT_HEADROOM <= g.gb }));
+  const smallest = [...fits].filter((f) => f.fits).sort((a, b) => a.gb - b.gb)[0];
+  return {
+    precision,
+    batch,
+    promptTokens,
+    genTokens,
+    weightsGb,
+    kvBytesPerToken,
+    kvPerSequenceGb,
+    kvGb,
+    peakGb,
+    headroom: FIT_HEADROOM,
+    fits,
+    smallestFitGpu: smallest?.gpu ?? null,
+    notCounted: INFERENCE_NOT_COUNTED
+  };
+}
+
+// src/utils/oomFacts.ts
+var DEFAULT_OOM_TRAIN_BATCH = 32;
+function vocabOf(model) {
+  for (const c of model.components) {
+    const v = Number(c.params?.vocabSize);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+  return null;
+}
+function factsFor2(model, batch, seqLen, attention, step) {
+  const sized = withSeqLen(model, seqLen);
+  const plan = buildPlan(sized.model, { run: { batchSize: batch }, attention });
+  const act = plan.cost.activationGb;
+  return {
+    predictedPeakGb: plan.cost.peakGb,
+    footprintGb: act != null ? plan.cost.peakGb - act : null,
+    activationPerSampleGb: act != null && batch > 0 ? act / batch : null,
+    batch,
+    step,
+    vocabSize: vocabOf(model),
+    seqLen: sized.seqLen
+  };
+}
+function inferenceFactsFor(model, batch, promptTokens, inference, step) {
+  const prompt = promptTokens ?? withSeqLen(model, null).seqLen ?? DEFAULT_SEQ_LEN;
+  const ip = inferencePeakFor(model, { batch, promptTokens: prompt, genTokens: inference.genTokens, precision: inference.precision });
+  if (!ip) return { mode: "inference", batch, step };
+  return {
+    mode: "inference",
+    predictedPeakGb: ip.peakGb,
+    footprintGb: ip.weightsGb,
+    activationPerSampleGb: ip.kvPerSequenceGb,
+    batch,
+    step,
+    vocabSize: vocabOf(model),
+    seqLen: ip.promptTokens
+  };
+}
+function oomFactsForModel(model, opts = {}) {
+  return opts.inference ? inferenceFactsFor(model, opts.batch ?? DEFAULT_INFERENCE_BATCH, opts.seqLen ?? null, opts.inference, opts.step ?? null) : factsFor2(model, opts.batch ?? DEFAULT_OOM_TRAIN_BATCH, opts.seqLen ?? null, opts.attention ?? "sdpa", opts.step ?? null);
+}
 export {
   ACTIVATION_K,
   ATTENTION_K,
   DEFAULT_ATTENTION,
+  DEFAULT_GEN_TOKENS,
+  DEFAULT_INFERENCE_BATCH,
+  DEFAULT_OOM_TRAIN_BATCH,
   DEFAULT_SEQ_LEN,
+  FIT_HEADROOM,
+  INFERENCE_NOT_COUNTED,
   OPTIMIZER_K,
   OUTPUT_K,
   activationGbFor,
+  adapterParamsFor,
   attentionPhrase,
   attentionScoresGbFor,
   buildPlan,
   changeGateSentence,
   checkComfyWorkflow,
   deviceMapFor,
+  diagnoseOom,
+  factsFor2 as factsFor,
   fmtParamCount,
   historySentence,
+  inferenceFactsFor,
+  inferencePeakFor,
   loraTargetsFor,
   maxBatchFor,
+  oomFactsForModel,
   parseHumanSize,
+  parseOomMessage,
+  peakInputsOf,
   readAttention,
   readGraph,
   readPolicy,
   readSeqLen,
   renderLoraText,
+  renderOomText,
   renderPlanMarkdown,
   renderPlanText,
   tokenSeqLenOf,
+  trainingPeakFor,
   withSeqLen
 };

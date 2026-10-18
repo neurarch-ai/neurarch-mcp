@@ -16,6 +16,10 @@ Use the Neurarch model graph as the single source of truth for a network's struc
 
 Before submitting or launching any training job (a scheduler submission, a cloud GPU reservation, a `python train.py` on a rented card), call `size_training_job` with the job's batch size and the card it will reserve. Quote its verdict line, and if it says the job will not fit, change the batch or the card before launching. Then call `history` with the fingerprint it returns, for what this structure measured last time it ran. Only after that, check whether the graph forward-passes (`lint_model`, `check_design`). The sizing number is a calibrated estimate, not a measurement; say so when you report it.
 
+## After a CUDA out-of-memory error
+
+Call `diagnose_oom` with the error text and the job (model, batch, seq_len, step) before changing batch size. Apply its first fix; shrink the batch only when the cause is `too-big-for-card`, and then with the gradient accumulation it names.
+
 ## Operating contract
 
 1. Use only the connected neurarch-mcp server for graph reads and writes. Do not hand-edit the `.neurarch.json` file while the server is connected: the server holds an in-memory copy, and direct file edits either get overwritten by `save_model` or silently diverge from what the tools report.

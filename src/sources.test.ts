@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { parseModelRef, listZoo, loadZooModel, modelFromText, loadHFModel, setHfEnabled } from './sources.js';
 import { makeModel } from './test/fixtures.js';
 
@@ -50,7 +50,31 @@ describe('modelFromText', () => {
 
 describe('hf', () => {
   it('refuses without --hf, naming the flag, before touching the network', async () => {
-    await expect(loadHFModel('Qwen/Qwen2.5-7B')).rejects.toThrow(/--hf/);
+    // An id no cache holds: a cached config is served without the flag (below).
+    await expect(loadHFModel('nobody/never-fetched-7b')).rejects.toThrow(/--hf/);
+  });
+  it('serves a config already in the cache without --hf, at any age, and opens no socket', async () => {
+    const { mkdtemp, writeFile, rm, utimes } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'nx-hfcache-'));
+    const prev = process.env.NEURARCH_MCP_CACHE;
+    process.env.NEURARCH_MCP_CACHE = dir;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const file = join(dir, 'Org__Tiny.json');
+      await writeFile(file, JSON.stringify({ model: { id: 'hf-Org/Tiny', name: 'Tiny', components: [], connections: [] }, configSource: 'config', cached: false }));
+      const old = new Date(Date.now() - 30 * 24 * 3600 * 1000);
+      await utimes(file, old, old);
+      const r = await loadHFModel('Org/Tiny');
+      expect(r.configSource).toBe('cache');
+      expect(r.model.name).toBe('Tiny');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      if (prev === undefined) delete process.env.NEURARCH_MCP_CACHE; else process.env.NEURARCH_MCP_CACHE = prev;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
   it('rejects a malformed repo id before touching the network', async () => {
     setHfEnabled(true);

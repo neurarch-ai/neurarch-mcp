@@ -94,3 +94,64 @@ export function deviceMapFor(model: unknown, gpus: number[], opts?: { batchSize?
 export const OPTIMIZER_K: number;
 export const OUTPUT_K: number;
 export const ATTENTION_K: number;
+
+// ── the out-of-memory diagnosis (diagnose_oom) ──────────────────────────────
+// The app's src/utils/oomDiagnosis.ts, oomFacts.ts and inferenceMemory.ts,
+// bundled into lib/modelPlan.bundle.mjs through src/utils/planBundle.entry.ts
+// (neurarch-ai/neurarch #297). The same functions behind `npx neurarch oom`.
+
+/** The numbers PyTorch prints with a CUDA OOM, in GB. */
+export interface OomMessage {
+  triedGb: number | null;
+  totalGb: number | null;
+  freeGb: number | null;
+  processInUseGb: number | null;
+  allocatedGb: number | null;
+  reservedUnallocatedGb: number | null;
+  reservedGb: number | null;
+  otherProcessesGb: number;
+  format: 'torch2' | 'torch1' | 'unknown';
+}
+
+/** What the plan knows about the job. Under inference the peak is weights plus KV cache. */
+export interface JobFacts {
+  mode?: 'train' | 'inference';
+  predictedPeakGb?: number | null;
+  footprintGb?: number | null;
+  activationPerSampleGb?: number | null;
+  batch?: number | null;
+  step?: number | null;
+  vocabSize?: number | null;
+  seqLen?: number | null;
+}
+
+export type OomCause = 'too-big-for-card' | 'fragmentation' | 'other-process' | 'large-logits' | 'undeclared-memory' | 'grows-during-run' | 'unknown';
+export interface OomFix { action: string; because: string; changesTraining: boolean }
+export interface OomDiagnosis {
+  cause: OomCause;
+  summary: string;
+  evidence: string[];
+  fixes: OomFix[];
+  message: OomMessage | null;
+  mode: 'train' | 'inference';
+}
+
+export type InferencePrecision = 'bf16' | 'fp16' | 'fp32' | 'int8' | 'int4';
+export interface OomJobOptions {
+  batch?: number | null;
+  seqLen?: number | null;
+  step?: number | null;
+  attention?: PlanAttention;
+  /** Size as generation: weights + KV cache. `seqLen` is then the prompt. */
+  inference?: { genTokens?: number; precision?: InferencePrecision } | null;
+}
+
+export function parseOomMessage(text: string): OomMessage | null;
+export function diagnoseOom(text: string, facts?: JobFacts): OomDiagnosis;
+/** The text `npx neurarch oom` prints. */
+export function renderOomText(d: OomDiagnosis): string;
+/** Job facts for one model: a training peak (default batch 32, sdpa) or, with `inference`, weights + KV cache (default batch 1). */
+export function oomFactsForModel(model: unknown, opts?: OomJobOptions): JobFacts;
+export const DEFAULT_OOM_TRAIN_BATCH: number;
+export const DEFAULT_GEN_TOKENS: number;
+export const DEFAULT_INFERENCE_BATCH: number;

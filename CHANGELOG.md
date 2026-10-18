@@ -28,6 +28,27 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   is read both as plain DDP and as sharded. A graph that feeds a hidden-state
   tensor into a token embedding (several bundled LLM references declare their
   input as `[1, L, D]`) is refused rather than sized at terabytes.
+- **`diagnose_oom`**, the tool to call after a CUDA out-of-memory error,
+  before changing batch size. Given the error text as printed (PyTorch 1.x or
+  2.x wording) and, optionally, the model (`model_path`, the server's, or
+  `hf_id`), `batch`, `seq_len`, `step`, `attention`, and `inference` with
+  `gen_tokens` for a generation job, it reads the allocated,
+  reserved-but-empty, other-process and failing-request numbers out of the
+  message, compares them with the predicted peak `size_training_job` uses, and
+  returns one cause (`too-big-for-card`, `fragmentation`, `other-process`,
+  `large-logits`, `undeclared-memory`, `grows-during-run`, `unknown`), the
+  evidence lines it was read from, fixes ordered least invasive first with a
+  `changesTraining` flag on each, and the job facts used. A smaller batch is
+  offered only when the job is too big for the card, and then with the
+  gradient accumulation that keeps the effective batch. The logic is the app's
+  `npx neurarch oom` (`diagnoseOom`, `oomFactsForModel`), carried in the
+  vendored plan bundle since neurarch-ai/neurarch #297; this server adds no
+  arithmetic of its own. In the core listing after `history`.
+- **A cached Hugging Face config is served without `--hf`.** `hf_id` and
+  `hf:<org/name>` read `~/.cache/neurarch-mcp/hf` (or `NEURARCH_MCP_CACHE`)
+  first, at any age, because reading a file is not the network call the flag
+  guards; only a fetch needs the flag. With `--hf`, a stale cached config now
+  beats a failed fetch or a family template.
 
 ### Changed
 - **Sizing leads.** `size_training_job` is first in the core listing and in
@@ -35,9 +56,11 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   structural checks follow it as "and whether it forward-passes".
   `rank_designs` left the core listing (still callable by name, and listed
   under `--tools=full`), and several schema descriptions were trimmed so the
-  listing stays under its token caps.
+  listing stays under its token caps. For `diagnose_oom` the injected
+  `model_path` description and the `add_layer` schema were shortened.
 - **Vendored `engine`, `verifier` and `plan` bundles refreshed** from
-  neurarch-ai/neurarch `96254170`. What moved with them: the plan assumes SDPA
+  neurarch-ai/neurarch `96254170`, and the three again from the #297 branch
+  (on `814c98a2`) for `diagnose_oom`. What moved with them: the plan assumes SDPA
   attention by default and counts the eager attention-score term only under
   `attention: 'eager'` (neurarch #285); a token graph is sized at 2048 tokens
   unless a sequence length is given, instead of at its declared context

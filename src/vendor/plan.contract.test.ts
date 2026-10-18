@@ -30,6 +30,10 @@ describe('vendored plan contract', () => {
       expect(typeof plan[fn], fn).toBe('function');
     }
     expect([plan.OPTIMIZER_K, plan.OUTPUT_K, plan.ATTENTION_K]).toEqual([1.26, 1.57, 3.47]);
+    for (const fn of ['parseOomMessage', 'diagnoseOom', 'renderOomText', 'oomFactsForModel'] as const) {
+      expect(typeof plan[fn], fn).toBe('function');
+    }
+    expect([plan.DEFAULT_OOM_TRAIN_BATCH, plan.DEFAULT_GEN_TOKENS, plan.DEFAULT_INFERENCE_BATCH]).toEqual([32, 256, 1]);
   });
 
   it('needs nothing from the outside world', async () => {

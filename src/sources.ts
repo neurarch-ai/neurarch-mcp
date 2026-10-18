@@ -104,8 +104,30 @@ export interface HFLoadResult {
   cached: boolean;
 }
 
+/** A config this machine already fetched, or null. Reading it opens no socket. */
+async function readHFCache(modelId: string): Promise<{ result: HFLoadResult; fresh: boolean } | null> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(modelId)) return null;
+  const cacheFile = join(hfCacheDir(), `${modelId.replace('/', '__')}.json`);
+  const st = await stat(cacheFile).catch(() => null);
+  if (!st) return null;
+  try {
+    const cached = JSON.parse(await readFile(cacheFile, 'utf-8')) as HFLoadResult;
+    return { result: { ...cached, configSource: 'cache', cached: true }, fresh: Date.now() - st.mtimeMs < HF_CACHE_TTL_MS };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A Hugging Face repo as a graph. A config already in the cache is served
+ * without --hf, at any age: reading a file is not the network call the flag
+ * guards, and an agent diagnosing an OOM on an offline box should get the
+ * model it sized yesterday. Only a fetch needs the flag.
+ */
 export async function loadHFModel(modelId: string): Promise<HFLoadResult> {
   if (!hfEnabled) {
+    const hit = await readHFCache(modelId);
+    if (hit) return hit.result;
     throw new Error(
       `hf:${modelId} needs the server started with --hf. That flag is the switch for the one `
       + 'network call this server can make on your behalf (huggingface.co, to read config.json); '
@@ -116,13 +138,12 @@ export async function loadHFModel(modelId: string): Promise<HFLoadResult> {
     throw new Error(`"${modelId}" is not a Hugging Face repo id. Expected the form org/name, e.g. Qwen/Qwen2.5-7B.`);
   }
   const cacheFile = join(hfCacheDir(), `${modelId.replace('/', '__')}.json`);
-  const cachedStat = await stat(cacheFile).catch(() => null);
-  if (cachedStat && Date.now() - cachedStat.mtimeMs < HF_CACHE_TTL_MS) {
-    const cached = JSON.parse(await readFile(cacheFile, 'utf-8')) as HFLoadResult;
-    return { ...cached, configSource: 'cache', cached: true };
-  }
+  const hit = await readHFCache(modelId);
+  if (hit?.fresh) return hit.result;
 
-  const config = await fetchHFModelConfig(modelId);
+  const config = await fetchHFModelConfig(modelId).catch(() => null);
+  // A stale cached config beats a failed fetch, and beats a family template.
+  if (hit && (!config || config._configSource === 'fallback')) return hit.result;
   if (!config) {
     throw new Error(
       `Could not build a graph for ${modelId}: config.json was not readable and the model id matches no known family. `
