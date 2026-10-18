@@ -49,6 +49,15 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   (`src/test/hf/Qwen3-8B`, revision b968826d), served by a `fetch` stub, so the
   `--hf` path runs end to end with no socket.
 
+- **A Claude Code plugin.** `/plugin marketplace add neurarch-ai/neurarch-mcp`
+  then `/plugin install neurarch@neurarch-ai` installs the server
+  (`npx -y neurarch-mcp --hosted --hf`), the PreToolUse launch hook
+  (`hooks/hooks.json`, the same `npx -y neurarch-mcp hook --hf` the README
+  configures by hand) and `skills/neurarch-skill`. This repository is the
+  marketplace (`.claude-plugin/marketplace.json`); `claude plugin validate .
+  --strict` passes. `plugin.json` carries the package version and
+  `src/plugin.test.ts` fails a release that bumps one without the other.
+
 ### Changed
 - **The vendored plan bundle** is rebuilt from neurarch-ai/neurarch at eea7a68c,
   adding `checkParallelLayout`, `checkServeConfig` and their readers, and the
@@ -60,16 +69,6 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   default), and four short descriptions were tightened. The core listing is
   ~4.72k tokens (cap 4.8k) and the full one ~6.63k (cap 6.7k), both with more
   headroom than 0.17.3 had.
-
-### Added (unreleased since 0.17.3)
-- **A Claude Code plugin.** `/plugin marketplace add neurarch-ai/neurarch-mcp`
-  then `/plugin install neurarch@neurarch-ai` installs the server
-  (`npx -y neurarch-mcp --hosted --hf`), the PreToolUse launch hook
-  (`hooks/hooks.json`, the same `npx -y neurarch-mcp hook --hf` the README
-  configures by hand) and `skills/neurarch-skill`. This repository is the
-  marketplace (`.claude-plugin/marketplace.json`); `claude plugin validate .
-  --strict` passes. `plugin.json` carries the package version and
-  `src/plugin.test.ts` fails a release that bumps one without the other.
 
 ## [0.17.3] - 2026-10-18
 
