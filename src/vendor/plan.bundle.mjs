@@ -8822,6 +8822,388 @@ function checkDataFit(contract, data) {
   return { checked, skipped, findings, contract };
 }
 
+// src/utils/gemmEfficiency.table.ts
+var GEMM_EFFICIENCY_TABLE = {
+  "sources": {
+    "neusight": {
+      "repo": "https://github.com/scai-tech/NeuSight",
+      "commit": "6945927d9afcca2b9daf021f8395e53edc5b4eef",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2025 Georgia Institute of Technology and Microsoft Corporation",
+      "files": [
+        "scripts/asplos/data/dataset/train/linear.csv",
+        "scripts/asplos/data/dataset/test/linear.csv",
+        "scripts/asplos/fp16mm.csv"
+      ]
+    },
+    "pytorch": {
+      "repo": "https://github.com/pytorch/pytorch",
+      "commit": "6a6db44e15f9678d573ad0af5e1f3e2b0713414a",
+      "licence": "BSD-3-Clause",
+      "files": [
+        "torch/_inductor/analysis/device_info.py"
+      ]
+    }
+  },
+  "fit": {
+    "script": "scripts/gemm-efficiency/fit_gemm_efficiency.py",
+    "plateauMinUs": 2e3,
+    "bucket": "half octave of time at the plateau, median, then isotonic (non-decreasing), capped at 1",
+    "minRowsPerBucket": 8
+  },
+  "cards": {
+    "h100-sxm": {
+      "neusightDevice": "NVIDIA H100 80GB HBM3",
+      "rows": 1040,
+      "plateauFp32TFLOPS": 50.2,
+      "fp32PeakTFLOPS": 67,
+      "plateauOfFp32Peak": 0.749,
+      "curve": [
+        [5.25, 0.4625],
+        [5.75, 0.492],
+        [6.25, 0.5737],
+        [6.75, 0.5775],
+        [7.25, 0.6399],
+        [7.75, 0.6527],
+        [8.25, 0.7348],
+        [8.75, 0.7348],
+        [9.25, 0.8118],
+        [9.75, 0.8118],
+        [10.25, 0.8977],
+        [10.75, 0.8977],
+        [11.25, 0.9606],
+        [11.75, 0.9606],
+        [12.25, 0.9864],
+        [12.75, 0.9864],
+        [13.25, 0.9986],
+        [13.75, 0.9986],
+        [14.25, 1]
+      ]
+    },
+    "l4": {
+      "neusightDevice": "NVIDIA L4",
+      "rows": 1040,
+      "plateauFp32TFLOPS": 8.9,
+      "fp32PeakTFLOPS": 30.3,
+      "plateauOfFp32Peak": 0.294,
+      "curve": [
+        [7.75, 0.6977],
+        [8.25, 0.8307],
+        [8.75, 0.8465],
+        [9.25, 0.8868],
+        [9.75, 0.8868],
+        [10.25, 0.8868],
+        [10.75, 0.9848],
+        [11.25, 0.9867],
+        [11.75, 0.9867],
+        [12.25, 0.9867],
+        [12.75, 0.9887]
+      ]
+    },
+    "a100-40g": {
+      "neusightDevice": "NVIDIA A100-PCIE-40GB",
+      "rows": 7500,
+      "plateauFp32TFLOPS": 14.88,
+      "fp32PeakTFLOPS": 19.5,
+      "plateauOfFp32Peak": 0.763,
+      "curve": [
+        [-3.75, 13e-4],
+        [-2.25, 41e-4],
+        [-1.75, 52e-4],
+        [-1.25, 7e-3],
+        [-0.75, 0.0107],
+        [-0.25, 0.0148],
+        [0.25, 0.0207],
+        [0.75, 0.0304],
+        [1.25, 0.0417],
+        [1.75, 0.0606],
+        [2.25, 0.0858],
+        [2.75, 0.1142],
+        [3.25, 0.1608],
+        [3.75, 0.2152],
+        [4.25, 0.2762],
+        [4.75, 0.337],
+        [5.25, 0.4209],
+        [5.75, 0.4993],
+        [6.25, 0.5871],
+        [6.75, 0.6628],
+        [7.25, 0.7263],
+        [7.75, 0.7778],
+        [8.25, 0.8345],
+        [8.75, 0.8615],
+        [9.25, 0.8717],
+        [9.75, 0.9284],
+        [10.25, 0.9312],
+        [10.75, 0.9483],
+        [11.25, 0.9553],
+        [11.75, 0.9814],
+        [12.25, 0.9882],
+        [12.75, 0.9995]
+      ]
+    },
+    "a100-80g": {
+      "neusightDevice": "NVIDIA A100 80GB PCIe",
+      "rows": 1040,
+      "plateauFp32TFLOPS": 17.51,
+      "fp32PeakTFLOPS": 19.5,
+      "plateauOfFp32Peak": 0.898,
+      "curve": [
+        [6.75, 0.6136],
+        [7.25, 0.6876],
+        [7.75, 0.7516],
+        [8.25, 0.7685],
+        [8.75, 0.819],
+        [9.25, 0.8328],
+        [9.75, 0.893],
+        [10.25, 0.9067],
+        [10.75, 0.9401],
+        [11.25, 0.9704],
+        [11.75, 0.987],
+        [12.25, 0.992]
+      ]
+    },
+    "v100": {
+      "neusightDevice": "Tesla V100-PCIE-32GB",
+      "rows": 7500,
+      "plateauFp32TFLOPS": 12.01,
+      "fp32PeakTFLOPS": 14,
+      "plateauOfFp32Peak": 0.858,
+      "curve": [
+        [-3.75, 12e-4],
+        [-1.75, 46e-4],
+        [-1.25, 71e-4],
+        [-0.75, 9e-3],
+        [-0.25, 0.0123],
+        [0.25, 0.018],
+        [0.75, 0.0244],
+        [1.25, 0.034],
+        [1.75, 0.05],
+        [2.25, 0.0681],
+        [2.75, 0.0956],
+        [3.25, 0.1398],
+        [3.75, 0.1818],
+        [4.25, 0.2316],
+        [4.75, 0.2963],
+        [5.25, 0.3427],
+        [5.75, 0.4064],
+        [6.25, 0.4777],
+        [6.75, 0.5333],
+        [7.25, 0.6233],
+        [7.75, 0.6822],
+        [8.25, 0.7467],
+        [8.75, 0.7942],
+        [9.25, 0.8572],
+        [9.75, 0.8877],
+        [10.25, 0.9254],
+        [10.75, 0.9398],
+        [11.25, 0.9497],
+        [11.75, 0.9653],
+        [12.25, 0.9897],
+        [12.75, 0.997]
+      ]
+    },
+    "t4": {
+      "neusightDevice": "Tesla T4",
+      "rows": 7498,
+      "plateauFp32TFLOPS": 3.14,
+      "fp32PeakTFLOPS": 8.1,
+      "plateauOfFp32Peak": 0.387,
+      "curve": [
+        [-1.75, 57e-4],
+        [0.25, 0.0208],
+        [0.75, 0.0315],
+        [1.25, 0.0413],
+        [1.75, 0.0587],
+        [2.25, 0.0857],
+        [2.75, 0.1067],
+        [3.25, 0.1559],
+        [3.75, 0.2183],
+        [4.25, 0.2903],
+        [4.75, 0.3519],
+        [5.25, 0.4754],
+        [5.75, 0.5216],
+        [6.25, 0.6392],
+        [6.75, 0.7926],
+        [7.25, 0.8978],
+        [7.75, 0.9814],
+        [8.25, 0.9832],
+        [8.75, 0.9832],
+        [9.25, 0.9832],
+        [9.75, 0.9832],
+        [10.25, 0.9832],
+        [10.75, 0.9832],
+        [11.25, 0.9832],
+        [11.75, 0.9832],
+        [12.25, 0.9832],
+        [12.75, 0.9832],
+        [13.25, 0.9832],
+        [13.75, 0.9832],
+        [14.25, 0.9832],
+        [14.75, 0.9845],
+        [15.25, 1]
+      ]
+    }
+  },
+  "neusightFp16H100OfDensePeak": [
+    0.119,
+    0.154,
+    0.178,
+    0.309,
+    0.342,
+    0.357,
+    0.418,
+    0.385,
+    0.37
+  ],
+  "deviceInfo": {
+    "h100-sxm": {
+      "deviceInfoKey": "NVIDIA H100",
+      "bf16TFLOPSListed": 1979,
+      "sparsityFactor": 2,
+      "bf16TFLOPSDense": 989.5,
+      "fp32TFLOPS": 67,
+      "dramGBs": 3350,
+      "dramGB": 80
+    },
+    "a100-80g": {
+      "deviceInfoKey": "NVIDIA A100",
+      "bf16TFLOPSListed": 312.5,
+      "sparsityFactor": 1,
+      "bf16TFLOPSDense": 312.5,
+      "fp32TFLOPS": 19.5,
+      "dramGBs": 2039,
+      "dramGB": 80
+    },
+    "l4": {
+      "deviceInfoKey": "NVIDIA L4",
+      "bf16TFLOPSListed": 242,
+      "sparsityFactor": 1,
+      "bf16TFLOPSDense": 242,
+      "fp32TFLOPS": 30.3,
+      "dramGBs": 3350,
+      "dramGB": 24
+    },
+    "b200": {
+      "deviceInfoKey": "NVIDIA B200",
+      "bf16TFLOPSListed": 2250,
+      "sparsityFactor": 1,
+      "bf16TFLOPSDense": 2250,
+      "fp32TFLOPS": 75,
+      "dramGBs": 7700,
+      "dramGB": 180
+    }
+  }
+};
+
+// src/utils/gemmEfficiency.ts
+var CARDS = GEMM_EFFICIENCY_TABLE.cards;
+var GEMM_CURVE_CARDS = Object.keys(CARDS);
+function gemmShapeFactor(gpuId, plateauUs) {
+  const c = CARDS[gpuId];
+  if (!c || !(plateauUs > 0)) return 1;
+  const pts = c.curve;
+  const x = Math.log2(plateauUs);
+  if (x <= pts[0][0]) return pts[0][1];
+  const last = pts[pts.length - 1];
+  if (x >= last[0]) return last[1];
+  for (let i = 1; i < pts.length; i++) {
+    if (x <= pts[i][0]) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+      return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+    }
+  }
+  return last[1];
+}
+function gemmMs(gpuId, flops, peakFlopsPerSec2, anchor, axis = "time") {
+  if (!(flops > 0) || !(peakFlopsPerSec2 > 0)) return 0;
+  const plateau = peakFlopsPerSec2 * anchor;
+  const fp32 = CARDS[gpuId]?.plateauFp32TFLOPS;
+  const us = axis === "flops" && fp32 ? flops / (fp32 * 1e12) * 1e6 : flops / plateau * 1e6;
+  const s = gemmShapeFactor(gpuId, us);
+  return flops / (plateau * s) * 1e3;
+}
+
+// src/utils/pipelineSchedule.ts
+function scheduleTable(pp, v, m) {
+  const table = Array.from({ length: pp }, () => []);
+  if (v <= 1) {
+    for (let r = 0; r < pp; r++) {
+      const warm = Math.min(pp - r - 1, m);
+      for (let i = 0; i < warm; i++) table[r].push({ kind: "F", mb: i, chunk: 0 });
+      for (let i = warm; i < m; i++) {
+        table[r].push({ kind: "F", mb: i, chunk: 0 });
+        table[r].push({ kind: "B", mb: i - warm, chunk: 0 });
+      }
+      for (let i = m - warm; i < m; i++) table[r].push({ kind: "B", mb: i, chunk: 0 });
+    }
+    return table;
+  }
+  if (m % pp !== 0) throw new Error(`interleaved schedule needs microbatches (${m}) divisible by pp (${pp})`);
+  const span = pp * v;
+  const total = m * v;
+  const fwdAt = (i) => ({ mb: i % pp + Math.floor(i / span) * pp, chunk: Math.floor(i % span / pp) });
+  const bwdAt = (i) => ({ mb: i % pp + Math.floor(i / span) * pp, chunk: v - 1 - Math.floor(i % span / pp) });
+  for (let r = 0; r < pp; r++) {
+    const warm = Math.min((pp - 1 - r) * 2 + (v - 1) * pp, total);
+    for (let i = 0; i < warm; i++) table[r].push({ kind: "F", ...fwdAt(i) });
+    for (let i = warm; i < total; i++) {
+      table[r].push({ kind: "F", ...fwdAt(i) });
+      table[r].push({ kind: "B", ...bwdAt(i - warm) });
+    }
+    for (let i = total - warm; i < total; i++) table[r].push({ kind: "B", ...bwdAt(i) });
+  }
+  return table;
+}
+function simulatePipeline(fwdMs, bwdMs, m, v = 1, p2pMs = 0) {
+  const pp = fwdMs.length;
+  const table = scheduleTable(pp, v, m);
+  const nv = pp * v;
+  const doneF = new Float64Array(nv * m).fill(-1);
+  const doneB = new Float64Array(nv * m).fill(-1);
+  const clock = new Array(pp).fill(0);
+  const idx = new Array(pp).fill(0);
+  let progress = true;
+  while (progress) {
+    progress = false;
+    for (let r = 0; r < pp; r++) {
+      const ops = table[r];
+      while (idx[r] < ops.length) {
+        const op = ops[idx[r]];
+        const vs = op.chunk * pp + r;
+        let ready = 0;
+        if (op.kind === "F") {
+          if (vs > 0) {
+            const t = doneF[(vs - 1) * m + op.mb];
+            if (t < 0) break;
+            ready = t + ((vs - 1) % pp !== r ? p2pMs : 0);
+          }
+        } else if (vs < nv - 1) {
+          const t = doneB[(vs + 1) * m + op.mb];
+          if (t < 0) break;
+          ready = t + ((vs + 1) % pp !== r ? p2pMs : 0);
+        } else {
+          const t = doneF[vs * m + op.mb];
+          if (t < 0) break;
+          ready = t;
+        }
+        const start = clock[r] > ready ? clock[r] : ready;
+        const end = start + (op.kind === "F" ? fwdMs[r][op.chunk] : bwdMs[r][op.chunk]);
+        (op.kind === "F" ? doneF : doneB)[vs * m + op.mb] = end;
+        clock[r] = end;
+        idx[r]++;
+        progress = true;
+      }
+    }
+  }
+  if (idx.some((i, r) => i < table[r].length)) throw new Error("pipeline schedule deadlocked");
+  return { stepMs: Math.max(...clock), rankEndMs: clock };
+}
+function simulatedStepTime(stageMs, m, v = 1, fwdShare = 1 / 3, p2pMs = 0) {
+  const f = stageMs.map((t) => new Array(v).fill(t * fwdShare / v));
+  const b = stageMs.map((t) => new Array(v).fill(t * (1 - fwdShare) / v));
+  return simulatePipeline(f, b, Math.max(1, m), v, p2pMs).stepMs;
+}
+
 // src/utils/parallelismPlanner.ts
 var NODE_SIZE = 8;
 var COMPUTE_BOUND_MFU = 0.4;
@@ -8868,7 +9250,7 @@ var MEM_BYTES_PER_ELEM = {
   /** Fused / chunked linear + cross-entropy: bf16 logits written and read once each way, never upcast whole. An assumption, not a count. */
   crossEntropyFused: 8
 };
-var LAYOUT_BASIS = "Derived from the graph, not measured. A stage's time is the sum of its layers: matmul FLOPs at 40% of the card's peak, plus memory-bound bytes (norms, elementwise ops, RoPE, the fp32 loss) at 80% of its memory bandwidth. Step time uses the pipeline formula m x slowest + (sum - slowest) / v at this layout's microbatch count. On 2 and 4 L4 GPUs the predicted speedup of a split landed within 5.1 points of measured; on H100 this overprices the LM head. Memory uses the same per-layer terms and calibrated upper bound as the training-peak estimate, plus the fp32 logits on the stage with the loss. Nothing here was timed on a GPU.";
+var LAYOUT_BASIS = "Derived from the graph, not measured. A stage's time is the sum of its layers: each matmul at 40% of the card's peak when long and less when short (a per-card curve fitted to NeuSight's measured kernels on H100, L4, A100, V100 and T4; flat 40% on other cards), plus memory-bound bytes (norms, elementwise ops, RoPE, the fp32 loss) at 80% of its memory bandwidth. Step time comes from simulating the 1F1B or interleaved schedule at this layout's microbatch count. Predicted speedups of a split landed within 5.4 points of measured on 2 and 4 L4 and within 2.3 on 2 H100; absolute step time runs over, by up to 7% on L4 and 27% on H100. Memory uses the same per-layer terms and calibrated upper bound as the training-peak estimate, plus the fp32 logits on the stage with the loss. Nothing here was timed on a GPU.";
 var DEFAULT_GPU = "h100-sxm";
 var posInt2 = (v) => {
   const n2 = typeof v === "string" && v.trim() !== "" ? Number(v) : typeof v === "number" ? v : NaN;
@@ -9109,9 +9491,40 @@ function memBoundBytes(c, shapes, hasRope) {
       return 0;
   }
 }
+function gemmsOf(c, shapes, macs) {
+  if (!(macs > 0)) return [];
+  const sh = shapes.get(c.id);
+  const inS = sh?.in ?? [];
+  const T = inS.length >= 2 ? inS[inS.length - 2] : 1;
+  const p = c.params ?? {};
+  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const parts = [];
+  if (c.type === "groupedQueryAttention" || c.type === "multiHeadAttention" || c.type === "causalAttention" || c.type === "selfAttention" || c.type === "attention") {
+    const D = num5(p.embedDim) ?? num5(p.hiddenDim) ?? (inS[inS.length - 1] || null);
+    if (D) {
+      if (c.type === "groupedQueryAttention") {
+        const H = num5(p.numHeads) ?? 32, kv = num5(p.numKVHeads) ?? H;
+        const hd = num5(p.headDim) ?? Math.floor(D / H);
+        parts.push(T * D * H * hd, T * D * kv * hd, T * D * kv * hd, T * T * H * hd, T * H * hd * D);
+      } else {
+        parts.push(T * D * D, T * D * D, T * D * D, T * T * D, T * D * D);
+      }
+    }
+  } else if (c.type === "swiglu" || c.type === "geglu") {
+    const D = num5(p.embedDim) ?? num5(p.inFeatures), I = num5(p.intermediateSize) ?? num5(p.hiddenFeatures) ?? num5(p.ffDim);
+    if (D && I) parts.push(T * D * I, T * D * I, T * I * D);
+  } else if (c.type === "linear") {
+    parts.push(macs);
+  }
+  const known = parts.reduce((a, b) => a + b, 0);
+  if (known > macs * (1 + 1e-9)) return [macs];
+  const rest = macs - known;
+  if (rest > macs * 1e-6) parts.push(rest);
+  return parts;
+}
 function unitCost(comps, shapes, isPost, hasRope) {
   const stores = storesScoresUnder("sdpa");
-  const u = { params: 0, expertParams: 0, macs: 0, actElems: 0, largest: 0, boundaryElems: 0, logits: 0, memBytes: 0 };
+  const u = { params: 0, expertParams: 0, macs: 0, gemms: [], actElems: 0, largest: 0, boundaryElems: 0, logits: 0, memBytes: 0 };
   for (const c of comps) {
     const sh = shapes.get(c.id);
     const inS = sh?.in ?? [];
@@ -9119,7 +9532,9 @@ function unitCost(comps, shapes, isPost, hasRope) {
     const p = estimateLayerParams(c.type, c.params, inS.length ? inS : void 0) ?? 0;
     u.params += p;
     if (/moe/i.test(c.type)) u.expertParams += p;
-    u.macs += estimateLayerFlops(c.type, c.params ?? {}, inS, outS) || 0;
+    const macs = estimateLayerFlops(c.type, c.params ?? {}, inS, outS) || 0;
+    u.macs += macs;
+    u.gemms.push(...gemmsOf(c, shapes, macs));
     u.memBytes += memBoundBytes(c, shapes, hasRope);
     const l = layerMemoryTerms(c, shapes, stores);
     if (l) {
@@ -9180,6 +9595,73 @@ function optimalPartition(w, k, head0 = 0, tailK = 0) {
     j = i;
   }
   return sizes;
+}
+function splitBySchedule(w, k, head0, tailK, step, seed, microbatches = 1) {
+  const mOf = microbatches;
+  const n2 = w.length;
+  const costs = (sizes) => {
+    const out = [];
+    let s = 0;
+    sizes.forEach((c, i) => {
+      let f = 0;
+      for (let j = s; j < s + c; j++) f += w[j];
+      if (i === 0) f += head0;
+      if (i === sizes.length - 1) f += tailK;
+      out.push(f);
+      s += c;
+    });
+    return out;
+  };
+  let best = seed.slice(), bestT = step(costs(best));
+  const better = (t) => t < bestT * (1 - 1e-9);
+  let count = 1;
+  for (let i = 0; i < k - 1; i++) count = count * (n2 - 1 - i) / (i + 1);
+  if (count <= 2e4) {
+    const pre = [0];
+    for (const x of w) pre.push(pre[pre.length - 1] + x);
+    const sizes = new Array(k).fill(1);
+    const rec = (i, at) => {
+      const left = n2 - at;
+      const bound = bestT / Math.max(1, mOf);
+      if (i === k - 1) {
+        const last = pre[n2] - pre[at] + tailK + (k === 1 ? head0 : 0);
+        if (last >= bound) return;
+        sizes[i] = left;
+        const t = step(costs(sizes));
+        if (better(t)) {
+          best = sizes.slice();
+          bestT = t;
+        }
+        return;
+      }
+      for (let c = 1; c <= left - (k - 1 - i); c++) {
+        const part = pre[at + c] - pre[at] + (i === 0 ? head0 : 0);
+        if (part >= bound) break;
+        sizes[i] = c;
+        rec(i + 1, at + c);
+      }
+    };
+    rec(0, 0);
+    return best;
+  }
+  for (let moved = true; moved; ) {
+    moved = false;
+    for (let b = 0; b < k - 1; b++) {
+      for (const d of [1, -1]) {
+        const s = best.slice();
+        s[b] += d;
+        s[b + 1] -= d;
+        if (s[b] < 1 || s[b + 1] < 1) continue;
+        const t = step(costs(s));
+        if (better(t)) {
+          best = s;
+          bestT = t;
+          moved = true;
+        }
+      }
+    }
+  }
+  return best;
 }
 function evenSplit(blocks, pp) {
   const base = Math.floor(blocks / pp), rem = blocks % pp;
@@ -9287,7 +9769,8 @@ function seqImbalance(hist, ranks, perRank, a, b, seed = 7) {
 }
 var pct = (x) => `${(x * 100).toFixed(1)}%`;
 var gb = (x) => `${x.toFixed(1)} GB`;
-function checkParallelLayout(model, layout) {
+function checkParallelLayout(model, layout, opts = {}) {
+  const useCurve = opts.gemmCurve !== false;
   const checked = [];
   const skipped = [];
   const findings = [];
@@ -9493,6 +9976,7 @@ function checkParallelLayout(model, layout) {
   const postC = unitCost(split.post, shapes, true, hasRope);
   if (postC.logits === 0 && geo.vocab != null && geo.hidden != null) {
     postC.macs += seqLen * geo.hidden * geo.vocab;
+    postC.gemms.push(seqLen * geo.hidden * geo.vocab);
     postC.logits = seqLen * geo.vocab;
     postC.params += geo.hidden * geo.vocab;
     postC.boundaryElems = Math.max(postC.boundaryElems, seqLen * geo.vocab);
@@ -9516,7 +10000,12 @@ function checkParallelLayout(model, layout) {
   const flopsPerTok = (u, isBlock) => 6 * u.macs / seqLen * (isBlock ? recompute : 1);
   const lossPerTok = postC.logits / seqLen * LOSS_FLOPS_PER_LOGIT;
   const perGpu = micro / (tp * cp);
-  const mmMs = (u, isBlock) => gpu ? flopsPerTok(u, isBlock) * seqLen * perGpu / (gpu.bf16TFLOPS * 1e12 * COMPUTE_BOUND_MFU) * 1e3 : 0;
+  const mmMs = (u, isBlock) => {
+    if (!gpu) return 0;
+    let t = 0;
+    for (const g of u.gemms) t += 3 * gemmMs(useCurve ? gpu.id : "", 2 * g * perGpu, gpu.bf16TFLOPS * 1e12, COMPUTE_BOUND_MFU, opts.gemmAxis);
+    return t * (isBlock ? recompute : 1);
+  };
   const memMs = (u, isBlock) => gpu ? u.memBytes * (isBlock ? recompute : 1) * perGpu / (gpu.memBandwidthGBs * 1e9 * MEM_BW_EFFICIENCY) * 1e3 : 0;
   const costBasis = gpu ? "time" : "flops";
   const unitCostOf = (u, kind) => {
@@ -9572,12 +10061,15 @@ function checkParallelLayout(model, layout) {
   const mean = sw.reduce((a, b) => a + b, 0) / sw.length;
   const maxW = Math.max(...sw);
   const slowest = sw.indexOf(maxW);
-  const best = pp > 1 ? optimalPartition(unitW, pp, head0W, tailW) : null;
+  const simulated = opts.simulateSchedule !== false && m != null && pp > 1 && (v === 1 || m % pp === 0);
+  const stepOf = (stages2) => m == null ? null : simulated ? simulatedStepTime(stages2, m, v) : pipelineStepTime(stages2, m, v);
+  const minMax = pp > 1 ? optimalPartition(unitW, pp, head0W, tailW) : null;
+  const best = minMax && simulated ? splitBySchedule(unitW, pp, head0W, tailW, (st) => stepOf(st), minMax, m) : minMax;
   const bestW = best ? stageSum(best, unitW, head0W, tailW) : sw;
   const bestMax = Math.max(...bestW);
-  const stepOf = (stages2) => m != null ? pipelineStepTime(stages2, m, v) : null;
   const balanced = sw.map(() => mean);
   const curStep = stepOf(sw), balStep = stepOf(balanced), bestStep = stepOf(bestW);
+  const improves = best != null && (simulated && curStep != null && bestStep != null ? bestStep < curStep * (1 - 1e-9) : bestMax < maxW * (1 - 1e-9));
   const asymptoticSlowdown = maxW / mean - 1;
   const imbalance = {
     costBasis,
@@ -9587,11 +10079,11 @@ function checkParallelLayout(model, layout) {
     asymptoticSlowdown,
     step: {
       microbatches: m,
-      formula: m != null ? v > 1 ? `t = m x max + (sum - max) / v, m = ${m}, v = ${v} (interleaved)` : `t = m x max + (sum - max), m = ${m} (1F1B)` : "max / mean (microbatches per step unknown, so fill and drain are left out and this overstates the gap)",
+      formula: m == null ? "max / mean (microbatches per step unknown, so fill and drain are left out and this overstates the gap)" : simulated ? `${v > 1 ? `interleaved schedule with v = ${v}` : "1F1B schedule"} simulated op by op, a port of Primus's simulator, m = ${m}, forward a third of each stage` : v > 1 ? `t = m x max + (sum - max) / v, m = ${m}, v = ${v} (interleaved)` : `t = m x max + (sum - max), m = ${m} (1F1B)`,
       currentMs: costBasis === "time" ? curStep : null,
       balancedMs: costBasis === "time" ? balStep : null
     },
-    rebalanced: best && bestMax < maxW * (1 - 1e-9) ? {
+    rebalanced: best && improves ? {
       layersPerStage: best,
       maxOverMean: bestMax / mean,
       estStepSpeedup: curStep != null && bestStep != null ? curStep / bestStep - 1 : maxW / bestMax - 1,
@@ -9815,7 +10307,7 @@ function renderLayoutText(r, name = "model") {
     const line = (cells) => "  " + cells.map((c, i) => i <= 2 ? c.padEnd(w[i]) : c.padStart(w[i])).join("  ");
     L.push(line(head));
     for (const row of rows) L.push(line(row));
-    L.push(`  * predicted fwd+bwd ms per microbatch per GPU: matmuls at ${Math.round(COMPUTE_BOUND_MFU * 100)}% of peak FLOPs plus memory-bound bytes (the mem-bound share) at ${Math.round(MEM_BW_EFFICIENCY * 100)}% of memory bandwidth. Not measured.`);
+    L.push(`  * predicted fwd+bwd ms per microbatch per GPU: matmuls at up to ${Math.round(COMPUTE_BOUND_MFU * 100)}% of peak FLOPs (less for short GEMMs${r.resolved.gpu && GEMM_CURVE_CARDS.includes(r.resolved.gpu) ? `, from a measured curve for this card` : ", no measured curve for this card so flat"}) plus memory-bound bytes (the mem-bound share) at ${Math.round(MEM_BW_EFFICIENCY * 100)}% of memory bandwidth. Not measured.`);
     const loss = r.stages.find((s) => s.lossLogitsGb > 0);
     if (loss) L.push(`  Stage ${loss.index}'s peak includes ${gb(loss.lossLogitsGb)} of fp32 logits and their gradient for the loss (--fused-ce if the loss is fused or chunked).`);
   }
@@ -9852,8 +10344,774 @@ function renderLayoutText(r, name = "model") {
   return L.join("\n") + "\n";
 }
 
+// src/utils/serveEngineTables.generated.ts
+var ENGINE_QUANT_TABLES = [
+  {
+    "engine": "vllm",
+    "tag": "v0.11.0",
+    "commit": "b8b302cde434df8c9289a2b465406b47ebab1c2d",
+    "date": "2025-10-10",
+    "repo": "vllm-project/vllm",
+    "methods": {
+      "awq": {
+        "cls": "AWQConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/awq.py#L60"
+      },
+      "deepspeedfp": {
+        "cls": "DeepSpeedFPConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/deepspeedfp.py#L65"
+      },
+      "tpu_int8": {
+        "cls": "Int8TpuConfig",
+        "minSm": null,
+        "at": "vllm/model_executor/layers/quantization/tpu_int8.py#L19"
+      },
+      "fp8": {
+        "cls": "Fp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/fp8.py#L114"
+      },
+      "fbgemm_fp8": {
+        "cls": "FBGEMMFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/fbgemm_fp8.py#L50"
+      },
+      "modelopt": {
+        "cls": "ModelOptFp8Config",
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L85"
+      },
+      "modelopt_fp4": {
+        "cls": "ModelOptNvFp4Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L643"
+      },
+      "bitblas": {
+        "cls": "BitBLASConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/bitblas.py#L117"
+      },
+      "gguf": {
+        "cls": "GGUFConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/gguf.py#L48"
+      },
+      "gptq_marlin_24": {
+        "cls": "GPTQMarlin24Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/gptq_marlin_24.py#L99"
+      },
+      "gptq_marlin": {
+        "cls": "GPTQMarlinConfig",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/gptq_marlin.py#L156"
+      },
+      "gptq_bitblas": {
+        "cls": "GPTQBitBLASConfig",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/gptq_bitblas.py#L140"
+      },
+      "awq_marlin": {
+        "cls": "AWQMarlinConfig",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/awq_marlin.py#L90"
+      },
+      "gptq": {
+        "cls": "GPTQConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/gptq.py#L107"
+      },
+      "compressed-tensors": {
+        "cls": "CompressedTensorsConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors.py#L90"
+      },
+      "bitsandbytes": {
+        "cls": "BitsAndBytesConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/bitsandbytes.py#L75"
+      },
+      "ptpc_fp8": {
+        "cls": "PTPCFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/fp8.py#L114"
+      },
+      "hqq": {
+        "cls": "HQQMarlinConfig",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/hqq_marlin.py#L63"
+      },
+      "experts_int8": {
+        "cls": "ExpertsInt8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/experts_int8.py#L36"
+      },
+      "ipex": {
+        "cls": "IPEXConfig",
+        "minSm": null,
+        "at": "vllm/model_executor/layers/quantization/ipex_quant.py#L31"
+      },
+      "quark": {
+        "cls": "QuarkConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/quark/quark.py#L52"
+      },
+      "moe_wna16": {
+        "cls": "MoeWNA16Config",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/moe_wna16.py#L80"
+      },
+      "torchao": {
+        "cls": "TorchAOConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/torchao.py#L72"
+      },
+      "auto-round": {
+        "cls": "AutoRoundConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/auto_round.py#L96"
+      },
+      "rtn": {
+        "cls": "RTNConfig",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/rtn.py#L65"
+      },
+      "inc": {
+        "cls": "INCConfig",
+        "minSm": null,
+        "at": "vllm/model_executor/layers/quantization/inc.py#L32"
+      },
+      "mxfp4": {
+        "cls": "Mxfp4Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/mxfp4.py#L121"
+      },
+      "petit_nvfp4": {
+        "cls": "PetitNvFp4Config",
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/petit.py#L75"
+      }
+    },
+    "compressedTensorsSchemes": {
+      "24": {
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_24.py#L60"
+      },
+      "w4a16sparse24": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_24.py#L49"
+      },
+      "w4a16fp4": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_nvfp4.py#L26"
+      },
+      "w4a4fp4": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_nvfp4.py#L52"
+      },
+      "w4a8fp8": {
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_fp8.py#L62"
+      },
+      "w4a8int": {
+        "minSm": 1,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_int.py#L48"
+      },
+      "w8a16fp8": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a16_fp8.py#L33"
+      },
+      "w8a8fp8": {
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_fp8.py#L55"
+      },
+      "w8a8int8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_int8.py#L32"
+      },
+      "wna16": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16.py#L69"
+      }
+    }
+  },
+  {
+    "engine": "vllm",
+    "tag": "v0.19.1",
+    "commit": "b1388b1fbf5aaef47937fabe98931211684666a6",
+    "date": "2026-04-17",
+    "repo": "vllm-project/vllm",
+    "methods": {
+      "awq": {
+        "cls": "AWQConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/awq.py#L73"
+      },
+      "fp8": {
+        "cls": "Fp8Config",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/fp8.py#L145"
+      },
+      "fbgemm_fp8": {
+        "cls": "FBGEMMFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/fbgemm_fp8.py#L65"
+      },
+      "fp_quant": {
+        "cls": "FPQuantConfig",
+        "minSm": 100,
+        "at": "vllm/model_executor/layers/quantization/fp_quant.py#L69"
+      },
+      "modelopt": {
+        "cls": "ModelOptFp8Config",
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L408"
+      },
+      "modelopt_fp4": {
+        "cls": "ModelOptNvFp4Config",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L1013"
+      },
+      "modelopt_mxfp8": {
+        "cls": "ModelOptMxFp8Config",
+        "minSm": 100,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L1501"
+      },
+      "modelopt_mixed": {
+        "cls": "ModelOptMixedPrecisionConfig",
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L2084"
+      },
+      "gguf": {
+        "cls": "GGUFConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/gguf.py#L71"
+      },
+      "gptq_marlin": {
+        "cls": "GPTQMarlinConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/gptq_marlin.py#L183"
+      },
+      "awq_marlin": {
+        "cls": "AWQMarlinConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/awq_marlin.py#L206"
+      },
+      "gptq": {
+        "cls": "GPTQConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/gptq.py#L135"
+      },
+      "compressed-tensors": {
+        "cls": "CompressedTensorsConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors.py#L116"
+      },
+      "bitsandbytes": {
+        "cls": "BitsAndBytesConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/bitsandbytes.py#L104"
+      },
+      "experts_int8": {
+        "cls": "ExpertsInt8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/experts_int8.py#L42"
+      },
+      "quark": {
+        "cls": "QuarkConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/quark/quark.py#L88"
+      },
+      "moe_wna16": {
+        "cls": "MoeWNA16Config",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/moe_wna16.py#L97"
+      },
+      "torchao": {
+        "cls": "TorchAOConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/torchao.py#L129"
+      },
+      "auto-round": {
+        "cls": "INCConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/inc.py#L105"
+      },
+      "inc": {
+        "cls": "INCConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/inc.py#L105"
+      },
+      "mxfp4": {
+        "cls": "Mxfp4Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/mxfp4.py#L50"
+      },
+      "mxfp8": {
+        "cls": "Mxfp8Config",
+        "minSm": 100,
+        "at": "vllm/model_executor/layers/quantization/mxfp8.py#L78"
+      },
+      "petit_nvfp4": {
+        "cls": "PetitNvFp4Config",
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/petit.py#L84"
+      },
+      "cpu_awq": {
+        "cls": "CPUAWQConfig",
+        "minSm": null,
+        "at": "vllm/model_executor/layers/quantization/cpu_wna16.py#L40"
+      }
+    },
+    "compressedTensorsSchemes": {
+      "w4a16mxfp4": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_mxfp4.py#L40"
+      },
+      "w4a16fp4": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_nvfp4.py#L29"
+      },
+      "w4a4fp4": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_nvfp4.py#L31"
+      },
+      "w4a8fp8": {
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_fp8.py#L68"
+      },
+      "w4a8int": {
+        "minSm": 1,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_int.py#L56"
+      },
+      "w8a16fp8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a16_fp8.py#L49"
+      },
+      "w8a8fp8": {
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_fp8.py#L95"
+      },
+      "w8a8int8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_int8.py#L35"
+      },
+      "wna16": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16.py#L79"
+      }
+    }
+  },
+  {
+    "engine": "vllm",
+    "tag": "v0.32.0",
+    "commit": "5df63a7203cdb9328d824a27b682e77c7b9928be",
+    "date": "2026-10-17",
+    "repo": "vllm-project/vllm",
+    "methods": {
+      "awq": {
+        "cls": "AutoAWQConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/auto_awq.py#L233"
+      },
+      "awq_marlin": {
+        "cls": "AutoAWQConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/auto_awq.py#L233"
+      },
+      "auto_awq": {
+        "cls": "AutoAWQConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/auto_awq.py#L233"
+      },
+      "fp8": {
+        "cls": "Fp8Config",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/fp8.py#L146"
+      },
+      "fbgemm_fp8": {
+        "cls": "FBGEMMFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/fbgemm_fp8.py#L66"
+      },
+      "fp_quant": {
+        "cls": "FPQuantConfig",
+        "minSm": 100,
+        "at": "vllm/model_executor/layers/quantization/fp_quant.py#L63"
+      },
+      "modelopt": {
+        "cls": "ModelOptFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L445"
+      },
+      "modelopt_fp4": {
+        "cls": "ModelOptNvFp4Config",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L768"
+      },
+      "modelopt_mxfp8": {
+        "cls": "ModelOptMxFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L1200"
+      },
+      "modelopt_mixed": {
+        "cls": "ModelOptMixedPrecisionConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L1616"
+      },
+      "auto_gptq": {
+        "cls": "AutoGPTQConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/auto_gptq.py#L182"
+      },
+      "gptq": {
+        "cls": "AutoGPTQConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/auto_gptq.py#L182"
+      },
+      "gptq_marlin": {
+        "cls": "AutoGPTQConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/auto_gptq.py#L182"
+      },
+      "compressed-tensors": {
+        "cls": "CompressedTensorsConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/compressed_tensors.py#L123"
+      },
+      "experts_int8": {
+        "cls": "ExpertsInt8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/experts_int8.py#L42"
+      },
+      "quark": {
+        "cls": "QuarkConfig",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/quark/quark.py#L127"
+      },
+      "moe_wna16": {
+        "cls": "MoeWNA16Config",
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/moe_wna16.py#L110"
+      },
+      "torchao": {
+        "cls": "TorchAOConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/torchao.py#L160"
+      },
+      "inc": {
+        "cls": "INCConfig",
+        "minSm": 60,
+        "at": "vllm/model_executor/layers/quantization/inc/inc.py#L266"
+      },
+      "mxfp4": {
+        "cls": "Mxfp4Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/mxfp4.py#L71"
+      },
+      "gpt_oss_mxfp4": {
+        "cls": "GptOssMxfp4Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/mxfp4.py#L71"
+      },
+      "deepseek_v4_fp8": {
+        "cls": "deepseek_config",
+        "minSm": null,
+        "at": null
+      },
+      "humming": {
+        "cls": "HummingConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/humming.py#L167"
+      },
+      "online": {
+        "cls": "OnlineQuantizationConfig",
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/online/base.py#L209"
+      },
+      "mxfp8": {
+        "cls": "ModelOptMxFp8Config",
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/modelopt.py#L1200"
+      }
+    },
+    "compressedTensorsSchemes": {
+      "w4a4mxfp4": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_mxfp4.py#L46"
+      },
+      "w4a4fp4": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_nvfp4.py#L35"
+      },
+      "w4a8fp8": {
+        "minSm": 90,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_fp8.py#L65"
+      },
+      "w4a8int": {
+        "minSm": 1,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_int.py#L56"
+      },
+      "w4a8mxfp4": {
+        "minSm": 80,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_mxfp4.py#L46"
+      },
+      "w8a16fp8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a16_fp8.py#L53"
+      },
+      "w8a8fp8": {
+        "minSm": 89,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_fp8.py#L83"
+      },
+      "w8a8int8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_int8.py#L35"
+      },
+      "w8a8mxfp8": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_mxfp8.py#L37"
+      },
+      "wna16": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16.py#L102"
+      },
+      "wna4int": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa4.py#L111"
+      },
+      "wna8int": {
+        "minSm": 75,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa8.py#L111"
+      },
+      "wna8o8int": {
+        "minSm": 70,
+        "at": "vllm/model_executor/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa8o8.py#L83"
+      }
+    }
+  },
+  {
+    "engine": "sglang",
+    "tag": "v0.5.22",
+    "commit": "baa9befa381511cd4d56f83980951e5a45fffc6d",
+    "date": "2026-10-13",
+    "repo": "sgl-project/sglang",
+    "methods": {
+      "fp8": {
+        "cls": "Fp8Config",
+        "minSm": 80,
+        "conditional": [
+          94,
+          100,
+          80
+        ],
+        "at": "python/sglang/srt/layers/quantization/fp8.py#L323"
+      },
+      "mxfp8": {
+        "cls": "Fp8Config",
+        "minSm": 80,
+        "conditional": [
+          94,
+          100,
+          80
+        ],
+        "at": "python/sglang/srt/layers/quantization/fp8.py#L323"
+      },
+      "blockwise_int8": {
+        "cls": "BlockInt8Config",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/blockwise_int8.py#L83"
+      },
+      "modelopt": {
+        "cls": "ModelOptFp8Config",
+        "minSm": 89,
+        "at": "python/sglang/srt/layers/quantization/modelopt_quant.py#L461"
+      },
+      "modelopt_fp8": {
+        "cls": "ModelOptFp8Config",
+        "minSm": 89,
+        "at": "python/sglang/srt/layers/quantization/modelopt_quant.py#L461"
+      },
+      "modelopt_fp4": {
+        "cls": "ModelOptFp4Config",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/modelopt_quant.py#L1528"
+      },
+      "nvfp4_online": {
+        "cls": "NvFp4OnlineConfig",
+        "minSm": 100,
+        "at": "python/sglang/srt/layers/quantization/nvfp4_online.py#L108"
+      },
+      "modelopt_mixed": {
+        "cls": "ModelOptMixedPrecisionConfig",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/modelopt_quant.py#L1528"
+      },
+      "w8a8_int8": {
+        "cls": "W8A8Int8Config",
+        "minSm": 75,
+        "at": "python/sglang/srt/layers/quantization/w8a8_int8.py#L87"
+      },
+      "w8a8_fp8": {
+        "cls": "W8A8Fp8Config",
+        "minSm": 89,
+        "at": "python/sglang/srt/layers/quantization/w8a8_fp8.py#L66"
+      },
+      "awq": {
+        "cls": "AWQConfig",
+        "minSm": 75,
+        "at": "python/sglang/srt/layers/quantization/awq/awq.py#L109"
+      },
+      "awq_marlin": {
+        "cls": "AWQMarlinConfig",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/awq/awq.py#L307"
+      },
+      "bitsandbytes": {
+        "cls": "BitsAndBytesConfig",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/bitsandbytes.py#L100"
+      },
+      "gguf": {
+        "cls": "GGUFConfig",
+        "minSm": 60,
+        "at": "python/sglang/srt/layers/quantization/gguf.py#L107"
+      },
+      "gptq_marlin": {
+        "cls": "GPTQMarlinConfig",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/gptq/gptq.py#L386"
+      },
+      "moe_wna16": {
+        "cls": "MoeWNA16Config",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/moe_wna16.py#L126"
+      },
+      "compressed-tensors": {
+        "cls": "CompressedTensorsConfig",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/compressed_tensors.py#L159"
+      },
+      "w4afp8": {
+        "cls": "W4AFp8Config",
+        "minSm": 90,
+        "at": "python/sglang/srt/layers/quantization/w4afp8.py#L70"
+      },
+      "petit_nvfp4": {
+        "cls": "PetitNvFp4Config",
+        "minSm": 90,
+        "at": "python/sglang/srt/layers/quantization/petit.py#L62"
+      },
+      "quark": {
+        "cls": "QuarkConfig",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/quark/quark.py#L371"
+      },
+      "quark_mxfp4": {
+        "cls": "QuarkConfig",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/quark/quark.py#L371"
+      },
+      "auto-round": {
+        "cls": "AutoRoundConfig",
+        "minSm": 60,
+        "at": "python/sglang/srt/layers/quantization/auto_round.py#L131"
+      },
+      "auto-round-int8": {
+        "cls": "W8A8Int8Config",
+        "minSm": 75,
+        "at": "python/sglang/srt/layers/quantization/w8a8_int8.py#L87"
+      },
+      "modelslim": {
+        "cls": "ModelSlimConfig",
+        "minSm": 0,
+        "at": "python/sglang/srt/layers/quantization/modelslim/modelslim.py#L242"
+      },
+      "quark_int4fp8_moe": {
+        "cls": "QuarkInt4Fp8Config",
+        "minSm": 70,
+        "at": "python/sglang/srt/layers/quantization/quark_int4fp8_moe.py#L91"
+      },
+      "humming": {
+        "cls": "HummingConfig",
+        "minSm": 75,
+        "at": "python/sglang/srt/layers/quantization/humming.py#L488"
+      },
+      "mxfp_w4a8": {
+        "cls": "Mxfp4W4A8Config",
+        "minSm": 0,
+        "at": "python/sglang/srt/layers/quantization/npu_mxfp4.py#L62"
+      },
+      "mxfp4": {
+        "cls": "Mxfp4Config",
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/mxfp4.py#L338"
+      }
+    },
+    "compressedTensorsSchemes": {
+      "w4a16fp4": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_nvfp4.py#L135"
+      },
+      "w4a16nvfp4moe": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a16_nvfp4_moe.py#L53"
+      },
+      "mxint4moe": {
+        "minSm": 100,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_mxint4_moe.py#L83"
+      },
+      "w4a4fp4": {
+        "minSm": 100,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_nvfp4.py#L37"
+      },
+      "w4a4nvfp4moe": {
+        "minSm": 100,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a4_nvfp4_moe.py#L50"
+      },
+      "w4afp8moe": {
+        "minSm": 90,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w4a8_fp8_moe.py#L102"
+      },
+      "w8a16fp8": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a16_fp8.py#L35"
+      },
+      "w8a8fp8": {
+        "minSm": 89,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_fp8.py#L58"
+      },
+      "w8a8fp8moe": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_fp8_moe.py#L80"
+      },
+      "w8a8int8": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_w8a8_int8.py#L97"
+      },
+      "wna16": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16.py#L94"
+      },
+      "wna16moe": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16_moe.py#L96"
+      },
+      "wna16tritonmoe": {
+        "minSm": 80,
+        "at": "python/sglang/srt/layers/quantization/compressed_tensors/schemes/compressed_tensors_wNa16_moe.py#L96"
+      }
+    }
+  }
+];
+var VLLM_RECIPES = { "repo": "vllm-project/recipes", "commit": "2338e9edec1d5df5f823abf3c1f19e7ba0b2ed0e", "date": "2026-10-18", "count": 215, "recipes": { "ByteDance-Seed/Seed-OSS-36B-Instruct": { "file": "models/ByteDance-Seed/Seed-OSS-36B-Instruct.yaml", "minVllmVersion": "0.11.0", "contextLength": 524288, "toolCallParser": "seed_oss", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 86, "extraArgs": ["--tensor-parallel-size", "8"] } } }, "google/diffusiongemma-26B-A4B-it": { "file": "models/Google/diffusiongemma-26B-A4B-it.yaml", "minVllmVersion": "0.24.0", "contextLength": 262144, "baseArgs": ["--max-num-seqs", "4"], "toolCallParser": "gemma4", "reasoningParser": "gemma4", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 64 }, "fp8": { "modelId": "RedHatAI/diffusiongemma-26B-A4B-it-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 32 }, "nvfp4": { "modelId": "RedHatAI/diffusiongemma-26B-A4B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 24 }, "nvidia_nvfp4": { "modelId": "nvidia/diffusiongemma-26B-A4B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 24 } }, "verifiedGpus": ["h100", "h200", "dgx_spark_gb10", "xeon6", "arc_pro_b60", "arc_pro_b70"] }, "google/gemma-4-12B-it": { "file": "models/Google/gemma-4-12B-it.yaml", "minVllmVersion": "0.23.0", "contextLength": 131072, "toolCallParser": "gemma4", "reasoningParser": "gemma4", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 29 }, "nvfp4": { "modelId": "RedHatAI/gemma-4-12B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 8, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "w4a16": { "modelId": "google/gemma-4-12B-it-qat-w4a16-ct", "precision": "int4", "vramMinimumGb": 9 }, "fp8": { "modelId": "RedHatAI/gemma-4-12B-it-FP8-Dynamic", "precision": "fp8", "vramMinimumGb": 15, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "arc_pro_b60", "arc_pro_b70"] }, "google/gemma-4-26B-A4B-it": { "file": "models/Google/gemma-4-26B-A4B-it.yaml", "minVllmVersion": "0.25.0", "contextLength": 131072, "toolCallParser": "gemma4", "reasoningParser": "gemma4", "optInFeatures": ["text_only", "spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 64 }, "fp8": { "modelId": "RedHatAI/gemma-4-26B-A4B-it-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 32, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "RedHatAI/gemma-4-26B-A4B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 16, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvidia_nvfp4": { "modelId": "nvidia/Gemma-4-26B-A4B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 16 } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x", "trillium", "ironwood", "xeon6", "dgx_spark_gb10", "dgx_station_gb300", "rtx_pro_6000", "rtx_5090", "arc_pro_b60", "arc_pro_b70"] }, "google/gemma-4-31B-it": { "file": "models/Google/gemma-4-31B-it.yaml", "minVllmVersion": "0.19.1", "contextLength": 262144, "toolCallParser": "gemma4", "reasoningParser": "gemma4", "optInFeatures": ["text_only", "spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 75 }, "fp8": { "modelId": "RedHatAI/gemma-4-31B-it-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 38, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/gemma-4-31B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 19, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/gemma-4-31B-it-NVFP4", "precision": "nvfp4", "vramMinimumGb": 19, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "w4a16": { "modelId": "google/gemma-4-31B-it-qat-w4a16-ct", "precision": "int4", "vramMinimumGb": 20 }, "redhat_fp8": { "modelId": "RedHatAI/gemma-4-31B-it-FP8-block", "precision": "fp8", "vramMinimumGb": 38, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "mi300x", "mi325x", "mi355x", "trillium", "ironwood", "arc_pro_b60", "arc_pro_b70"] }, "google/gemma-4-E2B-it": { "file": "models/Google/gemma-4-E2B-it.yaml", "minVllmVersion": "0.19.1", "contextLength": 131072, "toolCallParser": "gemma4", "reasoningParser": "gemma4", "optInFeatures": ["text_only", "spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 13 }, "fp8": { "modelId": "RedHatAI/gemma-4-E2B-it-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 6, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "w4a16": { "modelId": "google/gemma-4-E2B-it-qat-w4a16-ct", "precision": "int4", "vramMinimumGb": 8 }, "mobile": { "modelId": "google/gemma-4-E2B-it-qat-mobile-ct", "precision": "int2/4/8", "vramMinimumGb": 4 } }, "verifiedGpus": ["h100", "mi300x", "mi325x", "mi355x", "trillium", "ironwood", "xeon6"] }, "google/gemma-4-E4B-it": { "file": "models/Google/gemma-4-E4B-it.yaml", "minVllmVersion": "0.19.1", "contextLength": 131072, "toolCallParser": "gemma4", "reasoningParser": "gemma4", "optInFeatures": ["text_only", "spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 20 }, "fp8": { "modelId": "RedHatAI/gemma-4-E4B-it-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "w4a16": { "modelId": "google/gemma-4-E4B-it-qat-w4a16-ct", "precision": "int4", "vramMinimumGb": 10 }, "mobile": { "modelId": "google/gemma-4-E4B-it-qat-mobile-ct", "precision": "int2/4/8", "vramMinimumGb": 5 } }, "verifiedGpus": ["h100", "mi300x", "mi325x", "mi355x", "trillium", "ironwood", "xeon6"] }, "google/translategemma-27b-it": { "file": "models/Google/translategemma-27b-it.yaml", "minVllmVersion": "0.14.1", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 65 }, "vllm_optimized": { "modelId": "Infomaniak-AI/vllm-translategemma-27b-it", "precision": "bf16", "vramMinimumGb": 65 }, "small_4b": { "modelId": "google/translategemma-4b-it", "precision": "bf16", "vramMinimumGb": 10 } } }, "IFM/Jais-3-0.9B": { "file": "models/IFM/Jais-3-0.9B.yaml", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16", "--max-model-len", "131072", "--gpu-memory-utilization", "0.85"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h200"] }, "IFM/Jais-3-3.7B": { "file": "models/IFM/Jais-3-3.7B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 13 } }, "verifiedGpus": ["h200"] }, "IFM/Jais-3-32B": { "file": "models/IFM/Jais-3-32B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 84 } }, "verifiedGpus": ["h200"] }, "IFM/Jais-3-375B-A23B": { "file": "models/IFM/Jais-3-375B-A23B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 911 } }, "verifiedGpus": ["h200", "mi355x"] }, "IFM/Jais-3-7B": { "file": "models/IFM/Jais-3-7B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 } }, "verifiedGpus": ["h200"] }, "IFM/Jais-3-MoVA-36B-A4B": { "file": "models/IFM/Jais-3-MoVA-36B-A4B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16", "--enable-expert-parallel"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 90 } }, "verifiedGpus": ["h200"] }, "IFM/K2-Horizon-0.9B": { "file": "models/IFM/K2-Horizon-0.9B.yaml", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16", "--max-model-len", "131072", "--gpu-memory-utilization", "0.85"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h200"] }, "IFM/K2-Horizon-3.7B": { "file": "models/IFM/K2-Horizon-3.7B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 13 } }, "verifiedGpus": ["h200"] }, "IFM/K2-Horizon-32B": { "file": "models/IFM/K2-Horizon-32B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 84 } }, "verifiedGpus": ["h200"] }, "IFM/K2-Horizon-375B-A23B": { "file": "models/IFM/K2-Horizon-375B-A23B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 911 } }, "verifiedGpus": ["h200", "mi355x"] }, "IFM/K2-Horizon-7B": { "file": "models/IFM/K2-Horizon-7B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 } }, "verifiedGpus": ["h200"] }, "IFM/K2-Horizon-MoVA-36B-A4B": { "file": "models/IFM/K2-Horizon-MoVA-36B-A4B.yaml", "contextLength": 524288, "baseArgs": ["--trust-remote-code", "--chat-template-content-format", "string", "--dtype", "bfloat16", "--enable-expert-parallel"], "toolCallParser": "k2_horizon", "reasoningParser": "k2_horizon", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 90 } }, "verifiedGpus": ["h200"] }, "IndexTeam/IndexTTS-2.5": { "file": "models/IndexTeam/IndexTTS-2.5.yaml", "minVllmVersion": "0.27.0", "baseArgs": ["--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 96 } } }, "JetBrains/Mellum2-12B-A2.5B-Instruct": { "file": "models/JetBrains/Mellum2-12B-A2.5B-Instruct.yaml", "minVllmVersion": "0.23.0", "contextLength": 131072, "baseArgs": ["--max-model-len", "131072", "--trust-remote-code"], "toolCallParser": "hermes", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 29 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "JetBrains/Mellum2-12B-A2.5B-Thinking": { "file": "models/JetBrains/Mellum2-12B-A2.5B-Thinking.yaml", "minVllmVersion": "0.23.0", "contextLength": 131072, "baseArgs": ["--max-model-len", "131072"], "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 29 }, "fp8": { "modelId": "RedHatAI/Mellum2-12B-A2.5B-Thinking-FP8-Dynamic", "precision": "fp8", "vramMinimumGb": 15, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "RedHatAI/Mellum2-12B-A2.5B-Thinking-NVFP4", "precision": "nvfp4", "vramMinimumGb": 8 } }, "verifiedGpus": ["h200"] }, "Lightricks/LTX-2.5-Diffusers": { "file": "models/Lightricks/LTX-2.5-Diffusers.yaml", "minVllmVersion": "0.27.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 80 }, "fp8": { "precision": "fp8", "vramMinimumGb": 61, "extraArgs": ["--quantization", "fp8"] } }, "verifiedGpus": ["h200", "b300"] }, "LiquidAI/LFM2.5-1.2B-Base": { "file": "models/LiquidAI/LFM2.5-1.2B-Base.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-1.2B-Instruct": { "file": "models/LiquidAI/LFM2.5-1.2B-Instruct.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "toolCallParser": "lfm2", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-1.2B-JP-202606": { "file": "models/LiquidAI/LFM2.5-1.2B-JP-202606.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "toolCallParser": "lfm2", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-1.2B-JP": { "file": "models/LiquidAI/LFM2.5-1.2B-JP.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-1.2B-Thinking": { "file": "models/LiquidAI/LFM2.5-1.2B-Thinking.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "toolCallParser": "lfm2", "reasoningParser": "qwen3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-230M": { "file": "models/LiquidAI/LFM2.5-230M.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "toolCallParser": "lfm2", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-350M": { "file": "models/LiquidAI/LFM2.5-350M.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "toolCallParser": "lfm2", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-8B-A1B": { "file": "models/LiquidAI/LFM2.5-8B-A1B.yaml", "minVllmVersion": "0.23.0", "contextLength": 128e3, "toolCallParser": "lfm2", "reasoningParser": "qwen3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 21 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-VL-1.6B": { "file": "models/LiquidAI/LFM2.5-VL-1.6B.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 4 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "LiquidAI/LFM2.5-VL-450M": { "file": "models/LiquidAI/LFM2.5-VL-450M.yaml", "minVllmVersion": "0.23.0", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } }, "verifiedGpus": ["h100", "h200", "b200"] }, "MiniMaxAI/MiniMax-H3": { "file": "models/MiniMaxAI/MiniMax-H3.yaml", "minVllmVersion": "0.26.0", "baseArgs": ["--trust-remote-code", "--host", "0.0.0.0", "--port", "8000", "--num-gpus", "4", "--usp", "4", "--ring", "1", "--vae-patch-parallel-size", "4", "--vae-parallel-mode", "tile", "--vae-use-tiling"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 202 } }, "verifiedGpus": ["gb200", "b300", "dgx_spark_gb10", "rtx_4090_2x", "rtx_pro_5000_4x", "rtx_5090_2x", "rtx_pro_6000_2x", "mi300x", "mi325x", "mi355x", "ascend_950pr"] }, "MiniMaxAI/MiniMax-M2.1": { "file": "models/MiniMaxAI/MiniMax-M2.1.yaml", "minVllmVersion": "0.11.1", "contextLength": 196608, "baseArgs": ["--trust-remote-code"], "toolCallParser": "minimax_m2", "reasoningParser": "minimax_m2", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 276 } }, "verifiedGpus": ["h100", "mi300x", "mi325x", "mi355x"] }, "MiniMaxAI/MiniMax-M2.5": { "file": "models/MiniMaxAI/MiniMax-M2.5.yaml", "minVllmVersion": "0.20.2", "contextLength": 196608, "baseArgs": ["--trust-remote-code"], "toolCallParser": "minimax_m2", "reasoningParser": "minimax_m2", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 276 }, "nvfp4": { "modelId": "nvidia/MiniMax-M2.5-NVFP4", "precision": "nvfp4", "vramMinimumGb": 138, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/MiniMax-M2.5-NVFP4", "precision": "nvfp4", "vramMinimumGb": 146 } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x"] }, "MiniMaxAI/MiniMax-M2.7": { "file": "models/MiniMaxAI/MiniMax-M2.7.yaml", "minVllmVersion": "0.20.0", "contextLength": 196608, "baseArgs": ["--trust-remote-code"], "toolCallParser": "minimax_m2", "reasoningParser": "minimax_m2", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 276 }, "nvfp4": { "modelId": "nvidia/MiniMax-M2.7-NVFP4", "precision": "nvfp4", "vramMinimumGb": 138, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x", "dgx_station_gb300", "rtx_pro_6000_2x"] }, "MiniMaxAI/MiniMax-M2": { "file": "models/MiniMaxAI/MiniMax-M2.yaml", "minVllmVersion": "0.11.1", "contextLength": 196608, "baseArgs": ["--trust-remote-code"], "toolCallParser": "minimax_m2", "reasoningParser": "minimax_m2", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 276 }, "nvfp4": { "modelId": "RedHatAI/MiniMax-M2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 138, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x"] }, "MiniMaxAI/MiniMax-M3": { "file": "models/MiniMaxAI/MiniMax-M3.yaml", "minVllmVersion": "0.24.0", "nightlyRequired": true, "contextLength": 1048576, "baseArgs": ["--block-size", "128"], "toolCallParser": "minimax_m3", "reasoningParser": "minimax_m3", "optInFeatures": ["spec_decoding", "text_only", "thinking_always_on", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1025 }, "mxfp8": { "modelId": "MiniMaxAI/MiniMax-M3-MXFP8", "precision": "mxfp8", "vramMinimumGb": 513, "extraArgs": ["--attention_config.indexer_kv_dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/MiniMax-M3-NVFP4", "precision": "nvfp4", "vramMinimumGb": 257, "extraArgs": ["--trust-remote-code", "--kv-cache-dtype", "fp8", "--attention_config.backend", "FLASHINFER", "--attention_config.use_trtllm_attention", "true", "--attention_config.indexer_kv_dtype", "fp8", "--attention_config.minimax_m3_msa_decode_backend", "cutlass"] }, "mxfp4": { "modelId": "amd/MiniMax-M3-MXFP4", "precision": "mxfp4", "vramMinimumGb": 257 } }, "verifiedGpus": ["h200", "b200", "b300", "mi300x", "mi355x"] }, "OpenGVLab/InternVL3_5-8B": { "file": "models/OpenGVLab/InternVL3_5-8B.yaml", "minVllmVersion": "0.10.0", "contextLength": 40960, "baseArgs": ["--trust-remote-code"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 19 } }, "verifiedGpus": ["h100", "mi300x", "mi325x", "mi355x"] }, "OpenMOSS-Team/MOSS-Image-Base": { "file": "models/OpenMOSS-Team/MOSS-Image-Base.yaml", "minVllmVersion": "0.31.0", "baseArgs": ["--enforce-eager"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 33 }, "sft": { "modelId": "OpenMOSS-Team/MOSS-Image-SFT", "precision": "bf16", "vramMinimumGb": 33 } } }, "OpenMOSS-Team/MOSS-SoundEffect": { "file": "models/OpenMOSS-Team/MOSS-SoundEffect.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--deploy-config", "vllm_omni/deploy/moss_sound_effect.yaml"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 32 } } }, "OpenMOSS-Team/MOSS-TTS-Realtime": { "file": "models/OpenMOSS-Team/MOSS-TTS-Realtime.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 16 } } }, "OpenMOSS-Team/MOSS-TTS": { "file": "models/OpenMOSS-Team/MOSS-TTS.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--deploy-config", "vllm_omni/deploy/moss_tts.yaml"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 32 } } }, "OpenMOSS-Team/MOSS-TTSD-v1.0": { "file": "models/OpenMOSS-Team/MOSS-TTSD-v1.0.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--deploy-config", "vllm_omni/deploy/moss_ttsd.yaml"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 32 } } }, "OpenMOSS-Team/MOSS-Transcribe-Diarize": { "file": "models/OpenMOSS-Team/MOSS-Transcribe-Diarize.yaml", "minVllmVersion": "0.27.0", "baseArgs": ["--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 4 } } }, "OpenMOSS-Team/MOSS-VoiceGenerator": { "file": "models/OpenMOSS-Team/MOSS-VoiceGenerator.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--deploy-config", "vllm_omni/deploy/moss_voice_generator.yaml"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 16 } } }, "PaddlePaddle/PaddleOCR-VL-1.5": { "file": "models/PaddlePaddle/PaddleOCR-VL-1.5.yaml", "minVllmVersion": "0.11.1", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--max-num-batched-tokens", "16384", "--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } } }, "PaddlePaddle/PaddleOCR-VL-1.6": { "file": "models/PaddlePaddle/PaddleOCR-VL-1.6.yaml", "minVllmVersion": "0.11.1", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--max-num-batched-tokens", "16384", "--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } } }, "PaddlePaddle/PaddleOCR-VL": { "file": "models/PaddlePaddle/PaddleOCR-VL.yaml", "minVllmVersion": "0.11.1", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--max-num-batched-tokens", "16384", "--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } } }, "Qwen/QwQ-32B": { "file": "models/Qwen/QwQ-32B.yaml", "minVllmVersion": "0.7.3", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "deepseek_r1", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 77 }, "w8a8_int8": { "modelId": "RedHatAI/QwQ-32B-quantized.w8a8", "precision": "int8", "vramMinimumGb": 39 }, "awq": { "modelId": "Qwen/QwQ-32B-AWQ", "precision": "int4", "vramMinimumGb": 20, "extraArgs": ["--quantization", "awq"] } }, "verifiedGpus": ["xeon6"] }, "Qwen/Qwen-Image-2.1": { "file": "models/Qwen/Qwen-Image-2.1.yaml", "minVllmVersion": "0.29.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 40 }, "fp8": { "precision": "fp8", "vramMinimumGb": 40, "extraArgs": ["--diffusion-quantization-config", '{"transformer":{"method":"fp8","ignored_layers":["img_mlp"]}}'] } }, "verifiedGpus": ["gb300"] }, "Qwen/Qwen-Image": { "file": "models/Qwen/Qwen-Image.yaml", "minVllmVersion": "0.18.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 48 }, "fp8": { "precision": "fp8", "vramMinimumGb": 24, "extraArgs": ["--quantization", "fp8", "--ignored-layers", "img_mlp"] }, "int8": { "precision": "int8", "vramMinimumGb": 24, "extraArgs": ["--quantization", "int8"] } } }, "Qwen/Qwen2.5-32B": { "file": "models/Qwen/Qwen2.5-32B.yaml", "minVllmVersion": "0.6.2", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 77 }, "fp8": { "modelId": "RedHatAI/Qwen2.5-32B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 39, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["trillium"] }, "Qwen/Qwen2.5-VL-72B-Instruct": { "file": "models/Qwen/Qwen2.5-VL-72B-Instruct.yaml", "minVllmVersion": "0.10.2", "contextLength": 128e3, "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 173 }, "awq": { "modelId": "Qwen/Qwen2.5-VL-72B-Instruct-AWQ", "precision": "int4", "vramMinimumGb": 43, "extraArgs": ["--quantization", "awq"] }, "fp8": { "modelId": "RedHatAI/Qwen2.5-VL-72B-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 87, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x"] }, "Qwen/Qwen2.5-VL-7B-Instruct": { "file": "models/Qwen/Qwen2.5-VL-7B-Instruct.yaml", "minVllmVersion": "0.10.2", "contextLength": 128e3, "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 17 }, "awq": { "modelId": "Qwen/Qwen2.5-VL-7B-Instruct-AWQ", "precision": "int4", "vramMinimumGb": 5, "extraArgs": ["--quantization", "awq"] }, "fp8": { "modelId": "RedHatAI/Qwen2.5-VL-7B-Instruct-FP8-Dynamic", "precision": "fp8", "vramMinimumGb": 9, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["trillium", "xeon6"] }, "Qwen/Qwen3-1.7B": { "file": "models/Qwen/Qwen3-1.7B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 5 } }, "verifiedGpus": ["xeon6"] }, "Qwen/Qwen3-14B": { "file": "models/Qwen/Qwen3-14B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["reasoning", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 34 }, "fp8": { "modelId": "Qwen/Qwen3-14B-FP8", "precision": "fp8", "vramMinimumGb": 17 }, "awq": { "modelId": "Qwen/Qwen3-14B-AWQ", "precision": "int4", "vramMinimumGb": 10, "extraArgs": ["--quantization", "awq"] } }, "verifiedGpus": ["xeon6"] }, "Qwen/Qwen3-235B-A22B-Instruct-2507": { "file": "models/Qwen/Qwen3-235B-A22B-Instruct-2507.yaml", "minVllmVersion": "0.10.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "hermes", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 564 }, "fp8": { "modelId": "Qwen/Qwen3-235B-A22B-FP8", "precision": "fp8", "vramMinimumGb": 240 }, "nvfp4": { "modelId": "nvidia/Qwen3-235B-A22B-Instruct-2507-NVFP4", "precision": "nvfp4", "vramMinimumGb": 141, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Qwen3-235B-A22B-Instruct-2507-NVFP4", "precision": "nvfp4", "vramMinimumGb": 152 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "Qwen/Qwen3-30B-A3B": { "file": "models/Qwen/Qwen3-30B-A3B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 74 }, "ascend_w8a8": { "modelId": "Eco-Tech/Qwen3-30B-A3B-w8a8", "precision": "int8", "vramMinimumGb": 37, "extraArgs": ["--trust-remote-code", "--max-num-seqs", "100", "--max-model-len", "40960", "--max-num-batched-tokens", "16384", "--enable-expert-parallel", "--quantization", "ascend", "--distributed_executor_backend", "mp", "--no-enable-prefix-caching", "--async-scheduling", "--compilation-config", '{"cudagraph_mode": "FULL_DECODE_ONLY"}', "--additional-config", '{"enable_flashcomm1": true, "weight_nz_mode": 2}', "--gpu-memory-utilization", "0.95"] } }, "verifiedGpus": ["xeon6", "ascend_910c", "arc_pro_b70"] }, "Qwen/Qwen3-32B": { "file": "models/Qwen/Qwen3-32B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 77 }, "fp8": { "modelId": "Qwen/Qwen3-32B-FP8", "precision": "fp8", "vramMinimumGb": 39 }, "awq": { "modelId": "Qwen/Qwen3-32B-AWQ", "precision": "int4", "vramMinimumGb": 20, "extraArgs": ["--quantization", "awq"] }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3-32B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 39, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Qwen3-32B-FP8-block", "precision": "fp8", "vramMinimumGb": 39, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "RedHatAI/Qwen3-32B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 22 }, "redhat_nvfp4": { "modelId": "RedHatAI/Qwen3-32B-NVFP4A16", "precision": "nvfp4", "vramMinimumGb": 22 } }, "verifiedGpus": ["trillium", "ironwood", "arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3-4B": { "file": "models/Qwen/Qwen3-4B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 10 }, "fp8": { "modelId": "Qwen/Qwen3-4B-FP8", "precision": "fp8", "vramMinimumGb": 5 }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3-4B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 5, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["trillium", "xeon6"] }, "Qwen/Qwen3-8B": { "file": "models/Qwen/Qwen3-8B.yaml", "minVllmVersion": "0.8.5", "contextLength": 40960, "toolCallParser": "hermes", "reasoningParser": "qwen3", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 20 } }, "verifiedGpus": ["xeon6"] }, "Qwen/Qwen3-ASR-1.7B": { "file": "models/Qwen/Qwen3-ASR-1.7B.yaml", "minVllmVersion": "0.16.0", "contextLength": 65536, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 4 } } }, "Qwen/Qwen3-Coder-480B-A35B-Instruct": { "file": "models/Qwen/Qwen3-Coder-480B-A35B-Instruct.yaml", "minVllmVersion": "0.10.0", "contextLength": 262144, "toolCallParser": "qwen3_coder", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1152 }, "fp8": { "modelId": "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 576 }, "nvfp4": { "modelId": "nvidia/Qwen3-Coder-480B-A35B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 288, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3-Coder-480B-A35B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 576, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x", "ironwood"] }, "Qwen/Qwen3-Next-80B-A3B-Instruct": { "file": "models/Qwen/Qwen3-Next-80B-A3B-Instruct.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "toolCallParser": "hermes", "optInFeatures": ["spec_decoding", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 192 }, "fp8": { "modelId": "Qwen/Qwen3-Next-80B-A3B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 96 }, "nvfp4": { "modelId": "nvidia/Qwen3-Next-80B-A3B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 48, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3-Next-80B-A3B-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 96, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_plain": { "modelId": "RedHatAI/Qwen3-Next-80B-A3B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 96, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Qwen3-Next-80B-A3B-Instruct-FP8-block", "precision": "fp8", "vramMinimumGb": 96, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Qwen3-Next-80B-A3B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 48 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice": { "file": "models/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice.yaml", "minVllmVersion": "0.20.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 16 }, "voicedesign-1.7b": { "modelId": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign", "precision": "bf16", "vramMinimumGb": 16 }, "base-1.7b": { "modelId": "Qwen/Qwen3-TTS-12Hz-1.7B-Base", "precision": "bf16", "vramMinimumGb": 16 }, "customvoice-0.6b": { "modelId": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice", "precision": "bf16", "vramMinimumGb": 8 }, "base-0.6b": { "modelId": "Qwen/Qwen3-TTS-12Hz-0.6B-Base", "precision": "bf16", "vramMinimumGb": 8 } } }, "Qwen/Qwen3-VL-235B-A22B-Instruct": { "file": "models/Qwen/Qwen3-VL-235B-A22B-Instruct.yaml", "minVllmVersion": "0.11.0", "contextLength": 262144, "optInFeatures": ["text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 564 }, "fp8": { "modelId": "Qwen/Qwen3-VL-235B-A22B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 282 }, "nvfp4": { "modelId": "nvidia/Qwen3-VL-235B-A22B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 141, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3-VL-235B-A22B-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 282, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Qwen3-VL-235B-A22B-Instruct-FP8-block", "precision": "fp8", "vramMinimumGb": 282, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Qwen3-VL-235B-A22B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 150 } }, "verifiedGpus": ["h100", "h200", "b200", "mi300x", "mi325x", "mi355x"] }, "Qwen/Qwen3-VL-30B-A3B-Instruct": { "file": "models/Qwen/Qwen3-VL-30B-A3B-Instruct.yaml", "minVllmVersion": "0.11.0", "contextLength": 262144, "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 72 } }, "verifiedGpus": ["xeon6"] }, "Qwen/Qwen3.5-0.8B": { "file": "models/Qwen/Qwen3.5-0.8B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } }, "verifiedGpus": ["arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.5-122B-A10B": { "file": "models/Qwen/Qwen3.5-122B-A10B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 293 }, "fp8": { "modelId": "Qwen/Qwen3.5-122B-A10B-FP8", "precision": "fp8", "vramMinimumGb": 147 }, "nvfp4": { "modelId": "RedHatAI/Qwen3.5-122B-A10B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 74, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "gptq_int4": { "modelId": "Qwen/Qwen3.5-122B-A10B-GPTQ-Int4", "precision": "int4", "vramMinimumGb": 74 }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3.5-122B-A10B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 147, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["mi325x", "mi355x"] }, "Qwen/Qwen3.5-27B": { "file": "models/Qwen/Qwen3.5-27B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 65 }, "fp8": { "modelId": "Qwen/Qwen3.5-27B-FP8", "precision": "fp8", "vramMinimumGb": 33 }, "gptq_int4": { "modelId": "Qwen/Qwen3.5-27B-GPTQ-Int4", "precision": "int4", "vramMinimumGb": 17 } }, "verifiedGpus": ["arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.5-2B": { "file": "models/Qwen/Qwen3.5-2B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 5 } }, "verifiedGpus": ["arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.5-35B-A3B": { "file": "models/Qwen/Qwen3.5-35B-A3B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 84 }, "fp8": { "modelId": "Qwen/Qwen3.5-35B-A3B-FP8", "precision": "fp8", "vramMinimumGb": 42 }, "gptq_int4": { "modelId": "Qwen/Qwen3.5-35B-A3B-GPTQ-Int4", "precision": "int4", "vramMinimumGb": 21 }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3.5-35B-A3B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 42, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["xeon6", "arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.5-397B-A17B": { "file": "models/Qwen/Qwen3.5-397B-A17B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 953 }, "nvfp4": { "modelId": "nvidia/Qwen3.5-397B-A17B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 238, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "fp8": { "modelId": "RedHatAI/Qwen3.5-397B-A17B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 477, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "gptq_int4": { "modelId": "Qwen/Qwen3.5-397B-A17B-GPTQ-Int4", "precision": "int4", "vramMinimumGb": 239 }, "amd_mxfp4": { "modelId": "amd/Qwen3.5-397B-A17B-MXFP4", "precision": "mxfp4", "vramMinimumGb": 287, "extraArgs": ["--attention-backend", "ROCM_AITER_FA", "--max-num-seqs", "64"] }, "ascend_w8a8_mtp": { "modelId": "Eco-Tech/Qwen3.5-397B-A17B-w8a8-mtp", "precision": "int8", "vramMinimumGb": 477, "extraArgs": ["--distributed-executor-backend", "mp", "--data-parallel-size", "1", "--quantization", "ascend", "--served-model-name", "qwen3.5", "--max-num-seqs", "128", "--max-model-len", "133000", "--max-num-batched-tokens", "8192", "--gpu-memory-utilization", "0.95", "--enable-prefix-caching", "--async-scheduling", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--additional-config", '{"enable_cpu_binding":true}'] }, "ascend_w4a4_mxfp4": { "modelId": "Eco-Tech/Qwen3.5-397B-A17B-w4a4-mxfp4", "precision": "mxfp4", "vramMinimumGb": 239, "extraArgs": ["--distributed-executor-backend", "mp", "--data-parallel-size", "1", "--quantization", "ascend", "--served-model-name", "qwen3.5", "--max-num-seqs", "128", "--max-model-len", "133000", "--max-num-batched-tokens", "8192", "--gpu-memory-utilization", "0.95", "--enable-prefix-caching", "--async-scheduling", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--additional-config", '{"enable_cpu_binding":true}'] } }, "verifiedGpus": ["h200", "gb200", "mi300x", "mi325x", "mi350x", "mi355x", "ascend_950dt"] }, "Qwen/Qwen3.5-4B": { "file": "models/Qwen/Qwen3.5-4B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 10 }, "fp8": { "modelId": "RedHatAI/Qwen3.5-4B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 5, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["xeon6", "arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.5-9B": { "file": "models/Qwen/Qwen3.5-9B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 }, "fp8": { "modelId": "RedHatAI/Qwen3.5-9B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 11, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.6-27B": { "file": "models/Qwen/Qwen3.6-27B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 65 }, "fp8": { "modelId": "Qwen/Qwen3.6-27B-FP8", "precision": "fp8", "vramMinimumGb": 33, "extraArgs": ["--max-num-seqs", "512"] }, "nvfp4": { "modelId": "nvidia/Qwen3.6-27B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 27 }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3.6-27B-FP8", "precision": "fp8", "vramMinimumGb": 33 }, "ascend_w8a8_mxfp8": { "modelId": "Eco-Tech/Qwen3.6-27B-w8a8-mxfp8", "precision": "mxfp8", "vramMinimumGb": 34, "extraArgs": ["--distributed-executor-backend", "mp", "--data-parallel-size", "8", "--quantization", "ascend", "--served-model-name", "qwen3.6", "--max-num-seqs", "32", "--max-model-len", "262144", "--max-num-batched-tokens", "16384", "--gpu-memory-utilization", "0.90", "--no-enable-prefix-caching", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--additional-config", '{"enable_cpu_binding":true}'] }, "ascend_w8a8": { "modelId": "Eco-Tech/Qwen3.6-27B-w8a8", "precision": "int8", "vramMinimumGb": 33, "extraArgs": ["--data-parallel-size", "8", "--quantization", "ascend", "--served-model-name", "qwen3.6", "--max-num-seqs", "32", "--max-model-len", "133000", "--max-num-batched-tokens", "16384", "--gpu-memory-utilization", "0.90", "--no-enable-prefix-caching", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--additional-config", '{"enable_cpu_binding":true}', "--async-scheduling"] } }, "verifiedGpus": ["dgx_spark_gb10", "rtx_pro_6000", "dgx_station_gb300", "rtx_5090", "ascend_950dt", "ascend_910c", "arc_pro_b60", "arc_pro_b70", "mi300x"] }, "Qwen/Qwen3.6-35B-A3B": { "file": "models/Qwen/Qwen3.6-35B-A3B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 84 }, "fp8": { "modelId": "Qwen/Qwen3.6-35B-A3B-FP8", "precision": "fp8", "vramMinimumGb": 42 }, "nvfp4": { "modelId": "nvidia/Qwen3.6-35B-A3B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 21 }, "redhat_nvfp4": { "modelId": "RedHatAI/Qwen3.6-35B-A3B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 21, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Qwen3.6-35B-A3B-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 42, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_plain": { "modelId": "RedHatAI/Qwen3.6-35B-A3B-FP8", "precision": "fp8", "vramMinimumGb": 42, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["dgx_spark_gb10", "h100", "h200", "mi300x", "mi325x", "mi355x", "rtx_pro_6000", "dgx_station_gb300", "rtx_5090", "arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.8-2.4T-A95B": { "file": "models/Qwen/Qwen3.8-2.4T-A95B.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 5871 }, "fp8": { "modelId": "Qwen/Qwen3.8-2.4T-A95B-FP8", "precision": "fp8", "vramMinimumGb": 2996 }, "mxfp4": { "modelId": "Inferact/Qwen3.8-2.4T-A95B-MXFP4", "precision": "mxfp4", "vramMinimumGb": 1917 }, "nvfp4": { "modelId": "Inferact/Qwen3.8-2.4T-A95B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 1737, "extraArgs": ["--linear-backend", "flashinfer_cutedsl"] }, "nvfp4_reap25": { "modelId": "RedHatAI/Qwen3.8-2.4T-A95B-NVFP4-REAP-25", "precision": "nvfp4", "vramMinimumGb": 1373 } }, "verifiedGpus": ["b300", "gb300"] }, "Qwen/Qwen3.8-27B": { "file": "models/Qwen/Qwen3.8-27B.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 67 }, "fp8": { "modelId": "Qwen/Qwen3.8-27B-FP8", "precision": "fp8", "vramMinimumGb": 38 }, "nvfp4": { "modelId": "Inferact/Qwen3.8-27B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 32 }, "nvfp4_nvidia": { "modelId": "nvidia/Qwen3.8-27B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 32 }, "int4": { "modelId": "RedHatAI/Qwen3.8-27B-INT4", "precision": "int4", "vramMinimumGb": 24 }, "mxfp4": { "modelId": "RedHatAI/Qwen3.8-27B-MXFP4", "precision": "mxfp4", "vramMinimumGb": 24 }, "ascend_w8a8": { "modelId": "Eco-Tech/Qwen3.8-27B-w8a8", "precision": "int8", "vramMinimumGb": 39, "extraArgs": ["--quantization", "ascend", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--additional-config", '{"enable_cpu_binding":true}', "--max-num-batched-tokens", "16384"] } }, "verifiedGpus": ["gb300", "b200", "rtx_5090", "rtx_5090_2x", "rtx_pro_6000", "dgx_spark_gb10", "ascend_950pr", "arc_pro_b60", "arc_pro_b70"] }, "Qwen/Qwen3.8-Flash-Next": { "file": "models/Qwen/Qwen3.8-Flash-Next.yaml", "minVllmVersion": "0.30.0", "nightlyRequired": true, "contextLength": 262144, "baseArgs": ["--max-num-seqs", "256", "--gpu-memory-utilization", "0.90", "--enable-prefix-caching"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["text_only", "long_context"], "variants": { "default": { "modelId": "Inferact/Qwen3.8-Flash-Next-NVFP4", "precision": "nvfp4", "vramMinimumGb": 130 }, "fp8": { "modelId": "Qwen/Qwen3.8-Flash-Next-FP8", "precision": "fp8", "vramMinimumGb": 250 }, "bf16": { "modelId": "Qwen/Qwen3.8-Flash-Next", "precision": "bf16", "vramMinimumGb": 423 } }, "verifiedGpus": ["h200", "h100", "gb200", "gb300", "mi355x", "rtx_pro_6000_4x", "dgx_station_gb300"] }, "Qwen/Qwen3Guard-Gen-8B": { "file": "models/Qwen/Qwen3Guard-Gen-8B.yaml", "minVllmVersion": "0.10.0", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 19 }, "small_4b": { "modelId": "Qwen/Qwen3Guard-Gen-4B", "precision": "bf16", "vramMinimumGb": 10 }, "tiny_0_6b": { "modelId": "Qwen/Qwen3Guard-Gen-0.6B", "precision": "bf16", "vramMinimumGb": 4 } }, "verifiedGpus": ["mi300x"] }, "Wan-AI/Wan2.2-T2V-A14B-Diffusers": { "file": "models/Wan-AI/Wan2.2-T2V-A14B-Diffusers.yaml", "minVllmVersion": "0.12.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 152 } } }, "XiaomiMiMo/MiMo-V2-Flash": { "file": "models/XiaomiMiMo/MiMo-V2-Flash.yaml", "minVllmVersion": "0.20.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--generation-config", "vllm"], "toolCallParser": "mimo", "reasoningParser": "qwen3", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 371, "extraArgs": ["--tensor-parallel-size", "4", "--gpu-memory-utilization", "0.9"] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "XiaomiMiMo/MiMo-V2.5-Pro": { "file": "models/XiaomiMiMo/MiMo-V2.5-Pro.yaml", "minVllmVersion": "0.21.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--max-model-len auto", "--generation-config", "vllm"], "toolCallParser": "mimo", "reasoningParser": "mimo", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 1224, "extraArgs": ["--tensor-parallel-size", "8", "--gpu-memory-utilization", "0.95", "--max-model-len", "auto"] } }, "verifiedGpus": ["h200"] }, "XiaomiMiMo/MiMo-V2.5": { "file": "models/XiaomiMiMo/MiMo-V2.5.yaml", "minVllmVersion": "0.21.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--generation-config", "vllm"], "toolCallParser": "mimo", "reasoningParser": "mimo", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 374, "extraArgs": ["--gpu-memory-utilization", "0.95", "--max-model-len", "auto"] } }, "verifiedGpus": ["h200"] }, "XiaomiMiMo/MiMo-V2.6-Flash-RL": { "file": "models/XiaomiMiMo/MiMo-V2.6-Flash-RL.yaml", "minVllmVersion": "0.31.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--max-model-len", "auto", "--generation-config", "vllm"], "toolCallParser": "mimo", "reasoningParser": "mimo", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "XiaomiMiMo/MiMo-V2.6-Flash-MOPD", "precision": "fp8", "vramMinimumGb": 208, "extraArgs": ["--tensor-parallel-size", "4", "--gpu-memory-utilization", "0.95"] }, "rl": { "precision": "fp8", "vramMinimumGb": 208, "extraArgs": ["--tensor-parallel-size", "4", "--gpu-memory-utilization", "0.95"] } }, "verifiedGpus": ["h200", "gb300", "mi300x", "mi325x", "mi355x"] }, "XiaomiMiMo/MiMo-V2.6-Pro-RL": { "file": "models/XiaomiMiMo/MiMo-V2.6-Pro-RL.yaml", "minVllmVersion": "0.31.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--max-model-len", "auto", "--generation-config", "vllm"], "toolCallParser": "mimo", "reasoningParser": "mimo", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "XiaomiMiMo/MiMo-V2.6-Pro-MOPD", "precision": "fp8", "vramMinimumGb": 680, "extraArgs": ["--tensor-parallel-size", "8", "--gpu-memory-utilization", "0.95"] }, "rl": { "precision": "fp8", "vramMinimumGb": 680, "extraArgs": ["--tensor-parallel-size", "8", "--gpu-memory-utilization", "0.95"] } }, "verifiedGpus": ["h200", "gb300", "mi355x"] }, "arcee-ai/Trinity-Large-Thinking": { "file": "models/arcee-ai/Trinity-Large-Thinking.yaml", "minVllmVersion": "0.11.1", "contextLength": 262144, "baseArgs": ["--dtype", "bfloat16"], "toolCallParser": "qwen3_coder", "reasoningParser": "deepseek_r1", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 955 }, "nvfp4": { "modelId": "arcee-ai/Trinity-Large-Thinking-NVFP4", "precision": "nvfp4", "vramMinimumGb": 239, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Trinity-Large-Thinking-NVFP4", "precision": "nvfp4", "vramMinimumGb": 254 } } }, "baidu/ERNIE-4.5-21B-A3B-PT": { "file": "models/baidu/ERNIE-4.5-21B-A3B-PT.yaml", "minVllmVersion": "0.10.1", "contextLength": 131072, "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 106 }, "300b": { "modelId": "baidu/ERNIE-4.5-300B-A47B-PT", "precision": "bf16", "vramMinimumGb": 640, "extraArgs": ["--tensor-parallel-size", "8", "--gpu-memory-utilization", "0.95", "--quantization", "fp8"] } } }, "baidu/ERNIE-4.5-VL-28B-A3B-PT": { "file": "models/baidu/ERNIE-4.5-VL-28B-A3B-PT.yaml", "minVllmVersion": "0.11.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code"], "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 67 }, "424b": { "modelId": "baidu/ERNIE-4.5-VL-424B-A47B-PT", "precision": "bf16", "vramMinimumGb": 1120, "extraArgs": ["--trust-remote-code", "--tensor-parallel-size", "8"] }, "424b_fp8": { "modelId": "baidu/ERNIE-4.5-VL-424B-A47B-PT", "precision": "fp8", "vramMinimumGb": 640, "extraArgs": ["--trust-remote-code", "--tensor-parallel-size", "8", "--quantization", "fp8", "--cpu-offload-gb", "50"] } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x"] }, "baidu/Unlimited-OCR": { "file": "models/baidu/Unlimited-OCR.yaml", "minVllmVersion": "0.25.0", "contextLength": 32768, "baseArgs": ["--trust-remote-code", "--logits_processors", "vllm.model_executor.models.unlimited_ocr:NGramPerReqLogitsProcessor", "--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 8 } } }, "bharatgenai/Param2-17B-A2.4B-Thinking": { "file": "models/bharatgenai/Param2-17B-A2.4B-Thinking.yaml", "minVllmVersion": "0.20.0", "contextLength": 32768, "baseArgs": ["--trust-remote-code", "--async-scheduling"], "toolCallParser": "hermes", "reasoningParser": "qwen3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 41 } }, "verifiedGpus": ["h100", "l40s"] }, "black-forest-labs/flux-3-image-klein": { "file": "models/black-forest-labs/flux-3-image-klein.yaml", "minVllmVersion": "0.32.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 }, "fp8r": { "precision": "fp8", "vramMinimumGb": 17, "extraArgs": ["--stage-overrides", '{"0":{"additional_config":{"variant":"fp8r"}}}'] }, "nvfp4": { "precision": "nvfp4", "vramMinimumGb": 13, "extraArgs": ["--stage-overrides", '{"0":{"additional_config":{"variant":"nvfp4"}}}'] } }, "verifiedGpus": ["gb200"] }, "bosonai/higgs-audio-v3-tts-4b": { "file": "models/bosonai/higgs-audio-v3-tts-4b.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 } } }, "deepseek-ai/DeepSeek-OCR-2": { "file": "models/deepseek-ai/DeepSeek-OCR-2.yaml", "minVllmVersion": "0.16.0", "contextLength": 8192, "baseArgs": ["--trust-remote-code", "--logits_processors", "vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor", "--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 7 } } }, "deepseek-ai/DeepSeek-OCR": { "file": "models/deepseek-ai/DeepSeek-OCR.yaml", "minVllmVersion": "0.12.0", "contextLength": 8192, "baseArgs": ["--trust-remote-code", "--logits-processors", "vllm.model_executor.models.deepseek_ocr:NGramPerReqLogitsProcessor", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 7 } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x", "arc_pro_b60", "arc_pro_b70"] }, "deepseek-ai/DeepSeek-R1": { "file": "models/deepseek-ai/DeepSeek-R1.yaml", "minVllmVersion": "0.12.0", "contextLength": 163840, "baseArgs": ["--trust-remote-code"], "toolCallParser": "deepseek_v3", "reasoningParser": "deepseek_r1", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 805 }, "r1_0528": { "modelId": "deepseek-ai/DeepSeek-R1-0528", "precision": "fp8", "vramMinimumGb": 805 }, "nvfp4": { "modelId": "nvidia/DeepSeek-R1-0528-NVFP4-v2", "precision": "nvfp4", "vramMinimumGb": 403, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "mxfp4": { "modelId": "amd/DeepSeek-R1-0528-MXFP4-MTP-MoEFP4", "precision": "mxfp4", "vramMinimumGb": 403, "extraArgs": ["--no-enable-expert-parallel", "--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/DeepSeek-R1-NVFP4-FP8-BLOCK", "precision": "nvfp4", "vramMinimumGb": 444 } }, "verifiedGpus": ["h200", "b200", "gb200", "mi300x", "mi325x", "mi350x", "mi355x"] }, "deepseek-ai/DeepSeek-V3.1": { "file": "models/deepseek-ai/DeepSeek-V3.1.yaml", "minVllmVersion": "0.12.0", "contextLength": 163840, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel"], "toolCallParser": "deepseek_v31", "reasoningParser": "deepseek_v3", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 805 }, "nvfp4": { "modelId": "nvidia/DeepSeek-V3.1-NVFP4", "precision": "nvfp4", "vramMinimumGb": 403, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "deepseek-ai/DeepSeek-V3.2-Exp": { "file": "models/deepseek-ai/DeepSeek-V3.2-Exp.yaml", "minVllmVersion": "0.12.0", "contextLength": 163840, "baseArgs": ["--trust-remote-code"], "toolCallParser": "deepseek_v32", "reasoningParser": "deepseek_v3", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 805 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "deepseek-ai/DeepSeek-V3.2": { "file": "models/deepseek-ai/DeepSeek-V3.2.yaml", "minVllmVersion": "0.18.0", "contextLength": 163840, "baseArgs": ["--trust-remote-code", "--kernel-config.enable_flashinfer_autotune=False"], "toolCallParser": "deepseek_v32", "reasoningParser": "deepseek_v3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 805 }, "nvfp4": { "modelId": "nvidia/DeepSeek-V3.2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 403, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/DeepSeek-V3.2-NVFP4-FP8-BLOCK", "precision": "nvfp4", "vramMinimumGb": 430 } }, "verifiedGpus": ["h100", "h200"] }, "deepseek-ai/DeepSeek-V3": { "file": "models/deepseek-ai/DeepSeek-V3.yaml", "minVllmVersion": "0.12.0", "contextLength": 163840, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel"], "toolCallParser": "deepseek_v3", "reasoningParser": "deepseek_v3", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 805 }, "v3_0324": { "modelId": "deepseek-ai/DeepSeek-V3-0324", "precision": "fp8", "vramMinimumGb": 805 }, "fp4": { "modelId": "nvidia/DeepSeek-V3-FP4", "precision": "fp4", "vramMinimumGb": 403 } }, "verifiedGpus": ["h200", "b200", "gb200", "mi300x", "mi325x", "mi350x", "mi355x"] }, "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": { "file": "models/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp.yaml", "minVllmVersion": "0.30.0", "nightlyRequired": true, "contextLength": 1048576, "baseArgs": ["--kv-cache-dtype", "fp8", "--block-size", "256"], "toolCallParser": "deepseek_v4", "reasoningParser": "deepseek_v4", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 202 } }, "verifiedGpus": ["gb200", "mi350x", "ascend_950dt_8x", "ascend_950pr_8x"] }, "deepseek-ai/DeepSeek-V4-Flash": { "file": "models/deepseek-ai/DeepSeek-V4-Flash.yaml", "minVllmVersion": "0.20.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--kv-cache-dtype", "fp8", "--block-size", "256"], "toolCallParser": "deepseek_v4", "reasoningParser": "deepseek_v4", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "deepseek-ai/DeepSeek-V4-Flash-0731", "precision": "fp8", "vramMinimumGb": 200 }, "fp8": { "precision": "fp8", "vramMinimumGb": 170 }, "nvfp4": { "modelId": "nvidia/DeepSeek-V4-Flash-NVFP4", "precision": "nvfp4", "vramMinimumGb": 170 }, "redhat_nvfp4": { "modelId": "RedHatAI/DeepSeek-V4-Flash-NVFP4-FP8", "precision": "nvfp4", "vramMinimumGb": 170 }, "dspark": { "modelId": "deepseek-ai/DeepSeek-V4-Flash-DSpark", "precision": "fp8", "vramMinimumGb": 200 }, "ascend_w8a8": { "modelId": "Eco-Tech/DeepSeek-V4-Flash-w8a8-mtp", "precision": "int8", "vramMinimumGb": 341, "extraArgs": ["--data-parallel-size", "2", "--quantization", "ascend", "--max-num-seqs", "32", "--max-num-batched-tokens", "10240", "--gpu-memory-utilization", "0.90", "--block-size", "128", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--async-scheduling", "--api-server-count", "1", "--safetensors-load-strategy", "prefetch", "--additional-config", '{"ascend_compilation_config":{"enable_npugraph_ex":true,"enable_static_kernel":false},"enable_cpu_binding":true,"multistream_overlap_shared_expert":true}'] } }, "verifiedGpus": ["h200", "b200", "gb200", "b300", "gb300", "dgx_station_gb300", "dgx_spark_gb10", "rtx_pro_6000_8x", "mi300x", "mi325x", "mi355x", "ascend_950dt_8x", "ascend_950pr_8x", "ascend_910c"] }, "deepseek-ai/DeepSeek-V4-Pro": { "file": "models/deepseek-ai/DeepSeek-V4-Pro.yaml", "minVllmVersion": "0.20.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--kv-cache-dtype", "fp8", "--block-size", "256"], "toolCallParser": "deepseek_v4", "reasoningParser": "deepseek_v4", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "deepseek-ai/DeepSeek-V4-Pro-0813", "precision": "fp8", "vramMinimumGb": 960 }, "fp8": { "precision": "fp8", "vramMinimumGb": 960 }, "nvfp4": { "modelId": "nvidia/DeepSeek-V4-Pro-NVFP4", "precision": "nvfp4", "vramMinimumGb": 960 }, "dspark": { "modelId": "deepseek-ai/DeepSeek-V4-Pro-DSpark", "precision": "fp8", "vramMinimumGb": 960 }, "redhat_nvfp4": { "modelId": "RedHatAI/DeepSeek-V4-Pro-NVFP4-FP8", "precision": "nvfp4", "vramMinimumGb": 1e3 } }, "unsupportedGpus": ["mi300x", "mi325x"], "verifiedGpus": ["h200", "b200", "gb200", "b300", "gb300", "mi355x"] }, "deepseek-ai/DeepSeek-V4.1-Flash": { "file": "models/deepseek-ai/DeepSeek-V4.1-Flash.yaml", "minVllmVersion": "0.31.0", "contextLength": 1048576, "baseArgs": ["--tokenizer-mode", "deepseek_v41"], "toolCallParser": "deepseek_v41", "reasoningParser": "deepseek_v41", "optInFeatures": ["spec_decoding", "text_only"], "variants": { "default": { "modelId": "deepseek-ai/DeepSeek-V4.1-Flash-1017", "precision": "fp8", "vramMinimumGb": 614 }, "fp8": { "precision": "fp8", "vramMinimumGb": 614 } }, "verifiedGpus": ["h100", "h200", "b200", "gb200", "gb300", "b300", "mi300x", "mi325x", "mi350x", "mi355x", "dgx_station_gb300"] }, "dots-studio/dots3-note-prev": { "file": "models/dots-studio/dots3-note-prev.yaml", "minVllmVersion": "0.28.0", "contextLength": 524288, "baseArgs": ["--served-model-name", "dots3-note-prev", "--gpu-memory-utilization", "0.9", "--max-model-len", "262144", "--max-num-batched-tokens", "8192", "--block-size", "64", "--mm-processor-cache-gb", "32"], "toolCallParser": "dots", "reasoningParser": "qwen3", "optInFeatures": ["reasoning", "tool_calling", "text_only", "spec_decoding"], "variants": { "default": { "modelId": "dots-studio/dots3-note-prev-fp8", "precision": "fp8", "vramMinimumGb": 359 }, "bf16": { "modelId": "dots-studio/dots3-note-prev", "precision": "bf16", "vramMinimumGb": 692, "extraArgs": ["--gpu-memory-utilization", "0.95"] } }, "unsupportedGpus": ["b200", "gb200", "b300", "gb300", "mi300x", "mi325x", "mi355x"], "verifiedGpus": ["h100"] }, "fishaudio/drama-3": { "file": "models/fishaudio/drama-3.yaml", "minVllmVersion": "0.31.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 48 } }, "verifiedGpus": ["h100"] }, "fishaudio/s2-pro": { "file": "models/fishaudio/s2-pro.yaml", "minVllmVersion": "0.19.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 48 } } }, "ibm-granite/granite-3.2-2b-instruct": { "file": "models/ibm-granite/granite-3.2-2b-instruct.yaml", "minVllmVersion": "0.6.1", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 6 } }, "verifiedGpus": ["xeon6"] }, "inclusionAI/Ling-2.6-1T": { "file": "models/inclusionAI/Ling-2.6-1T.yaml", "minVllmVersion": "0.20.2", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--tensor-parallel-size", "8"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 1200 } }, "verifiedGpus": ["b300", "mi300x"] }, "inclusionAI/Ling-2.6-flash": { "file": "models/inclusionAI/Ling-2.6-flash.yaml", "minVllmVersion": "0.20.2", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--tensor-parallel-size", "4"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 250 } }, "verifiedGpus": ["h200", "mi300x"] }, "inclusionAI/Ling-3.0-flash-VL": { "file": "models/inclusionAI/Ling-3.0-flash-VL.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--dtype", "bfloat16", "--gpu-memory-utilization", "0.9", "--enable-chunked-prefill", "--compilation-config", '{"cudagraph_mode":"FULL_AND_PIECEWISE"}', "--enable-prefix-caching"], "toolCallParser": "ling3", "reasoningParser": "ling3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 300 }, "fp8": { "modelId": "inclusionAI/Ling-3.0-flash-VL-fp8", "precision": "fp8", "vramMinimumGb": 150 }, "fp4": { "modelId": "inclusionAI/Ling-3.0-flash-VL-fp4", "precision": "fp4", "vramMinimumGb": 85 }, "int4": { "modelId": "inclusionAI/Ling-3.0-flash-VL-int4", "precision": "int4", "vramMinimumGb": 95 } } }, "inclusionAI/Ling-3.0-flash": { "file": "models/inclusionAI/Ling-3.0-flash.yaml", "minVllmVersion": "0.28.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--dtype", "bfloat16", "--gpu-memory-utilization", "0.9", "--enable-chunked-prefill", "--compilation-config", '{"cudagraph_mode":"FULL_AND_PIECEWISE"}', "--enable-prefix-caching"], "toolCallParser": "ling3", "reasoningParser": "ling3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 300 }, "fp8": { "modelId": "inclusionAI/Ling-3.0-flash-fp8", "precision": "fp8", "vramMinimumGb": 150 }, "fp4": { "modelId": "inclusionAI/Ling-3.0-flash-fp4", "precision": "fp4", "vramMinimumGb": 85 }, "int4": { "modelId": "inclusionAI/Ling-3.0-flash-int4", "precision": "int4", "vramMinimumGb": 95 } }, "verifiedGpus": ["h200", "dgx_spark_gb10", "mi300x", "mi355x"] }, "inclusionAI/Ling-3.0-tiny": { "file": "models/inclusionAI/Ling-3.0-tiny.yaml", "minVllmVersion": "0.28.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--dtype", "bfloat16", "--gpu-memory-utilization", "0.85", "--enable-prefix-caching"], "toolCallParser": "ling3", "reasoningParser": "ling3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 18 }, "fp8": { "modelId": "inclusionAI/Ling-3.0-tiny-fp8", "precision": "fp8", "vramMinimumGb": 11 }, "int4": { "modelId": "inclusionAI/Ling-3.0-tiny-int4", "precision": "int4", "vramMinimumGb": 8 } }, "verifiedGpus": ["h200"] }, "inclusionAI/Ling-3.1-flash": { "file": "models/inclusionAI/Ling-3.1-flash.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel", "--gpu-memory-utilization", "0.9", "--enable-chunked-prefill", "--compilation-config", '{"cudagraph_mode":"FULL_AND_PIECEWISE"}', "--enable-prefix-caching"], "toolCallParser": "ling3", "reasoningParser": "ling3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 689 } }, "verifiedGpus": ["mi355x"] }, "inclusionAI/Ming-omni-tts-0.5B": { "file": "models/inclusionAI/Ming-omni-tts-0.5B.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--enforce-eager"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 16 } } }, "inclusionAI/Ring-1T-FP8": { "file": "models/inclusionAI/Ring-1T-FP8.yaml", "minVllmVersion": "0.11.0", "contextLength": 65536, "baseArgs": ["--trust-remote-code", "--tensor-parallel-size", "8", "--max-num-seqs", "32", "--kv-cache-dtype", "fp8", "--served-model-name", "Ring-1T-FP8"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 1200, "extraArgs": ["--gpu-memory-utilization", "0.97", "--compilation-config", '{"use_inductor": false}'] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "inclusionAI/Ring-2.6-1T": { "file": "models/inclusionAI/Ring-2.6-1T.yaml", "minVllmVersion": "0.20.2", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--tensor-parallel-size", "8"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 1200 } } }, "internlm/Intern-S1": { "file": "models/internlm/Intern-S1.yaml", "minVllmVersion": "0.10.2", "contextLength": 65536, "baseArgs": ["--trust-remote-code"], "toolCallParser": "internlm", "reasoningParser": "deepseek_r1", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 578 }, "fp8": { "modelId": "internlm/Intern-S1-FP8", "precision": "fp8", "vramMinimumGb": 289 } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x"] }, "internlm/Intern-S2-397B": { "file": "models/internlm/Intern-S2-397B.yaml", "minVllmVersion": "0.22.1", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 969 }, "fp8": { "modelId": "internlm/Intern-S2-397B-FP8", "precision": "fp8", "vramMinimumGb": 488 } } }, "internlm/Intern-S2-Preview": { "file": "models/internlm/Intern-S2-Preview.yaml", "minVllmVersion": "0.22.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "qwen3", "optInFeatures": ["spec_decoding", "text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 87 }, "fp8": { "modelId": "internlm/Intern-S2-Preview-FP8", "precision": "fp8", "vramMinimumGb": 44 } }, "verifiedGpus": ["h200", "gb200"] }, "jinaai/jina-embeddings-v5-text-small": { "file": "models/jinaai/jina-embeddings-v5-text-small.yaml", "minVllmVersion": "0.20.0", "contextLength": 32768, "baseArgs": ["--trust-remote-code", "--runner", "pooling"], "variants": { "default": { "modelId": "jinaai/jina-embeddings-v5-text-small-retrieval", "precision": "bf16", "vramMinimumGb": 2 }, "text_matching": { "modelId": "jinaai/jina-embeddings-v5-text-small-text-matching", "precision": "bf16", "vramMinimumGb": 2 }, "classification": { "modelId": "jinaai/jina-embeddings-v5-text-small-classification", "precision": "bf16", "vramMinimumGb": 2 }, "clustering": { "modelId": "jinaai/jina-embeddings-v5-text-small-clustering", "precision": "bf16", "vramMinimumGb": 2 } } }, "jinaai/jina-reranker-m0": { "file": "models/jinaai/jina-reranker-m0.yaml", "minVllmVersion": "0.10.0", "contextLength": 32768, "baseArgs": ["--gpu-memory-utilization", "0.75", "--max-num-seqs", "32"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 6 } } }, "meituan-longcat/LongCat-Image-Edit": { "file": "models/meituan-longcat/LongCat-Image-Edit.yaml", "minVllmVersion": "0.12.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 36 } } }, "meta-llama/Llama-3.1-8B-Instruct": { "file": "models/meta-llama/Llama-3.1-8B-Instruct.yaml", "minVllmVersion": "0.6.0", "contextLength": 131072, "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 20 }, "w8a8_int8": { "modelId": "RedHatAI/Meta-Llama-3.1-8B-Instruct-quantized.w8a8", "precision": "int8", "vramMinimumGb": 10 }, "awq_int4": { "modelId": "hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4", "precision": "int4", "vramMinimumGb": 5, "extraArgs": ["--quantization", "awq"] }, "nvfp4": { "modelId": "nvidia/Llama-3.1-8B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 5, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvidia_fp8": { "modelId": "nvidia/Llama-3.1-8B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "fp8": { "modelId": "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Llama-3.1-8B-Instruct-FP8-block", "precision": "fp8", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Llama-3.1-8B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 6 } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x", "trillium", "xeon6", "arc_pro_b60", "arc_pro_b70"] }, "meta-llama/Llama-3.1-8B": { "file": "models/meta-llama/Llama-3.1-8B.yaml", "minVllmVersion": "0.6.0", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 20 }, "w8a8_int8": { "modelId": "RedHatAI/Meta-Llama-3.1-8B-quantized.w8a8", "precision": "int8", "vramMinimumGb": 10 } }, "verifiedGpus": ["xeon6"] }, "meta-llama/Llama-3.2-1B-Instruct": { "file": "models/meta-llama/Llama-3.2-1B-Instruct.yaml", "minVllmVersion": "0.6.2", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 }, "w8a8_int8": { "modelId": "RedHatAI/Llama-3.2-1B-Instruct-quantized.w8a8", "precision": "int8", "vramMinimumGb": 2 }, "awq_int4": { "modelId": "AMead10/Llama-3.2-1B-Instruct-AWQ", "precision": "int4", "vramMinimumGb": 2, "extraArgs": ["--quantization", "awq"] } }, "verifiedGpus": ["xeon6"] }, "meta-llama/Llama-3.2-1B": { "file": "models/meta-llama/Llama-3.2-1B.yaml", "minVllmVersion": "0.6.2", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["xeon6"] }, "meta-llama/Llama-3.2-3B-Instruct": { "file": "models/meta-llama/Llama-3.2-3B-Instruct.yaml", "minVllmVersion": "0.6.2", "contextLength": 131072, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 8 }, "w8a8_int8": { "modelId": "RedHatAI/Llama-3.2-3B-Instruct-quantized.w8a8", "precision": "int8", "vramMinimumGb": 4 }, "awq_int4": { "modelId": "AMead10/Llama-3.2-3B-Instruct-AWQ", "precision": "int4", "vramMinimumGb": 3, "extraArgs": ["--quantization", "awq"] } }, "verifiedGpus": ["xeon6"] }, "meta-llama/Llama-3.3-70B-Instruct": { "file": "models/meta-llama/Llama-3.3-70B-Instruct.yaml", "minVllmVersion": "0.12.0", "contextLength": 131072, "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 170 }, "fp8": { "modelId": "nvidia/Llama-3.3-70B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 84, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Llama-3.3-70B-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 84, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/Llama-3.3-70B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 42, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Llama-3.3-70B-Instruct-FP8-block", "precision": "fp8", "vramMinimumGb": 84, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Llama-3.3-70B-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 46 } }, "verifiedGpus": ["h100", "h200", "b200", "gb200", "mi300x", "mi325x", "mi355x", "trillium", "xeon6", "arc_pro_b70"] }, "meta-llama/Llama-4-Scout-17B-16E-Instruct": { "file": "models/meta-llama/Llama-4-Scout-17B-16E-Instruct.yaml", "minVllmVersion": "0.12.0", "contextLength": 10485760, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 262 }, "fp8": { "modelId": "nvidia/Llama-4-Scout-17B-16E-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 131, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/Llama-4-Scout-17B-16E-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 65, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Llama-4-Scout-17B-16E-Instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 131, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Llama-4-Scout-17B-16E-Instruct-NVFP4", "precision": "nvfp4", "vramMinimumGb": 65, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_block": { "modelId": "RedHatAI/Llama-4-Scout-17B-16E-Instruct-FP8-block", "precision": "fp8", "vramMinimumGb": 131, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "b200", "gb200", "mi300x", "mi325x", "mi355x", "xeon6"] }, "meta-models/Muse-Glimmer-30B": { "file": "models/meta-models/Muse-Glimmer-30B.yaml", "minVllmVersion": "0.28.0", "contextLength": 131072, "baseArgs": ["--generation-config", "auto"], "toolCallParser": "muse_glimmer", "reasoningParser": "muse_glimmer", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 72 }, "fp8_block": { "modelId": "RedHatAI/Muse-Glimmer-30B-FP8-block", "precision": "fp8", "vramMinimumGb": 40 }, "nvfp4": { "modelId": "Inferact/Muse-Glimmer-30B-NVFP4-W4A4", "precision": "nvfp4", "vramMinimumGb": 31 } }, "verifiedGpus": ["gb300", "dgx_spark_gb10", "mi300x", "mi325x", "mi355x", "arc_pro_b60", "arc_pro_b70", "rtx_5090", "rtx_5090_2x"] }, "meta-models/Muse-Spark-Open-816B-A42B": { "file": "models/meta-models/Muse-Spark-Open-816B-A42B.yaml", "minVllmVersion": "0.33.0", "nightlyRequired": true, "contextLength": 1048576, "toolCallParser": "muse", "reasoningParser": "muse", "optInFeatures": ["spec_decoding"], "variants": { "bf16": { "modelId": "meta-models/Muse-Spark-Open-816B-A42B", "precision": "bf16", "vramMinimumGb": 1959 }, "bf16_online_mxfp4": { "modelId": "meta-models/Muse-Spark-Open-816B-A42B", "precision": "mxfp4", "vramMinimumGb": 567 }, "mxfp4": { "modelId": "amd/Muse-Spark-Open-816B-A42B-Quark-MXFP4", "precision": "mxfp4", "vramMinimumGb": 611 }, "default": { "modelId": "meta-models/Muse-Spark-Open-816B-A42B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 640 } }, "verifiedGpus": ["h200", "gb200", "gb300", "mi350x", "mi355x"] }, "microsoft/Phi-4-mini-instruct": { "file": "models/microsoft/Phi-4-mini-instruct.yaml", "minVllmVersion": "0.7.0", "contextLength": 131072, "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 10 }, "mini_reasoning": { "modelId": "microsoft/Phi-4-mini-reasoning", "precision": "bf16", "vramMinimumGb": 10 }, "reasoning": { "modelId": "microsoft/Phi-4-reasoning", "precision": "bf16", "vramMinimumGb": 30 }, "multimodal": { "modelId": "microsoft/Phi-4-multimodal-instruct", "precision": "bf16", "vramMinimumGb": 16, "extraArgs": ["--trust-remote-code"] }, "fp8": { "modelId": "RedHatAI/Phi-4-mini-instruct-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 5, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100"] }, "microsoft/Phi-4-multimodal-instruct": { "file": "models/microsoft/Phi-4-multimodal-instruct.yaml", "minVllmVersion": "0.8.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 14 } }, "verifiedGpus": ["xeon6"] }, "microsoft/Phi-4-reasoning": { "file": "models/microsoft/Phi-4-reasoning.yaml", "minVllmVersion": "0.4.2", "contextLength": 32768, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 34 } }, "verifiedGpus": ["xeon6"] }, "mindlab-research/Macaron-V1-Coding-Venti": { "file": "models/mindlab-research/Macaron-V1-Coding-Venti.yaml", "minVllmVersion": "0.25.0", "contextLength": 1048576, "baseArgs": ["--kv-cache-dtype", "fp8_e4m3"], "toolCallParser": "glm47", "reasoningParser": "glm45", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1786 }, "fp8": { "precision": "fp8", "vramMinimumGb": 893, "extraArgs": ["--quantization", "fp8"] } }, "verifiedGpus": ["b300"] }, "mistralai/Ministral-3-14B-Instruct-2512": { "file": "models/mistralai/Ministral-3-14B-Instruct-2512.yaml", "minVllmVersion": "0.11.0", "contextLength": 262144, "baseArgs": ["--tokenizer_mode", "mistral", "--config_format", "mistral", "--load_format", "mistral"], "toolCallParser": "mistral", "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 17 }, "8b": { "modelId": "mistralai/Ministral-3-8B-Instruct-2512", "precision": "fp8", "vramMinimumGb": 12 }, "3b": { "modelId": "mistralai/Ministral-3-3B-Instruct-2512", "precision": "fp8", "vramMinimumGb": 6 }, "fp8": { "modelId": "mistralai/Ministral-3-14B-Instruct-2512-FP8", "precision": "fp8", "vramMinimumGb": 17, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Ministral-3-14B-Instruct-2512-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 17, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "RedHatAI/Ministral-3-14B-Instruct-2512-NVFP4", "precision": "nvfp4", "vramMinimumGb": 9 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "mistralai/Ministral-3-8B-Reasoning-2512": { "file": "models/mistralai/Ministral-3-8B-Reasoning-2512.yaml", "minVllmVersion": "0.11.0", "contextLength": 262144, "baseArgs": ["--tokenizer_mode", "mistral", "--config_format", "mistral", "--load_format", "mistral"], "toolCallParser": "mistral", "reasoningParser": "mistral", "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 }, "3b": { "modelId": "mistralai/Ministral-3-3B-Reasoning-2512", "precision": "bf16", "vramMinimumGb": 8 }, "14b": { "modelId": "mistralai/Ministral-3-14B-Reasoning-2512", "precision": "bf16", "vramMinimumGb": 32, "extraArgs": ["--tensor-parallel-size", "2"] } }, "verifiedGpus": ["h200", "gb200", "mi300x"] }, "mistralai/Mistral-Large-3-675B-Instruct-2512": { "file": "models/mistralai/Mistral-Large-3-675B-Instruct-2512.yaml", "minVllmVersion": "0.11.0", "contextLength": 294912, "baseArgs": ["--tokenizer_mode", "mistral", "--config_format", "mistral", "--load_format", "mistral"], "toolCallParser": "mistral", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 810, "extraArgs": ["--tensor-parallel-size", "8"] }, "nvfp4": { "modelId": "mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4", "precision": "nvfp4", "vramMinimumGb": 405, "extraArgs": ["--tensor-parallel-size", "4"] }, "fp8": { "modelId": "mistralai/Mistral-Large-3-675B-Instruct-2512-FP8", "precision": "fp8", "vramMinimumGb": 810, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Mistral-Large-3-675B-Instruct-2512-NVFP4", "precision": "nvfp4", "vramMinimumGb": 405 } }, "verifiedGpus": ["h100", "b200"] }, "mistralai/Mistral-Medium-3.5-128B": { "file": "models/mistralai/Mistral-Medium-3.5-128B.yaml", "minVllmVersion": "0.18.0", "contextLength": 262144, "baseArgs": ["--tokenizer_mode", "mistral", "--config_format", "mistral", "--load_format", "mistral"], "toolCallParser": "mistral", "reasoningParser": "mistral", "optInFeatures": ["text_only", "encoder_parallel", "spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 154 } }, "verifiedGpus": ["mi300x"] }, "mistralai/Mistral-Small-4-119B-2603": { "file": "models/mistralai/Mistral-Small-4-119B-2603.yaml", "minVllmVersion": "0.20.0", "contextLength": 262144, "baseArgs": ["--max-model-len", "262144"], "toolCallParser": "mistral", "reasoningParser": "mistral", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 143 }, "nvfp4": { "modelId": "mistralai/Mistral-Small-4-119B-2603-NVFP4", "precision": "nvfp4", "vramMinimumGb": 72 }, "redhat_nvfp4": { "modelId": "RedHatAI/Mistral-Small-4-119B-2603-NVFP4", "precision": "nvfp4", "vramMinimumGb": 72 } } }, "mistralai/Voxtral-4B-TTS-2603": { "file": "models/mistralai/Voxtral-4B-TTS-2603.yaml", "minVllmVersion": "0.20.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 } } }, "mistralai/Voxtral-Mini-4B-Realtime-2602": { "file": "models/mistralai/Voxtral-Mini-4B-Realtime-2602.yaml", "minVllmVersion": "0.20.0", "contextLength": 131072, "baseArgs": ["--tokenizer-mode", "mistral", "--compilation_config", '{"cudagraph_mode": "PIECEWISE"}'], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 16 } }, "verifiedGpus": ["dgx_spark_gb10"] }, "moonshotai/Kimi-K2-Instruct": { "file": "models/moonshotai/Kimi-K2-Instruct.yaml", "minVllmVersion": "0.12.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--tokenizer-mode", "auto"], "toolCallParser": "kimi_k2", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 1200 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "moonshotai/Kimi-K2-Thinking": { "file": "models/moonshotai/Kimi-K2-Thinking.yaml", "minVllmVersion": "0.12.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "kimi_k2", "reasoningParser": "kimi_k2", "variants": { "default": { "precision": "int4", "vramMinimumGb": 600 }, "nvfp4": { "modelId": "nvidia/Kimi-K2-Thinking-NVFP4", "precision": "nvfp4", "vramMinimumGb": 600, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "fp8": { "modelId": "RedHatAI/Kimi-K2-Thinking-FP8-Block", "precision": "fp8", "vramMinimumGb": 1200, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "moonshotai/Kimi-K2.5": { "file": "models/moonshotai/Kimi-K2.5.yaml", "minVllmVersion": "0.19.1", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "kimi_k2", "reasoningParser": "kimi_k2", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "int4", "vramMinimumGb": 714 }, "nvfp4": { "modelId": "nvidia/Kimi-K2.5-NVFP4", "precision": "nvfp4", "vramMinimumGb": 600, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "mxfp4": { "modelId": "amd/Kimi-K2.5-MXFP4", "precision": "mxfp4", "vramMinimumGb": 669, "extraArgs": ["--kv-cache-dtype", "fp8", "--mm-encoder-tp-mode", "data"] } }, "verifiedGpus": ["h200", "gb200", "mi300x", "mi325x", "mi355x"] }, "moonshotai/Kimi-K2.6": { "file": "models/moonshotai/Kimi-K2.6.yaml", "minVllmVersion": "0.25.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "kimi_k2", "reasoningParser": "kimi_k2", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "int4", "vramMinimumGb": 714 }, "nvfp4": { "modelId": "nvidia/Kimi-K2.6-NVFP4", "precision": "nvfp4", "vramMinimumGb": 600, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "fp8": { "modelId": "RedHatAI/Kimi-K2.6-FP8-BLOCK", "precision": "fp8", "vramMinimumGb": 1200, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Kimi-K2.6-NVFP4", "precision": "nvfp4", "vramMinimumGb": 600 } }, "verifiedGpus": ["h200", "b300", "gb200", "mi300x", "mi325x", "mi355x"] }, "moonshotai/Kimi-K2.7-Code": { "file": "models/moonshotai/Kimi-K2.7-Code.yaml", "minVllmVersion": "0.19.1", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "kimi_k2", "reasoningParser": "kimi_k2", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "int4", "vramMinimumGb": 714 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "moonshotai/Kimi-K3": { "file": "models/moonshotai/Kimi-K3.yaml", "minVllmVersion": "0.29.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--gpu-memory-utilization", "0.95"], "toolCallParser": "kimi_k3", "reasoningParser": "kimi_k3", "optInFeatures": ["spec_decoding", "text_only", "decode_context_parallelism"], "variants": { "default": { "precision": "mxfp4", "vramMinimumGb": 1680 }, "nvfp4": { "modelId": "RedHatAI/Kimi-K3-NVFP4", "precision": "nvfp4", "vramMinimumGb": 1650 }, "ascend_w4a8": { "modelId": "Eco-Tech/Kimi-K3-w4a8", "precision": "int4", "vramMinimumGb": 1711, "extraArgs": ["--quantization", "ascend", "--enable-prefix-caching", "--enable-expert-parallel", "--max-num-seqs", "16", "--max-model-len", "131072", "--max-num-batched-tokens", "24576", "--gpu-memory-utilization", "0.9", "--compilation-config", '{"cudagraph_mode":"FULL_DECODE_ONLY"}', "--mm-processor-cache-gb", "0", "--additional-config", '{"enable_cpu_binding":true, "enable_flashcomm1":true}', "--mm-encoder-tp-mode", "data", "--limit-mm-per-prompt", '{"vision_chunk": 2}', "--allowed-local-media-path", "/"] }, "fp8": { "modelId": "RedHatAI/Kimi-K3-FP8-BLOCK", "precision": "fp8", "vramMinimumGb": 3360 } }, "verifiedGpus": ["h200", "b200", "b300", "gb200", "gb300", "mi355x", "ascend_910c"] }, "moonshotai/Kimi-Linear-48B-A3B-Instruct": { "file": "models/moonshotai/Kimi-Linear-48B-A3B-Instruct.yaml", "minVllmVersion": "0.11.2", "contextLength": 1048576, "baseArgs": ["--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 115 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "nvidia/Cosmos3-Nano": { "file": "models/nvidia/Cosmos3-Nano.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--host", "0.0.0.0", "--port", "8000", "--init-timeout", "1800"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 39 } }, "verifiedGpus": ["h200", "h100"] }, "nvidia/Cosmos3-Super-Image2Video": { "file": "models/nvidia/Cosmos3-Super-Image2Video.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--host", "0.0.0.0", "--port", "8000", "--cfg-parallel-size", "2", "--ulysses-degree", "4", "--use-hsdp", "--hsdp-shard-size", "8", "--init-timeout", "1800"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 154 } }, "verifiedGpus": ["h200", "h100"] }, "nvidia/Cosmos3-Super-Text2Image": { "file": "models/nvidia/Cosmos3-Super-Text2Image.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--host", "0.0.0.0", "--port", "8000", "--cfg-parallel-size", "2", "--ulysses-degree", "4", "--tensor-parallel-size", "1", "--use-hsdp", "--hsdp-shard-size", "8", "--init-timeout", "1800"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 154 } }, "verifiedGpus": ["h200", "h100", "gb200"] }, "nvidia/Cosmos3-Super": { "file": "models/nvidia/Cosmos3-Super.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--host", "0.0.0.0", "--port", "8000", "--cfg-parallel-size", "2", "--ulysses-degree", "4", "--use-hsdp", "--hsdp-shard-size", "8", "--init-timeout", "1800"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 154 } }, "verifiedGpus": ["h200", "h100"] }, "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16.yaml", "minVllmVersion": "0.17.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--async-scheduling"], "toolCallParser": "qwen3_coder", "reasoningParser": "nano_v3", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 72, "extraArgs": ["--kv-cache-dtype", "auto"] }, "fp8": { "modelId": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8", "precision": "fp8", "vramMinimumGb": 35, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "arc_pro_b60", "arc_pro_b70"] }, "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16.yaml", "minVllmVersion": "0.11.2", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--async-scheduling"], "toolCallParser": "qwen3_coder", "reasoningParser": "nano_v3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 10, "extraArgs": ["--kv-cache-dtype", "auto"] }, "fp8": { "modelId": "nvidia/NVIDIA-Nemotron-3-Nano-4B-FP8", "precision": "fp8", "vramMinimumGb": 5, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "b200", "arc_pro_b60", "arc_pro_b70"] }, "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16.yaml", "minVllmVersion": "0.17.1", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "nemotron_v3", "optInFeatures": ["spec_decoding", "long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 298, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "fp8": { "modelId": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8", "precision": "fp8", "vramMinimumGb": 149, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 75 }, "base_bf16": { "modelId": "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-Base-BF16", "precision": "bf16", "vramMinimumGb": 298 } }, "verifiedGpus": ["h100", "h200", "b200", "dgx_station_gb300", "dgx_spark_gb10", "rtx_pro_6000"] }, "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16.yaml", "minVllmVersion": "0.22.0", "contextLength": 262144, "baseArgs": ["--served-model-name", "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B", "--trust-remote-code", "--kv-cache-dtype", "fp8", "--max-num-seqs", "16", "--max-model-len", "262144", "--gpu-memory-utilization", "0.90", "--max-num-batched-tokens", "32768", "--enable-flashinfer-autotune", "--async-scheduling", "--mamba-backend", "triton", "--mamba-ssm-cache-dtype", "float32"], "toolCallParser": "qwen3_coder", "reasoningParser": "nemotron_v3", "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1320 }, "fp4": { "modelId": "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 330 } }, "verifiedGpus": ["b200"] }, "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16.yaml", "minVllmVersion": "0.27.1", "contextLength": 262144, "baseArgs": ["--mamba-backend", "flashinfer", "--mamba-cache-mode", "align", "--enable-prefix-caching", "--max-num-batched-tokens", "16384"], "toolCallParser": "qwen3_coder", "reasoningParser": "nemotron_v3", "optInFeatures": ["spec_decoding", "long_context"], "variants": { "default": { "modelId": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 18, "extraArgs": ["--kv-cache-dtype", "fp8", "--moe-backend", "marlin"] }, "bf16": { "modelId": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16", "precision": "bf16", "vramMinimumGb": 72, "extraArgs": ["--moe-backend", "flashinfer_cutlass"] } }, "verifiedGpus": ["h100", "dgx_spark_gb10", "rtx_pro_6000", "dgx_station_gb300"] }, "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4": { "file": "models/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4.yaml", "minVllmVersion": "0.31.0", "contextLength": 1048576, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "reasoningParser": "nemotron_v3", "optInFeatures": ["local_media"], "variants": { "default": { "precision": "nvfp4", "vramMinimumGb": 91 }, "fp8": { "modelId": "RedHatAI/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-FP8", "precision": "fp8", "vramMinimumGb": 155, "extraArgs": ["--gpu-memory-utilization", "0.89", "--prefix-match-unit", "64", "--block-size", "64", "--compilation-config", '{"max_cudagraph_capture_size":192}', "--enable-expert-parallel", "--max-num-seqs", "128", "--max-model-len", "114688", "--max-num-batched-tokens", "16384", "--enable-prefix-caching", "--async-scheduling", "--mamba-backend", "flashinfer", "--mamba-ssm-cache-dtype", "float16", "--enable-mamba-cache-stochastic-rounding", "--mamba-cache-philox-rounds", "5", "--chat-template-content-format", "string", "--mamba-cache-mode", "align", "--enable-mamba-fine-grained-prefix-cache"] }, "bf16": { "modelId": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16", "precision": "bf16", "vramMinimumGb": 299 }, "nvfp4_gb200_4x": { "modelId": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 91, "extraArgs": ["--enable-expert-parallel", "--max-num-seqs", "512", "--max-model-len", "28672", "--no-enable-prefix-caching", "--async-scheduling", "--mamba-backend", "flashinfer", "--mamba-ssm-cache-dtype", "float16", "--enable-mamba-cache-stochastic-rounding", "--mamba-cache-philox-rounds", "5", "--chat-template-content-format", "string", "--mamba-cache-mode", "align"] }, "bf16_gb200_4x": { "modelId": "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16", "precision": "bf16", "vramMinimumGb": 299, "extraArgs": ["--enable-expert-parallel", "--max-num-seqs", "512", "--max-model-len", "28672", "--no-enable-prefix-caching", "--async-scheduling", "--mamba-backend", "flashinfer", "--mamba-ssm-cache-dtype", "float32", "--chat-template-content-format", "string", "--mamba-cache-mode", "align"] } }, "verifiedGpus": ["h100", "h200", "gb200", "dgx_spark_gb10", "rtx_pro_6000"] }, "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16": { "file": "models/nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16.yaml", "minVllmVersion": "0.11.1", "contextLength": 131072, "baseArgs": ["--trust-remote-code"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 29 }, "fp8": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-FP8", "precision": "fp8", "vramMinimumGb": 14 }, "nvfp4": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-NVFP4-QAD", "precision": "nvfp4", "vramMinimumGb": 8 } }, "verifiedGpus": ["h100", "b200"] }, "nvidia/NVIDIA-Nemotron-Nano-9B-v2": { "file": "models/nvidia/NVIDIA-Nemotron-Nano-9B-v2.yaml", "minVllmVersion": "0.10.1", "contextLength": 131072, "baseArgs": ["--trust-remote-code"], "toolCallParser": "nemotron_json", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 }, "fp8": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-9B-v2-FP8", "precision": "fp8", "vramMinimumGb": 11 }, "nvfp4": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-9B-v2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 6 }, "base": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Base", "precision": "bf16", "vramMinimumGb": 22 }, "japanese": { "modelId": "nvidia/NVIDIA-Nemotron-Nano-9B-v2-Japanese", "precision": "bf16", "vramMinimumGb": 22 }, "redhat_fp8": { "modelId": "RedHatAI/NVIDIA-Nemotron-Nano-9B-v2-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 11, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "b200"] }, "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16": { "file": "models/nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16.yaml", "minVllmVersion": "0.20.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--max-model-len", "131072", "--media-io-kwargs", '{"video": {"num_frames": 512, "fps": 1}}', "--video-pruning-rate", "0.5"], "toolCallParser": "qwen3_coder", "reasoningParser": "nemotron_v3", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 75 }, "fp8": { "modelId": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-FP8", "precision": "fp8", "vramMinimumGb": 38, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-NVFP4", "precision": "nvfp4", "vramMinimumGb": 28, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h100", "h200", "b200"] }, "openai/gpt-oss-120b": { "file": "models/openai/gpt-oss-120b.yaml", "minVllmVersion": "0.10.1", "contextLength": 131072, "toolCallParser": "openai", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "mxfp4", "vramMinimumGb": 96 }, "amd_fp8": { "modelId": "amd/gpt-oss-120b-w-mxfp4-a-fp8", "precision": "mxfp4", "vramMinimumGb": 80 } }, "verifiedGpus": ["h100", "h200", "b200", "mi300x", "mi325x", "mi355x", "ironwood", "arc_pro_b70"] }, "openai/gpt-oss-20b": { "file": "models/openai/gpt-oss-20b.yaml", "minVllmVersion": "0.10.1", "contextLength": 131072, "toolCallParser": "openai", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "mxfp4", "vramMinimumGb": 16 } }, "verifiedGpus": ["h100", "h200", "b200", "mi300x", "mi325x", "mi355x", "arc_pro_b60", "arc_pro_b70", "xeon6"] }, "openai/whisper-large-v3": { "file": "models/openai/whisper-large-v3.yaml", "minVllmVersion": "0.7.0", "contextLength": 448, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 4 } }, "verifiedGpus": ["xeon6"] }, "openbmb/MiniCPM-V-4.6": { "file": "models/openbmb/MiniCPM-V-4.6.yaml", "minVllmVersion": "0.22.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "qwen3_coder", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 4 } } }, "openbmb/MiniCPM5-1B": { "file": "models/openbmb/MiniCPM5-1B.yaml", "minVllmVersion": "0.21.0", "contextLength": 131072, "optInFeatures": ["reasoning"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } } }, "openbmb/MiniCPM5-2B": { "file": "models/openbmb/MiniCPM5-2B.yaml", "minVllmVersion": "0.21.0", "contextLength": 131072, "toolCallParser": "minicpm5", "optInFeatures": ["reasoning"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 5 } } }, "openbmb/VoxCPM2": { "file": "models/openbmb/VoxCPM2.yaml", "minVllmVersion": "0.21.0", "baseArgs": ["--omni"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 } } }, "pfnet/plamo-3-nict-31b-base": { "file": "models/pfnet/plamo-3-nict-31b-base.yaml", "minVllmVersion": "0.12.0", "contextLength": 4096, "baseArgs": ["--trust-remote-code", "--max-model-len", "4096"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 77 } } }, "poolside/Laguna-M.1": { "file": "models/poolside/Laguna-M.1.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "toolCallParser": "poolside_v1", "reasoningParser": "poolside_v1", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 540 }, "fp8": { "modelId": "poolside/Laguna-M.1-FP8", "precision": "fp8", "vramMinimumGb": 270 }, "nvfp4": { "modelId": "poolside/Laguna-M.1-NVFP4", "precision": "nvfp4", "vramMinimumGb": 135 } } }, "poolside/Laguna-S-2.1": { "file": "models/poolside/Laguna-S-2.1.yaml", "minVllmVersion": "0.25.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "poolside_v1", "reasoningParser": "poolside_v1", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 282 }, "fp8": { "modelId": "poolside/Laguna-S-2.1-FP8", "precision": "fp8", "vramMinimumGb": 145 }, "nvfp4": { "modelId": "poolside/Laguna-S-2.1-NVFP4", "precision": "nvfp4", "vramMinimumGb": 86 }, "int4": { "modelId": "poolside/Laguna-S-2.1-INT4", "precision": "int4", "vramMinimumGb": 86 } }, "verifiedGpus": ["h200", "mi325x"] }, "poolside/Laguna-XS-2.1": { "file": "models/poolside/Laguna-XS-2.1.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "poolside_v1", "reasoningParser": "poolside_v1", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 80 }, "fp8": { "modelId": "poolside/Laguna-XS-2.1-FP8", "precision": "fp8", "vramMinimumGb": 40 }, "nvfp4": { "modelId": "poolside/Laguna-XS-2.1-NVFP4", "precision": "nvfp4", "vramMinimumGb": 26 }, "int4": { "modelId": "poolside/Laguna-XS-2.1-INT4", "precision": "int4", "vramMinimumGb": 29 } }, "verifiedGpus": ["h200"] }, "poolside/Laguna-XS.2": { "file": "models/poolside/Laguna-XS.2.yaml", "minVllmVersion": "0.21.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "poolside_v1", "reasoningParser": "poolside_v1", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 80 }, "fp8": { "modelId": "poolside/Laguna-XS.2-FP8", "precision": "fp8", "vramMinimumGb": 40 }, "nvfp4": { "modelId": "poolside/Laguna-XS.2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 26 }, "int4": { "modelId": "poolside/Laguna-XS.2-INT4", "precision": "int4", "vramMinimumGb": 29 }, "redhat_fp8": { "modelId": "RedHatAI/Laguna-XS.2-FP8", "precision": "fp8", "vramMinimumGb": 40, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Laguna-XS.2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 22 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "reflection/Beam-1.0-501B-A23B": { "file": "models/reflection/Beam-1.0-501B-A23B.yaml", "minVllmVersion": "0.33.0", "contextLength": 1048576, "baseArgs": ["--kv-cache-dtype", "fp8"], "toolCallParser": "beam", "reasoningParser": "beam", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "reflection/Beam-1.0-501B-A23B-NVFP4", "precision": "nvfp4", "vramMinimumGb": 353 }, "fp8": { "modelId": "reflection/Beam-1.0-501B-A23B-FP8", "precision": "fp8", "vramMinimumGb": 604, "extraArgs": ["--moe-backend", "triton"] }, "bf16": { "modelId": "reflection/Beam-1.0-501B-A23B", "precision": "bf16", "vramMinimumGb": 1204, "extraArgs": ["--kv-cache-dtype", "auto"] } }, "unsupportedGpus": ["mi300x", "mi325x", "mi350x", "mi355x"], "verifiedGpus": ["b300", "h200"] }, "stabilityai/stable-audio-open-1.0": { "file": "models/stabilityai/stable-audio-open-1.0.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--trust-remote-code", "--enforce-eager", "--gpu-memory-utilization", "0.9"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 19 } } }, "stabilityai/stable-diffusion-3.5-medium": { "file": "models/stabilityai/stable-diffusion-3.5-medium.yaml", "minVllmVersion": "0.12.0", "variants": { "default": { "precision": "bf16", "vramMinimumGb": 44 }, "large": { "modelId": "stabilityai/stable-diffusion-3.5-large", "precision": "bf16", "vramMinimumGb": 24 }, "large_turbo": { "modelId": "stabilityai/stable-diffusion-3.5-large-turbo", "precision": "bf16", "vramMinimumGb": 24 } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x"] }, "stepfun-ai/Step-3.5-Flash": { "file": "models/stepfun-ai/Step-3.5-Flash.yaml", "minVllmVersion": "0.15.1", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "step3p5", "reasoningParser": "step3p5", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 470 }, "fp8": { "modelId": "stepfun-ai/Step-3.5-Flash-FP8", "precision": "fp8", "vramMinimumGb": 235 }, "int4": { "modelId": "stepfun-ai/Step-3.5-Flash-INT4", "precision": "int4", "vramMinimumGb": 118 }, "int8": { "modelId": "stepfun-ai/Step-3.5-Flash-INT8", "precision": "int8", "vramMinimumGb": 235 } }, "verifiedGpus": ["h200", "b200"] }, "stepfun-ai/Step-3.7-Flash": { "file": "models/stepfun-ai/Step-3.7-Flash.yaml", "minVllmVersion": "0.23.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel", "--disable-cascade-attn"], "toolCallParser": "step3p5", "reasoningParser": "step3p5", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 475 }, "fp8": { "modelId": "stepfun-ai/Step-3.7-Flash-FP8", "precision": "fp8", "vramMinimumGb": 238 }, "nvfp4": { "modelId": "stepfun-ai/Step-3.7-Flash-NVFP4", "precision": "nvfp4", "vramMinimumGb": 119, "extraArgs": ["--quantization", "modelopt", "--kv-cache-dtype", "fp8", "--gpu-memory-utilization", "0.9", "--async-scheduling"] } }, "verifiedGpus": ["h200", "b200", "dgx_station_gb300"] }, "stepfun-ai/Step-5-Preview": { "file": "models/stepfun-ai/Step-5-Preview.yaml", "contextLength": 1048576, "baseArgs": ["--data-parallel-backend", "mp", "--distributed-executor-backend", "mp", "--disable-custom-all-reduce", "--max-model-len", "1048576", "--max-num-batched-tokens", "16384", "--max-num-seqs", "64", "--gpu-memory-utilization", "0.85", "--enable-prefix-caching"], "toolCallParser": "step5", "reasoningParser": "step5", "variants": { "default": { "precision": "fp8", "vramMinimumGb": 773 }, "nvfp4": { "modelId": "stepfun-ai/Step-5-Preview-NVFP4", "precision": "nvfp4", "vramMinimumGb": 473 } }, "verifiedGpus": ["h200", "b300", "gb300"] }, "tencent/Hunyuan-A13B-Instruct": { "file": "models/tencent/Hunyuan-A13B-Instruct.yaml", "minVllmVersion": "0.11.0", "contextLength": 32768, "baseArgs": ["--trust-remote-code"], "optInFeatures": ["long_context"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 580 }, "fp8": { "modelId": "tencent/Hunyuan-A13B-Instruct-FP8", "precision": "fp8", "vramMinimumGb": 96, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["mi300x", "mi325x", "mi355x"] }, "tencent/HunyuanOCR": { "file": "models/tencent/HunyuanOCR.yaml", "minVllmVersion": "0.12.0", "contextLength": 32768, "baseArgs": ["--no-enable-prefix-caching", "--mm-processor-cache-gb", "0"], "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } } }, "tencent/Hy3-preview": { "file": "models/tencent/Hy3-preview.yaml", "minVllmVersion": "0.20.0", "contextLength": 262144, "baseArgs": ["--trust-remote-code"], "toolCallParser": "hy_v3", "reasoningParser": "hy_v3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 708 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "tencent/Hy3": { "file": "models/tencent/Hy3.yaml", "minVllmVersion": "0.28.0", "contextLength": 262144, "toolCallParser": "hy_v3", "reasoningParser": "hy_v3", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 708 }, "fp8": { "modelId": "tencent/Hy3-FP8", "precision": "fp8", "vramMinimumGb": 354 }, "nvfp4": { "modelId": "RedHatAI/Hy3-NVFP4-FP8", "precision": "nvfp4", "vramMinimumGb": 214 } }, "verifiedGpus": ["gb300", "mi300x", "mi355x"] }, "tencent/Hy4-preview": { "file": "models/tencent/Hy4-preview.yaml", "minVllmVersion": "0.29.0", "nightlyRequired": true, "contextLength": 1048576, "toolCallParser": "hy_v4", "reasoningParser": "hy_v4", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1848 }, "fp8": { "modelId": "tencent/Hy4-preview-FP8", "precision": "mxfp8", "vramMinimumGb": 924 } }, "verifiedGpus": ["b200", "b300", "mi325x", "mi355x"] }, "thinkingmachines/Inkling-Small-NVFP4": { "file": "models/thinkingmachines/Inkling-Small.yaml", "minVllmVersion": "0.26.0", "nightlyRequired": true, "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--tokenizer-mode", "inkling"], "toolCallParser": "inkling", "reasoningParser": "inkling", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "nvfp4", "vramMinimumGb": 180, "extraArgs": ["--kernel-config.enable_flashinfer_autotune=False"] }, "mxfp4": { "modelId": "EmbeddedLLM/Inkling-Small-MXFP4", "precision": "mxfp4", "vramMinimumGb": 160 }, "bf16": { "modelId": "thinkingmachines/Inkling-Small", "precision": "bf16", "vramMinimumGb": 600 }, "fp8": { "modelId": "RedHatAI/Inkling-Small-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 332, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["mi300x", "mi355x"] }, "thinkingmachines/Inkling-NVFP4": { "file": "models/thinkingmachines/Inkling.yaml", "minVllmVersion": "0.26.0", "nightlyRequired": true, "contextLength": 1048576, "baseArgs": ["--trust-remote-code", "--tokenizer-mode", "inkling"], "toolCallParser": "inkling", "reasoningParser": "inkling", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "nvfp4", "vramMinimumGb": 651, "extraArgs": ["--kernel-config.enable_flashinfer_autotune=False"] }, "mxfp4": { "modelId": "lightseekorg/Inkling-MXFP4", "precision": "mxfp4", "vramMinimumGb": 540 }, "bf16": { "modelId": "thinkingmachines/Inkling", "precision": "bf16", "vramMinimumGb": 2400, "extraArgs": ["--kernel-config.enable_flashinfer_autotune=False"] }, "fp8": { "modelId": "RedHatAI/Inkling-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 1170, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8": { "modelId": "RedHatAI/Inkling-FP8-block", "precision": "fp8", "vramMinimumGb": 1170, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_nvfp4": { "modelId": "RedHatAI/Inkling-NVFP4", "precision": "nvfp4", "vramMinimumGb": 618 } }, "verifiedGpus": ["gb200", "b200", "h200", "mi300x", "mi355x"] }, "vllm-sr/d3-edge": { "file": "models/vllm-sr/d3-edge.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } }, "verifiedGpus": ["mi300x"] }, "vllm-sr/d3-flash": { "file": "models/vllm-sr/d3-flash.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 21 } }, "verifiedGpus": ["mi300x"] }, "vllm-sr/d3-lite": { "file": "models/vllm-sr/d3-lite.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 3 } }, "verifiedGpus": ["mi300x"] }, "vllm-sr/d3-mini": { "file": "models/vllm-sr/d3-mini.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 11 } }, "verifiedGpus": ["mi300x"] }, "vllm-sr/d3-nano": { "file": "models/vllm-sr/d3-nano.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 6 } }, "verifiedGpus": ["mi300x"] }, "vllm-sr/d3": { "file": "models/vllm-sr/d3.yaml", "minVllmVersion": "nightly", "nightlyRequired": true, "contextLength": 262144, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 63 } }, "verifiedGpus": ["mi300x"] }, "zai-org/GLM-4.5": { "file": "models/zai-org/GLM-4.5.yaml", "minVllmVersion": "0.11.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code"], "toolCallParser": "glm45", "reasoningParser": "glm45", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 859 }, "fp8": { "modelId": "zai-org/GLM-4.5-FP8", "precision": "fp8", "vramMinimumGb": 430 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "zai-org/GLM-4.5V": { "file": "models/zai-org/GLM-4.5V.yaml", "minVllmVersion": "0.12.0", "contextLength": 65536, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel", "--allowed-local-media-path", "/", "--mm-encoder-tp-mode", "data", "--mm-processor-cache-type", "shm"], "toolCallParser": "glm45", "reasoningParser": "glm45", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 257 }, "fp8": { "modelId": "zai-org/GLM-4.5V-FP8", "precision": "fp8", "vramMinimumGb": 128 } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x"] }, "zai-org/GLM-4.6": { "file": "models/zai-org/GLM-4.6.yaml", "minVllmVersion": "0.11.0", "contextLength": 202752, "baseArgs": ["--trust-remote-code"], "toolCallParser": "glm45", "reasoningParser": "glm45", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 857 }, "fp8": { "modelId": "zai-org/GLM-4.6-FP8", "precision": "fp8", "vramMinimumGb": 428 }, "redhat_fp8": { "modelId": "RedHatAI/GLM-4.6-FP8-dynamic", "precision": "fp8", "vramMinimumGb": 429, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "redhat_fp8_plain": { "modelId": "RedHatAI/GLM-4.6-FP8", "precision": "fp8", "vramMinimumGb": 429, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "nvfp4": { "modelId": "RedHatAI/GLM-4.6-NVFP4", "precision": "nvfp4", "vramMinimumGb": 223 } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "zai-org/GLM-4.6V": { "file": "models/zai-org/GLM-4.6V.yaml", "minVllmVersion": "0.12.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--enable-expert-parallel", "--allowed-local-media-path", "/", "--mm-encoder-tp-mode", "data", "--mm-processor-cache-type", "shm"], "toolCallParser": "glm45", "reasoningParser": "glm45", "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 257 }, "fp8": { "modelId": "zai-org/GLM-4.6V-FP8", "precision": "fp8", "vramMinimumGb": 128 } }, "verifiedGpus": ["h100", "h200", "mi300x", "mi325x", "mi355x"] }, "zai-org/GLM-4.7": { "file": "models/zai-org/GLM-4.7.yaml", "minVllmVersion": "0.24.0", "contextLength": 202752, "baseArgs": ["--trust-remote-code"], "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 859 }, "fp8": { "modelId": "zai-org/GLM-4.7-FP8", "precision": "fp8", "vramMinimumGb": 430 }, "nvfp4": { "modelId": "nvidia/GLM-4.7-NVFP4", "precision": "nvfp4", "vramMinimumGb": 215, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h200", "mi300x", "mi325x", "mi355x"] }, "zai-org/GLM-5.1": { "file": "models/zai-org/GLM-5.1.yaml", "minVllmVersion": "0.24.0", "contextLength": 202752, "baseArgs": ["--trust-remote-code", "--chat-template-content-format=string"], "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1786 }, "fp8": { "modelId": "zai-org/GLM-5.1-FP8", "precision": "fp8", "vramMinimumGb": 893 }, "nvfp4": { "modelId": "nvidia/GLM-5.1-NVFP4", "precision": "nvfp4", "vramMinimumGb": 446, "extraArgs": ["--kv-cache-dtype", "fp8"] }, "mxfp4": { "modelId": "amd/GLM-5.1-MXFP4", "precision": "mxfp4", "vramMinimumGb": 447, "extraArgs": ["--kv-cache-dtype", "fp8_e4m3", "-cc.pass_config.fuse_allreduce_rms=False", "--block-size=1", "--enable-prefix-caching", "--max-num-seqs", "64"] } }, "verifiedGpus": ["h200", "mi325x", "mi350x", "mi355x"] }, "zai-org/GLM-5.2": { "file": "models/zai-org/GLM-5.2.yaml", "minVllmVersion": "0.24.0", "contextLength": 1048576, "baseArgs": ["--kv-cache-dtype", "fp8_e4m3"], "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "modelId": "zai-org/GLM-5.2-FP8", "precision": "fp8", "vramMinimumGb": 893 }, "mxfp4": { "modelId": "amd/GLM-5.2-MXFP4", "precision": "mxfp4", "vramMinimumGb": 446 }, "nvfp4": { "modelId": "nvidia/GLM-5.2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 558 }, "redhat_nvfp4": { "modelId": "RedHatAI/GLM-5.2-NVFP4-FP8", "precision": "nvfp4", "vramMinimumGb": 558 }, "bf16": { "precision": "bf16", "vramMinimumGb": 1786 }, "redhat_fp8": { "modelId": "RedHatAI/GLM-5.2-FP8", "precision": "fp8", "vramMinimumGb": 892 }, "redhat_nvfp4_plain": { "modelId": "RedHatAI/GLM-5.2-NVFP4", "precision": "nvfp4", "vramMinimumGb": 477 } }, "verifiedGpus": ["b300", "b200", "mi300x", "mi325x", "mi350x", "mi355x"] }, "zai-org/GLM-5.3-Flash": { "file": "models/zai-org/GLM-5.3-Flash.yaml", "minVllmVersion": "0.29.0", "nightlyRequired": true, "contextLength": 1048576, "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 386 }, "nvfp4": { "modelId": "RedHatAI/GLM-5.3-Flash-NVFP4", "precision": "nvfp4", "vramMinimumGb": 229 }, "bf16": { "modelId": "zai-org/GLM-5.3-Flash-BF16", "precision": "bf16", "vramMinimumGb": 772 } }, "verifiedGpus": ["h100", "b200", "gb200", "mi355x", "ascend_950pr_8x"] }, "zai-org/GLM-5.3": { "file": "models/zai-org/GLM-5.3.yaml", "minVllmVersion": "0.29.0", "contextLength": 1048576, "baseArgs": ["--kv-cache-dtype", "fp8_e4m3"], "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "fp8", "vramMinimumGb": 893 }, "nvfp4": { "modelId": "Inferact/GLM-5.3-NVFP4", "precision": "nvfp4", "vramMinimumGb": 558 }, "w4a8": { "modelId": "gpustack/GLM-5.3-W4A8", "precision": "int4", "vramMinimumGb": 447, "extraArgs": ["--enable-expert-parallel", "--trust-remote-code"] }, "bf16": { "modelId": "zai-org/GLM-5.3-BF16", "precision": "bf16", "vramMinimumGb": 1786 } }, "verifiedGpus": ["b300", "h200", "mi325x", "mi350x", "ascend_950pr_8x", "dgx_station_gb300"] }, "zai-org/GLM-5": { "file": "models/zai-org/GLM-5.yaml", "minVllmVersion": "0.24.0", "contextLength": 202752, "baseArgs": ["--trust-remote-code", "--chat-template-content-format=string"], "toolCallParser": "glm47", "reasoningParser": "glm47", "optInFeatures": ["spec_decoding"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 1786 }, "fp8": { "modelId": "zai-org/GLM-5-FP8", "precision": "fp8", "vramMinimumGb": 893 }, "nvfp4": { "modelId": "nvidia/GLM-5-NVFP4", "precision": "nvfp4", "vramMinimumGb": 446, "extraArgs": ["--kv-cache-dtype", "fp8"] } }, "verifiedGpus": ["h200", "mi325x", "mi350x"] }, "zai-org/GLM-ASR-Nano-2512": { "file": "models/zai-org/GLM-ASR-Nano-2512.yaml", "minVllmVersion": "0.14.1", "contextLength": 8192, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 11 } } }, "zai-org/GLM-GA": { "file": "models/zai-org/GLM-GA.yaml", "minVllmVersion": "0.21.0", "contextLength": 131072, "baseArgs": ["--trust-remote-code", "--allowed-local-media-path", "/", "--mm-processor-cache-type", "shm", "--reasoning-parser", "glm45"], "optInFeatures": ["text_only"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 29 } } }, "zai-org/GLM-Image": { "file": "models/zai-org/GLM-Image.yaml", "minVllmVersion": "0.11.0", "contextLength": 4096, "baseArgs": ["--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 38 } }, "verifiedGpus": ["h100"] }, "zai-org/GLM-OCR": { "file": "models/zai-org/GLM-OCR.yaml", "minVllmVersion": "0.16.0", "contextLength": 131072, "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 2 } } }, "zai-org/GLM-TTS": { "file": "models/zai-org/GLM-TTS.yaml", "minVllmVersion": "0.22.0", "baseArgs": ["--omni", "--trust-remote-code"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 } } }, "zai-org/Glyph": { "file": "models/zai-org/Glyph.yaml", "minVllmVersion": "0.11.0", "contextLength": 131072, "baseArgs": ["--no-enable-prefix-caching", "--mm-processor-cache-gb", "0", "--limit-mm-per-prompt.video", "0"], "reasoningParser": "glm45", "optInFeatures": ["text_only", "encoder_parallel"], "variants": { "default": { "precision": "bf16", "vramMinimumGb": 24 } }, "verifiedGpus": ["h100", "mi300x", "mi325x"] }, "zai-org/glm-4-9b-hf": { "file": "models/zai-org/glm-4-9b-hf.yaml", "minVllmVersion": "0.6.5", "contextLength": 8192, "variants": { "default": { "precision": "bf16", "vramMinimumGb": 22 } }, "verifiedGpus": ["xeon6"] } } };
+
 // src/utils/serveConfigCheck.ts
-var SERVE_BASIS = "Derived from config.json, the engine flags and the card, not measured. Card memory is the nominal GB; the engine's own reserve (activation profiling, CUDA graphs, communication buffers) is not counted, so every KV capacity and concurrency here is an upper bound. Template checks read files and do not render a conversation, so they cannot prove two stacks produce the same prompt.";
+var SERVE_VALIDATION = { llmdRuns: 16, llmdKvMae: 0.33, poolLogs: 21, poolTokensMae: 1.07, poolConcMae: 3.95, e2eLogs: 9, e2eKvMedian: 7.63 };
+var SERVE_BASIS = `Predicted from config.json, the engine flags and the card, not measured. Memory follows each engine's own arithmetic, ported from its source (vLLM's KV cache groups and blocks, SGLang's mem_fraction_static formula, llama.cpp's sliding-window cells); the terms an engine measures at startup (vLLM's activation peak, non-torch memory and CUDA graph pool) are estimates and are marked as such. Checked against vLLM's own logged numbers: ${SERVE_VALIDATION.llmdRuns} llm-d-planner H100 runs, KV memory mean absolute error ${SERVE_VALIDATION.llmdKvMae}% (in-sample for one fitted factor); given the KV memory vLLM logged, ${SERVE_VALIDATION.poolLogs} public logs, token count ${SERVE_VALIDATION.poolTokensMae}% and concurrency ${SERVE_VALIDATION.poolConcMae}%; end to end on ${SERVE_VALIDATION.e2eLogs} public logs, median ${SERVE_VALIDATION.e2eKvMedian}% with outliers past 100% (scripts/serve-check-validation.ts). Template checks read files and do not render a conversation, so they cannot prove two stacks produce the same prompt.`;
+var SERVE_BASIS_UPPER_BOUND = "The config gave no layer geometry, so memory was sized from the graph alone: the engine's reserve (activation profiling, CUDA graphs, communication buffers) is not counted and the card's nominal GB is used, so every KV capacity and concurrency here is an upper bound.";
 var CARD_SM = {
   "b200": 100,
   "h200": 90,
@@ -10084,6 +11342,7 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "--kv-unified",
   "-no-kvu",
   "--no-kv-unified",
+  "--swa-full",
   "--mlock",
   "--no-mmap",
   "--verbose",
@@ -10166,6 +11425,9 @@ function parseServeCommand(cmd, engineHint) {
       const ogc = parseJsonObject(get("--override-generation-config"));
       if (ogc) args.samplerFlags = readSampler(ogc);
       if (has("--enable-auto-tool-choice")) args.enableAutoToolChoice = true;
+      setNum("maxNumBatchedTokens", get("--max-num-batched-tokens"), readTokenCount);
+      if (has("--enforce-eager")) args.enforceEager = true;
+      setNum("blockSize", get("--block-size"));
     } else {
       args.model = get("--model-path", "--model");
       setNum("tp", get("--tp-size", "--tp", "--tensor-parallel-size"));
@@ -10180,6 +11442,10 @@ function parseServeCommand(cmd, engineHint) {
       if (over?.rope_scaling && typeof over.rope_scaling === "object") args.ropeScaling = over.rope_scaling;
       if (over && posInt3(over.max_position_embeddings) != null) args.maxPositionOverride = posInt3(over.max_position_embeddings);
       args.generationConfigMode = get("--sampling-defaults");
+      setNum("chunkedPrefillSize", get("--chunked-prefill-size"), num4);
+      if (has("--disable-cuda-graph")) args.enforceEager = true;
+      if (has("--enable-dp-attention")) args.dpAttention = true;
+      if (/deepep/i.test(get("--moe-a2a-backend") ?? "")) args.deepep = true;
     }
     args.dtype = get("--dtype");
     args.quantization = get("--quantization", "-q");
@@ -10223,7 +11489,11 @@ function parseServeCommand(cmd, engineHint) {
     const rp = num4(get("--repeat-penalty"));
     if (rp != null) s.repetition_penalty = rp;
     if (Object.keys(s).length) args.samplerFlags = s;
+    setNum("nUbatch", get("-ub", "--ubatch-size"));
+    if (has("--swa-full")) args.swaFull = true;
   }
+  has("--trust-remote-code");
+  if (flags.size) args.flags = [...flags.keys()];
   for (const k of Object.keys(args)) if (args[k] == null) delete args[k];
   const ignored = [...flags.keys()].filter((f) => !used.has(f));
   return { engine, args, ignored };
@@ -10342,6 +11612,11 @@ function ggufQuantOf(file) {
   }
   return null;
 }
+function derivedMaxLenRaw(config) {
+  if (!config) return null;
+  const c = textConfigOf(config);
+  return posInt3(c.max_position_embeddings) ?? posInt3(c.n_positions) ?? null;
+}
 function derivedMaxLen(config, ropeOverride, maxPosOverride, graphMax) {
   const c = config ?? {};
   const native = maxPosOverride ?? posInt3(c.max_position_embeddings) ?? posInt3(c.n_positions) ?? posInt3(c.max_seq_len) ?? posInt3(c.seq_length) ?? graphMax ?? null;
@@ -10371,6 +11646,621 @@ function templateHash(s) {
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0).toString(16).padStart(8, "0");
+}
+var VLLM_SRC = "vllm-project/vllm@83c9a547bf";
+var SGLANG_SRC = "sgl-project/sglang@80914b7c9b";
+var TRTLLM_SRC = "NVIDIA/TensorRT-LLM@8e4f13322e";
+var LLAMACPP_SRC = "ggml-org/llama.cpp@547208dca";
+var cdiv = (a, b) => Math.ceil(a / b);
+var GiB = 1024 ** 3;
+var CARD_NVSMI_MIB = {
+  "b200": { mib: 183359, approx: true },
+  "h200": { mib: 143771 },
+  "h100-sxm": { mib: 81559 },
+  "a100-80g": { mib: 81920 },
+  "a100-40g": { mib: 40960 },
+  "l40s": { mib: 46068 },
+  "l4": { mib: 23034 },
+  "a10g": { mib: 23028 },
+  "t4": { mib: 15360 },
+  "v100": { mib: 16384, approx: true },
+  "rtx-4090": { mib: 24564 },
+  "rtx-3090": { mib: 24576 }
+};
+var CARD_TORCH_TOTAL_GIB = {
+  "h100-sxm": { gib: 79.19, source: 'vLLM log, llm-d-planner accuracy report (H100-80GB "physical 79.19 GiB")' },
+  "a100-80g": { gib: 79.15, source: 'vLLM log "total_gpu_memory (79.15GiB)" on A100-SXM4-80GB (github.com/vllm-project/vllm/issues/18446)' }
+};
+var TORCH_GAP_MIB = 81559 - 79.19 * 1024;
+function cardTotalGiB(cardId, nominalGb) {
+  const t = CARD_TORCH_TOTAL_GIB[cardId];
+  if (t) return t;
+  const n2 = CARD_NVSMI_MIB[cardId];
+  if (n2) return { gib: Math.round((n2.mib - TORCH_GAP_MIB) / 1024 * 100) / 100, source: `derived: nvidia-smi ${n2.mib} MiB less the ${Math.round(TORCH_GAP_MIB)} MiB gap measured on H100` };
+  return { gib: Math.round(nominalGb * 0.9899 * 100) / 100, source: "derived: nominal GB x 0.9899 (the H100 ratio)" };
+}
+function readEngineVersion(v) {
+  const m = /^\s*v?(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(v ?? ""));
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)] : null;
+}
+var vAtLeast = (v, w) => {
+  for (let i = 0; i < 3; i++) {
+    if ((v[i] ?? 0) !== w[i]) return (v[i] ?? 0) > w[i];
+  }
+  return true;
+};
+var ASSUMED_VLLM_VERSION = "0.32.0";
+var ASSUMED_SGLANG_VERSION = "0.5.22";
+function vllmVersionDefaults(version, card, pp) {
+  const v20 = vAtLeast(version, [0, 20, 0]);
+  const v26 = vAtLeast(version, [0, 26, 0]);
+  const totalGib = cardTotalGiB(card.id, card.memoryGB).gib;
+  const big = totalGib >= 70 && !/a100/.test(card.id);
+  const huge = totalGib >= 160 && vAtLeast(version, [0, 26, 0]);
+  return {
+    gpuMemoryUtilization: v20 ? 0.92 : 0.9,
+    cudaGraphsCounted: v20,
+    maxNumBatchedTokens: huge ? 16384 : big ? 8192 : 2048,
+    maxNumSeqs: big || huge ? 1024 : 256,
+    inFlightBatches: v26 ? pp > 1 ? pp : 2 : 1,
+    printsTokensAs: vAtLeast(version, [0, 21, 0]) ? "concurrency" : "blocks",
+    linearRecurrentAlign: vAtLeast(version, [0, 15, 0])
+  };
+}
+function textConfigOf(c) {
+  if (posInt3(c.num_hidden_layers) != null || posInt3(c.n_layer) != null || posInt3(c.num_layers) != null || posInt3(c.decoder_layers) != null) return c;
+  for (const k of ["text_config", "llm_config", "language_config", "text_model_config"]) {
+    const t = c[k];
+    if (t && typeof t === "object") return t;
+  }
+  const th = c.thinker_config;
+  if (th?.text_config && typeof th.text_config === "object") return th.text_config;
+  return c;
+}
+var DTYPE_BYTES_OF = (s, fallback) => {
+  const t = String(s ?? "").toLowerCase();
+  if (/float32|fp32/.test(t)) return 4;
+  if (/bfloat16|float16|bf16|fp16|half/.test(t)) return 2;
+  return fallback;
+};
+function kvLayoutFromConfig(config, opts) {
+  const top = config;
+  const c = textConfigOf(config);
+  const notes = [];
+  const mt = String(top.model_type ?? c.model_type ?? "").toLowerCase();
+  const tp = Math.max(1, opts.tp);
+  const n2 = posInt3(c.num_hidden_layers) ?? posInt3(c.n_layer) ?? posInt3(c.num_layers) ?? posInt3(c.decoder_layers);
+  if (n2 == null) return null;
+  const hidden = posInt3(c.hidden_size) ?? posInt3(c.d_model) ?? posInt3(c.n_embd);
+  const heads = posInt3(c.num_attention_heads) ?? posInt3(c.n_head) ?? posInt3(c.decoder_attention_heads);
+  const kvHeads = posInt3(c.num_key_value_heads) ?? (c.multi_query === true ? 1 : null) ?? posInt3(c.num_kv_heads) ?? heads;
+  const headDim = posInt3(c.head_dim) ?? (hidden && heads ? hidden / heads : null);
+  const kvRank = kvHeads != null ? Math.max(1, Math.floor(kvHeads / tp)) : null;
+  const replicated = kvHeads != null && tp > kvHeads;
+  const attnBytes = kvRank != null && headDim != null ? kvRank * headDim * 2 * opts.kvBytes : null;
+  const kvLora = posInt3(c.kv_lora_rank);
+  const rope = posInt3(c.qk_rope_head_dim);
+  const mlaBytes = kvLora != null ? (kvLora + (rope ?? 0)) * opts.kvBytes : null;
+  if (kvLora != null) notes.push(`MLA: ${kvLora} + ${rope ?? 0} latent values per token per layer, the same on every TP rank (${VLLM_SRC} MLAAttentionSpec, head_size_v = 0)`);
+  const ssmBytes = DTYPE_BYTES_OF(c.mamba_ssm_cache_dtype, opts.modelBytes);
+  const mambaState = () => {
+    const conv = posInt3(c.conv_kernel) ?? posInt3(c.mamba_d_conv) ?? posInt3(c.d_conv) ?? posInt3(c.linear_conv_kernel_dim) ?? 4;
+    const kda = c.linear_attn_config;
+    if (kda && posInt3(kda.num_heads) && posInt3(kda.head_dim)) {
+      const h = posInt3(kda.num_heads), d = posInt3(kda.head_dim), k = posInt3(kda.short_conv_kernel_size) ?? 4;
+      return 3 * h * d / tp * (k - 1) * opts.modelBytes + h / tp * d * d * ssmBytes;
+    }
+    const nk = posInt3(c.linear_num_key_heads), nv = posInt3(c.linear_num_value_heads);
+    const hk = posInt3(c.linear_key_head_dim), hv = posInt3(c.linear_value_head_dim);
+    if (nk && nv && hk && hv) {
+      const convDim2 = hk * nk * 2 + hv * nv;
+      return convDim2 / tp * (conv - 1) * opts.modelBytes + nv / tp * hv * hk * ssmBytes;
+    }
+    const nh = posInt3(c.mamba_num_heads) ?? posInt3(c.mamba_n_heads) ?? (/mamba2|nemotron_h/.test(mt) ? posInt3(c.num_heads) : null);
+    const hd = posInt3(c.mamba_head_dim) ?? posInt3(c.mamba_d_head) ?? (/mamba2/.test(mt) ? posInt3(c.head_dim) : null);
+    const state = posInt3(c.ssm_state_size) ?? posInt3(c.mamba_d_state) ?? posInt3(c.state_size) ?? posInt3(c.d_state);
+    if (nh && hd && state) {
+      let ng = posInt3(c.n_groups) ?? posInt3(c.mamba_n_groups) ?? 1;
+      if (ng % tp !== 0) ng = ng + (tp - ng);
+      const inter2 = nh * hd;
+      return (inter2 + 2 * ng * state) / tp * (conv - 1) * opts.modelBytes + nh / tp * hd * state * ssmBytes;
+    }
+    const expand = num4(c.mamba_expand) ?? num4(c.expand) ?? 2;
+    const inter = posInt3(c.intermediate_size) && /^(falcon_)?mamba$/.test(mt) ? posInt3(c.intermediate_size) : hidden ? hidden * expand : null;
+    if (inter && state) return inter / tp * (conv - 1) * opts.modelBytes + inter / tp * state * ssmBytes;
+    return null;
+  };
+  let kinds = null;
+  const lt = Array.isArray(c.layer_types) ? c.layer_types.map((x) => String(x).toLowerCase()) : null;
+  const sw = posInt3(c.sliding_window) ?? posInt3(c.attention_window);
+  const pattern = typeof c.hybrid_override_pattern === "string" ? c.hybrid_override_pattern : null;
+  const blockTypes = Array.isArray(c.layers_block_type) ? c.layers_block_type.map((x) => String(x).toLowerCase()) : null;
+  if (pattern) {
+    kinds = [...pattern].map((ch) => ch === "M" ? "mamba" : ch === "*" ? "attn" : "none");
+    notes.push(`hybrid_override_pattern: ${kinds.filter((k) => k === "mamba").length} Mamba-2 layers, ${kinds.filter((k) => k === "attn").length} attention layers, the rest MLP / MoE with no cache`);
+  } else if (blockTypes) {
+    kinds = blockTypes.map((t) => /mamba|linear/.test(t) ? "mamba" : /attention/.test(t) ? "attn" : "none");
+  } else if (lt) {
+    kinds = lt.map((t) => /linear|mamba|kda|deltanet/.test(t) ? "mamba" : /sliding/.test(t) ? "sliding" : /chunk/.test(t) ? "chunked" : /attention|full/.test(t) ? "attn" : "none");
+  } else if (c.linear_attn_config && Array.isArray(c.linear_attn_config.kda_layers)) {
+    const kdaSet = new Set(c.linear_attn_config.kda_layers.map(Number));
+    kinds = Array.from({ length: n2 }, (_, i) => kdaSet.has(i + 1) ? "mamba" : "attn");
+  } else if (posInt3(c.full_attention_interval) != null && posInt3(c.linear_num_value_heads) != null) {
+    const k = posInt3(c.full_attention_interval);
+    kinds = Array.from({ length: n2 }, (_, i) => (i + 1) % k === 0 ? "attn" : "mamba");
+  } else if (posInt3(c.attn_layer_period) != null) {
+    const per = posInt3(c.attn_layer_period), off = num4(c.attn_layer_offset) ?? 0;
+    kinds = Array.from({ length: n2 }, (_, i) => i % per === off ? "attn" : "mamba");
+  } else if (/^(mamba|mamba2|falcon_mamba)$/.test(mt)) {
+    kinds = Array.from({ length: n2 }, () => "mamba");
+  } else if (/^gemma2$|cost_wise_gemma/.test(mt) && sw) {
+    kinds = Array.from({ length: n2 }, (_, i) => i % 2 === 0 ? "sliding" : "attn");
+  } else if (/^gemma3/.test(mt) && sw) {
+    const p = posInt3(c.sliding_window_pattern) ?? 6;
+    kinds = Array.from({ length: n2 }, (_, i) => (i + 1) % p ? "sliding" : "attn");
+  } else if (posInt3(c.attention_chunk_size) != null) {
+    const nr = Array.isArray(c.no_rope_layers) ? c.no_rope_layers : null;
+    const interval = posInt3(c.no_rope_layer_interval) ?? 4;
+    kinds = Array.from({ length: n2 }, (_, i) => (nr ? Number(nr[i]) !== 0 : (i + 1) % interval !== 0) ? "chunked" : "attn");
+  } else if (sw && c.use_sliding_window !== false && !/qwen2|qwen3/.test(mt)) {
+    kinds = Array.from({ length: n2 }, () => "sliding");
+  } else if (sw && c.use_sliding_window === true) {
+    const mw = posInt3(c.max_window_layers) ?? 0;
+    kinds = Array.from({ length: n2 }, (_, i) => i >= mw ? "sliding" : "attn");
+  } else {
+    kinds = Array.from({ length: n2 }, () => "attn");
+  }
+  if (Array.isArray(c.cross_attention_layers)) {
+    const cross = new Set(c.cross_attention_layers.map(Number));
+    kinds = kinds.map((k, i) => cross.has(i) ? "cross" : k);
+  }
+  const whisper = /whisper/.test(mt);
+  const layers = [];
+  const chunk = posInt3(c.attention_chunk_size);
+  const visionTokens = (() => {
+    const v = top.vision_config ?? {};
+    const img = posInt3(v.image_size), patch = posInt3(v.patch_size), tiles = posInt3(v.max_num_tiles);
+    return img && patch ? ((img / patch) ** 2 + 1) * (tiles ?? 1) : null;
+  })();
+  for (const k of kinds) {
+    if (k === "none") continue;
+    if (k === "mamba") {
+      const s = mambaState();
+      if (s == null) {
+        notes.push("a recurrent layer whose state size the config does not give: counted as 0");
+        continue;
+      }
+      layers.push({ kind: "mamba", bytesPerToken: 0, stateBytes: s });
+      continue;
+    }
+    if (mlaBytes != null) {
+      layers.push({ kind: "mla", bytesPerToken: mlaBytes });
+      continue;
+    }
+    if (attnBytes == null) return null;
+    if (k === "cross") {
+      layers.push({ kind: "cross", bytesPerToken: attnBytes, encoderLen: visionTokens ?? 6404 });
+      continue;
+    }
+    if (k === "sliding" && sw) {
+      layers.push({ kind: "sliding", bytesPerToken: attnBytes, window: sw });
+      continue;
+    }
+    if (k === "chunked" && chunk) {
+      layers.push({ kind: "chunked", bytesPerToken: attnBytes, window: chunk });
+      continue;
+    }
+    layers.push({ kind: "full", bytesPerToken: attnBytes });
+    if (whisper) layers.push({ kind: "cross", bytesPerToken: attnBytes, encoderLen: posInt3(c.max_source_positions) ?? 1500 });
+  }
+  const count = (k) => layers.filter((l) => l.kind === k).length;
+  if (count("sliding")) notes.push(`${count("sliding")} sliding-window layers (window ${sw}): each holds at most the window plus the tokens in flight, not the whole sequence (${VLLM_SRC} SlidingWindowSpec)`);
+  if (count("chunked")) notes.push(`${count("chunked")} chunked-local layers (chunk ${chunk}): each holds one chunk plus the tokens in flight (ChunkedLocalAttentionSpec)`);
+  if (count("mamba")) notes.push(`${count("mamba")} recurrent layers: a fixed state per sequence, not per token (MambaSpec)`);
+  if (count("cross")) notes.push(`${count("cross")} cross-attention layers: vLLM reserves max_num_encoder_input_tokens (default: max_num_batched_tokens) of encoder cache per request, not decoder tokens (CrossAttentionSpec)`);
+  if (replicated && mlaBytes == null) notes.push(`TP ${tp} is past ${kvHeads} KV heads: each rank holds 1 full KV head, so KV per GPU stops shrinking at TP ${kvHeads} (vLLM max(1, kv_heads // tp); ${TRTLLM_SRC} heuristics.py max(tp_size, num_key_value_heads))`);
+  if (/deepseek_v32|deepseek_v4|kimi_linear|minimax_m[23]/.test(mt)) notes.push(`${mt}: sparse-attention indexer or compressed caches are not modelled; KV here is the dense part only`);
+  const linear = posInt3(c.linear_num_value_heads) != null || (lt ?? []).some((x) => /linear|kda|deltanet/.test(x)) || c.linear_attn_config != null;
+  return { layers, notes, kvHeadsPerRank: mlaBytes != null ? 1 : kvRank, replicated: replicated && mlaBytes == null, recurrentFamily: count("mamba") ? linear ? "linear" : "mamba" : null };
+}
+var kvBytesPerTokenOf = (l) => l.layers.reduce((s, x) => s + (x.kind === "mamba" || x.kind === "cross" ? 0 : x.bytesPerToken), 0);
+function vllmKvCapacity(layout, o) {
+  const L = layout.layers;
+  if (!L.length) return null;
+  const attn = L.find((l) => l.kind !== "mamba");
+  const mambaState = Math.max(0, ...L.filter((l) => l.kind === "mamba").map((l) => l.stateBytes ?? 0));
+  let bs = o.blockSize ?? (L.some((l) => l.kind === "mla") ? 64 : 16);
+  if (attn && mambaState > 0) {
+    const align = Math.max(16, bs);
+    bs = Math.max(bs, align * cdiv(mambaState, align * attn.bytesPerToken));
+  }
+  const page = attn ? bs * attn.bytesPerToken : mambaState;
+  if (!(page > 0)) return null;
+  const key = (l) => `${l.kind}:${l.window ?? ""}:${l.encoderLen ?? ""}`;
+  const buckets = /* @__PURE__ */ new Map();
+  for (const l of L) {
+    const k = key(l);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k).push(l);
+  }
+  const sizes = [...buckets.values()].map((b) => b.length);
+  const minN = Math.min(...sizes), maxN = Math.max(...sizes);
+  const groupSize = buckets.size === 1 ? maxN : maxN < minN * 1.5 ? maxN : minN;
+  const bytesPerBlock = groupSize * page;
+  const numBlocks = Math.max(0, Math.floor(o.budgetBytes / bytesPerBlock));
+  const groups = [];
+  let perReq = 0;
+  for (const b of buckets.values()) {
+    const spec = b[0];
+    const nGroups = cdiv(b.length, groupSize);
+    let blocks;
+    if (spec.kind === "mamba") blocks = o.mambaAlign ? 2 : 1;
+    else if (spec.kind === "sliding") blocks = cdiv(Math.min((spec.window ?? 0) - 1 + o.inFlightTokens, o.maxModelLen), bs) + 1;
+    else if (spec.kind === "chunked") blocks = cdiv(Math.min((spec.window ?? 0) + o.inFlightTokens, o.maxModelLen), bs);
+    else if (spec.kind === "cross") blocks = cdiv(o.encoderTokens ?? spec.encoderLen ?? 0, bs);
+    else blocks = cdiv(o.maxModelLen, bs);
+    groups.push({ kind: spec.kind, layers: b.length, blocksPerRequest: blocks * nGroups });
+    perReq += blocks * nGroups;
+  }
+  const maxConcurrency = perReq > 0 ? numBlocks / perReq : 0;
+  const nGroupsTotal = groups.reduce((s, g) => s + cdiv(g.layers, groupSize), 0);
+  const printedTokens = o.printsTokensAs === "concurrency" ? Math.floor(maxConcurrency * o.maxModelLen) : Math.floor(numBlocks / nGroupsTotal) * bs;
+  return { blockSize: bs, bytesPerBlock, numBlocks, groups, blocksPerRequest: perReq, maxConcurrency, printedTokens, poolTokens: numBlocks * bs };
+}
+function vllmNonKvReserve(config, o) {
+  const c = config ? textConfigOf(config) : {};
+  const vocab = posInt3(c.vocab_size) ?? posInt3((config ?? {}).vocab_size) ?? 32e3;
+  const hidden = posInt3(c.hidden_size) ?? 4096;
+  const inter = posInt3(c.intermediate_size) ?? hidden * 4;
+  const moeInter = posInt3(c.moe_intermediate_size) ?? (posInt3(c.num_local_experts) || posInt3(c.num_experts) ? inter : null);
+  const topk = posInt3(c.num_experts_per_tok) ?? posInt3(c.num_experts_per_token) ?? posInt3(c.moe_topk) ?? 2;
+  const T = o.maxNumBatchedTokens;
+  const rows = Math.min(o.maxNumSeqs, T);
+  const sampler = rows * vocab * 16;
+  const dense = T * (3 * inter / o.tp + 2 * hidden) * o.actBytes;
+  const moe = moeInter != null ? T * topk * (3 * moeInter / o.tp + hidden) * o.actBytes : 0;
+  const act = Math.max(sampler, dense, moe) / GiB;
+  const multiGpu = o.tp >= 2 && o.nvlink !== false;
+  const nonTorch = multiGpu ? 2.1 : o.pp > 1 ? 0.07 : 0.27;
+  const terms = [
+    { what: "weights", gib: o.weightsGib, basis: 'computed from the config (vLLM reports it as "Model loading took")', measuredByEngine: false },
+    { what: "activation peak", gib: act, basis: `estimate: the profile run at ${T.toLocaleString("en-US")} batched tokens and ${rows} sampler rows (${sampler >= Math.max(dense, moe) ? `sampler, ${rows} x ${vocab.toLocaleString("en-US")} vocab x 16 bytes` : moe > dense ? "fused-MoE intermediate caches" : "MLP intermediates"}); vLLM measures it`, measuredByEngine: true },
+    { what: "non-torch (NCCL, CUDA)", gib: nonTorch, basis: `estimate: ${o.tp >= 2 && !multiGpu ? "TP on a card without NVLink: no custom all-reduce buffers, TP 1 figure used (from two public PCIe logs)" : `llm-d-planner's measured mean for ${multiGpu ? "TP >= 2" : o.pp > 1 ? "PP only" : "TP 1"} on vLLM 0.19 / H100`}; vLLM measures it`, measuredByEngine: true }
+  ];
+  if (o.cudaGraphsCounted && !o.enforceEager) terms.push({ what: "CUDA graphs", gib: 1.04, basis: "estimate: mean of the 0.51 to 1.85 GiB llm-d-planner observed; vLLM >= 0.20 captures throwaway graphs and measures it", measuredByEngine: true });
+  return terms;
+}
+function sglangMemoryDefaults(o) {
+  const g = o.gpuMemMiB;
+  let cp, bs;
+  if (g < 20 * 1024) {
+    cp = 2048;
+    bs = 8;
+  } else if (g < 35 * 1024) {
+    cp = 4096;
+    bs = o.tp < 4 ? 48 : 160;
+  } else if (g < 60 * 1024) {
+    cp = 4096;
+    bs = o.tp < 4 ? 32 : 160;
+  } else if (g < 90 * 1024) {
+    cp = 8192;
+    bs = o.tp < 4 ? 256 : 512;
+  } else if (g < 160 * 1024) {
+    cp = 8192;
+    bs = o.tp < 4 ? 256 : 512;
+  } else {
+    cp = 16384;
+    bs = 512;
+  }
+  if (o.chunkedPrefill != null) cp = o.chunkedPrefill;
+  if (o.maxRunningRequests != null && bs > o.maxRunningRequests) bs = o.maxRunningRequests;
+  let prefillMax = o.mla ? 2048 : cp;
+  if (/llama-2/i.test(o.modelPath ?? "")) prefillMax = Math.min(prefillMax, 4096);
+  const sizes = [];
+  for (let s = 4; s <= 32; s += 4) sizes.push(s);
+  for (let s = 48; s <= 256; s += 16) sizes.push(s);
+  for (let s = 288; s <= 512; s += 32) sizes.push(s);
+  for (let s = 576; s <= 1024; s += 64) sizes.push(s);
+  for (let s = 1280; s <= 4096; s += 256) sizes.push(s);
+  for (let s = 4608; s <= prefillMax; s += 512) sizes.push(s);
+  const prefillGraphSizes = sizes.filter((s) => s <= prefillMax).length;
+  const terms = [];
+  const act = Math.max(cp > 0 ? cp : 0, 2048);
+  terms.push({ what: "constant (attention metadata) + activation slack", mb: 512 + act * 1.5 });
+  terms.push({ what: `parallel slack (TP ${o.tp} x PP ${o.pp} / 8 x 1 GiB)`, mb: o.tp * o.pp / 8 * 1024 });
+  if (!o.disableCudaGraph) {
+    terms.push({ what: `decode CUDA graphs (max_bs ${bs} x 2 MB)`, mb: bs * 2 });
+    if (o.dpAttention && o.dpAttention > 1) terms.push({ what: "DP-attention padding", mb: bs * o.dpAttention * 3 + (bs > 300 ? bs * o.dpAttention * 1.5 : 0) });
+    terms.push({ what: o.mla ? "prefill CUDA graphs (MLA backend, 1.5 GiB)" : `prefill CUDA graphs (${prefillGraphSizes} sizes x 8 MB)`, mb: o.mla ? 1.5 * 1024 : prefillGraphSizes * 8 });
+  }
+  let reserved = terms.reduce((s, t) => s + t.mb, 0);
+  if (g > 60 * 1024 && reserved < 10 * 1024) {
+    terms.push({ what: "floor to 10 GiB above 60 GiB cards", mb: 10 * 1024 - reserved });
+    reserved = 10 * 1024;
+  }
+  if (o.deepep && !o.disableCudaGraph) {
+    terms.push({ what: "DeepEP all-to-all buffers", mb: 2048 });
+    reserved += 2048;
+  }
+  return { chunkedPrefill: cp, decodeMaxBs: bs, prefillGraphSizes, reservedMb: reserved, memFractionStatic: Math.round((g - reserved) / g * 1e3) / 1e3, terms };
+}
+function llamacppSwaCells(nCtx, nSwa, nSeq, unified, nUbatch = 512) {
+  return Math.min(Math.ceil(Math.min(nCtx, nSwa * (unified ? nSeq : 1) + nUbatch) / 256) * 256, Math.max(nCtx, Math.ceil(nCtx / 256) * 256));
+}
+var VLLM_PLUGIN_MIGRATIONS = {
+  gguf: { since: "0.24.0", plugin: "vllm-gguf-plugin", pr: "#39612" },
+  bitsandbytes: { since: "0.28.0", plugin: "vllm-bnb-plugin", pr: "#43529" }
+};
+function quantTableFor(engine, version) {
+  const ts = ENGINE_QUANT_TABLES.filter((t) => t.engine === engine).map((t) => ({ t, v: readEngineVersion(t.tag) })).sort((a, b) => vAtLeast(a.v, b.v) ? 1 : -1);
+  if (!ts.length) return null;
+  if (!version) return ts[ts.length - 1].t;
+  const fit = ts.filter((x) => vAtLeast(version, x.v));
+  return (fit.length ? fit[fit.length - 1] : ts[0]).t;
+}
+function engineQuantKey(raw, qc) {
+  if (!raw) return null;
+  const m = String(raw).toLowerCase();
+  if (m !== "compressed-tensors") return { method: m, scheme: null };
+  const groups = qc?.config_groups ?? {};
+  const g = Object.values(groups)[0];
+  const w = g?.weights, a = g?.input_activations;
+  let scheme = null;
+  if (w?.num_bits === 8 && w.type === "float") scheme = a?.num_bits === 8 ? "w8a8fp8" : "w8a16fp8";
+  else if (w?.num_bits === 4 && w.type === "float") scheme = a?.num_bits === 4 ? "w4a4fp4" : "w4a16fp4";
+  else if (w?.num_bits === 8 && a?.num_bits === 8) scheme = "w8a8int8";
+  else if (w?.num_bits === 4 && a?.num_bits === 8) scheme = a.type === "float" ? "w4a8fp8" : "w4a8int";
+  else if (w?.num_bits) scheme = "wna16";
+  return { method: "compressed-tensors", scheme };
+}
+var gib = (x) => `${x.toFixed(2)} GiB`;
+function engineMemory(x) {
+  const { engine, args, card, layout, servedLen } = x;
+  const findings = [];
+  const checked = [];
+  const weightsGib = x.weightsPerGpuBytes / GiB;
+  const total = cardTotalGiB(card.id, card.memoryGB);
+  const stage = x.pp > 1 ? { ...layout, layers: layout.layers.slice(0, cdiv(layout.layers.length, x.pp)) } : layout;
+  const kvPerTok = kvBytesPerTokenOf(stage);
+  const statePerSeq = stage.layers.reduce((s, l) => s + (l.stateBytes ?? 0), 0);
+  const base = {
+    weightsBasis: x.weights.basis,
+    weightsGbTotal: x.weights.bytes / 1e9,
+    weightsGbPerGpu: x.weightsPerGpuBytes / 1e9,
+    kvBytesPerTokenPerGpu: kvPerTok,
+    stateBytesPerSequencePerGpu: statePerSeq,
+    method: "engine",
+    cardTotalGib: total.gib,
+    cardTotalSource: total.source,
+    layoutNotes: stage.notes
+  };
+  if (engine === "vllm" && x.vllmDefaults) {
+    const D = x.vllmDefaults;
+    const util = args.gpuMemoryUtilization ?? D.gpuMemoryUtilization;
+    const requested = total.gib * util;
+    const mnbt = args.maxNumBatchedTokens ?? D.maxNumBatchedTokens;
+    const mns = args.maxNumSeqs ?? D.maxNumSeqs;
+    const reserve = vllmNonKvReserve(x.config, { weightsGib, tp: x.tp, pp: x.pp, maxNumSeqs: mns, maxNumBatchedTokens: mnbt, cudaGraphsCounted: D.cudaGraphsCounted, enforceEager: !!args.enforceEager, actBytes: x.actBytes, nvlink: card.nvlinkGBs > 0 });
+    const kvBudget = requested - reserve.reduce((s, r) => s + r.gib, 0);
+    const capOf = (len) => vllmKvCapacity(stage, {
+      budgetBytes: Math.max(0, kvBudget) * GiB,
+      maxModelLen: len,
+      blockSize: args.blockSize,
+      inFlightTokens: D.inFlightBatches * mnbt,
+      printsTokensAs: D.printsTokensAs,
+      encoderTokens: mnbt,
+      mambaAlign: D.linearRecurrentAlign && stage.recurrentFamily === "linear" && !(args.flags ?? []).includes("--no-enable-prefix-caching")
+    });
+    const cap = capOf(servedLen);
+    if (!cap) return null;
+    const perSeqBytes = cap.blocksPerRequest * cap.bytesPerBlock;
+    const conc = cap.maxConcurrency;
+    const budgetWord = `${gib(total.gib)} x ${util} = ${gib(requested)}`;
+    const reserveWord = reserve.map((r) => `${r.what} ${gib(r.gib)}`).join(" + ");
+    const memory = {
+      ...base,
+      budgetGbPerGpu: requested * GiB / 1e9,
+      kvGbPerSequencePerGpu: perSeqBytes / 1e9,
+      kvCapacityGbPerGpu: Math.max(0, kvBudget) * GiB / 1e9,
+      tokenCapacity: cap.printedTokens,
+      maxConcurrentFullLength: Math.floor(conc * 100) / 100,
+      reserve,
+      pool: { blockSize: cap.blockSize, numBlocks: cap.numBlocks, groups: cap.groups, printedTokens: cap.printedTokens },
+      notCounted: [
+        "vLLM measures the activation peak, the non-torch memory and the CUDA graph pool at startup; the figures here for those three are estimates (see each term)",
+        "a second process on the same GPU, and memory another tenant frees or takes during profiling",
+        ...x.config.vision_config || x.config.audio_config ? ["the multimodal encoder's profiling run (vLLM profiles the vision / audio tower too; on a multimodal model the activation here is low)"] : []
+      ]
+    };
+    if (kvBudget <= 0) {
+      const weightsOnly = weightsGib >= requested;
+      findings.push({
+        rule: weightsOnly ? "weights-over-budget" : "no-kv-memory",
+        area: "memory",
+        severity: "block",
+        title: weightsOnly ? `Weights alone are ${gib(weightsGib)} per GPU${x.shareWord}, over the ${gib(requested)} budget` : `Weights plus vLLM's own reserve leave no memory for the KV cache`,
+        detail: `Budget = ${budgetWord}. Out of it: ${reserveWord}. vLLM refuses at startup ("No available memory for the cache blocks. Try increasing \`gpu_memory_utilization\`").`,
+        fix: "Raise TP (or PP), quantize the weights, raise --gpu-memory-utilization, or use a larger card.",
+        source: `${VLLM_SRC} vllm/v1/core/kv_cache_planning.py _check_enough_kv_cache_memory`
+      });
+    } else if (conc < 1) {
+      let lo = 0, hi = servedLen;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        const c = capOf(mid);
+        if (c && c.maxConcurrency >= 1) lo = mid;
+        else hi = mid - 1;
+      }
+      findings.push({
+        rule: "kv-under-one-sequence",
+        area: "memory",
+        severity: "block",
+        title: `One ${servedLen}-token request needs ${gib(perSeqBytes / GiB)} of KV per GPU; vLLM would have ${gib(kvBudget)}`,
+        detail: `Budget = ${budgetWord}; out of it ${reserveWord}. vLLM refuses at startup ("To serve at least one request with the model's max seq len (${servedLen}), (${(perSeqBytes / GiB).toFixed(2)} GiB KV cache is needed, which is larger than the available KV cache memory (${kvBudget.toFixed(2)} GiB). Based on the available memory, the estimated maximum model length is ${lo}.").`,
+        fix: `Serve at most ~${lo} tokens, raise --gpu-memory-utilization, use an fp8 KV cache (--kv-cache-dtype fp8), or raise TP.`,
+        source: `${VLLM_SRC} vllm/v1/core/kv_cache_planning.py _check_enough_kv_cache_memory`
+      });
+    } else {
+      checked.push("memory-fit");
+      if (conc < 1.5) findings.push({
+        rule: "kv-borderline",
+        area: "memory",
+        severity: "warn",
+        title: `Only ~${conc.toFixed(2)} full-length requests fit after vLLM's own reserve`,
+        detail: `${gib(kvBudget)} for KV against ${gib(perSeqBytes / GiB)} per ${servedLen}-token request. Three of the reserve terms are estimates of what vLLM measures, so at this margin the startup check can go either way.`,
+        fix: "Leave more room: lower the max length, use an fp8 KV cache, or raise TP."
+      });
+      if (args.maxNumSeqs != null && args.maxNumSeqs > Math.floor(conc)) findings.push({
+        rule: "seqs-over-capacity",
+        area: "memory",
+        severity: "warn",
+        title: `--max-num-seqs ${args.maxNumSeqs}, but at most ${Math.floor(conc)} requests fit at the full ${servedLen} tokens`,
+        detail: `vLLM's pool would hold ${cap.numBlocks.toLocaleString("en-US")} blocks of ${cap.blockSize} tokens; a full-length request takes ${cap.blocksPerRequest.toLocaleString("en-US")}. Shorter requests pack more, but once long ones arrive the scheduler preempts or queues past ~${Math.floor(conc)}.`,
+        fix: `Set the flag to what fits (${Math.max(1, Math.floor(conc))}), shorten the max length, use an fp8 KV cache, or add GPUs as DP replicas.`
+      });
+      if (!findings.some((f) => f.rule === "seqs-over-capacity")) findings.push({
+        rule: "kv-capacity",
+        area: "memory",
+        severity: "info",
+        title: `vLLM would log "GPU KV cache size: ${cap.printedTokens.toLocaleString("en-US")} tokens" and "Maximum concurrency for ${servedLen.toLocaleString("en-US")} tokens per request: ${conc.toFixed(2)}x" (predicted)`,
+        detail: `Per GPU: budget ${budgetWord}; ${reserveWord}; KV ${gib(kvBudget)} (${x.kvName}${stage.replicated ? ", KV heads replicated past TP" : ""}). Pool: ${cap.groups.map((g) => `${g.layers} ${g.kind} layer${g.layers === 1 ? "" : "s"}`).join(", ")} in blocks of ${cap.blockSize} tokens.`,
+        fix: ""
+      });
+    }
+    return { memory, findings, checked };
+  }
+  if (engine === "sglang" && x.sglDefault) {
+    const def = x.sglDefault;
+    const frac = args.memFractionStatic ?? def.memFractionStatic;
+    const kvBudget = total.gib * frac - weightsGib;
+    const cell = stage.layers.reduce((s, l) => s + (l.kind === "mamba" || l.kind === "cross" ? 0 : l.bytesPerToken), 0);
+    const tokens = kvBudget > 0 && cell > 0 ? Math.floor(kvBudget * GiB / cell) : 0;
+    const conc = tokens / servedLen;
+    const reserveGib = total.gib * (1 - frac);
+    const memory = {
+      ...base,
+      budgetGbPerGpu: total.gib * frac * GiB / 1e9,
+      kvGbPerSequencePerGpu: (cell * servedLen + statePerSeq) / 1e9,
+      kvCapacityGbPerGpu: Math.max(0, kvBudget) * GiB / 1e9,
+      tokenCapacity: tokens,
+      maxConcurrentFullLength: Math.floor(conc * 100) / 100,
+      sglangDefault: { memFractionStatic: def.memFractionStatic, reservedMb: def.reservedMb, chunkedPrefill: def.chunkedPrefill, decodeMaxBs: def.decodeMaxBs, terms: def.terms },
+      notCounted: [
+        "SGLang measures free memory after loading; the CUDA context and NCCL buffers present before the load are not subtracted here",
+        ...stage.layers.some((l) => l.kind === "sliding") ? ["SGLang's separate sliding-window pool: sliding layers are counted at the full length here, so the token count is a lower bound for them"] : [],
+        ...stage.layers.some((l) => l.kind === "mamba") ? ["SGLang's separate Mamba state pool (max_mamba_cache_size)"] : []
+      ]
+    };
+    if (args.memFractionStatic != null && args.memFractionStatic > def.memFractionStatic + 5e-4) {
+      findings.push({
+        rule: "mem-fraction-over-engine-default",
+        area: "memory",
+        severity: "warn",
+        title: `--mem-fraction-static ${args.memFractionStatic} leaves ${gib(reserveGib)} outside the static pool; SGLang's own formula keeps ${(def.reservedMb / 1024).toFixed(2)} GiB there on this card`,
+        detail: `The space outside weights + KV is where activations and CUDA graphs live. SGLang's default (${def.memFractionStatic}) reserves ${def.terms.map((t) => `${t.what} ${Math.round(t.mb)} MB`).join(", ")}. Setting a higher fraction contradicts the engine's own arithmetic for chunked_prefill_size ${def.chunkedPrefill} and decode CUDA graphs up to batch ${def.decodeMaxBs}, and is a common source of OOM under the first long prefill.`,
+        fix: `Drop the flag (SGLang picks ${def.memFractionStatic}), or lower --chunked-prefill-size / --cuda-graph-max-bs alongside it.`,
+        source: `${SGLANG_SRC} python/sglang/srt/arg_groups/memory_hook.py`
+      });
+    }
+    if (kvBudget <= 0) {
+      findings.push({
+        rule: "weights-over-budget",
+        area: "memory",
+        severity: "block",
+        title: `Weights ${gib(weightsGib)} per GPU${x.shareWord} are over ${gib(total.gib)} x ${frac} = ${gib(total.gib * frac)}`,
+        detail: `SGLang refuses at startup ("Loaded weights leave no GPU memory for the KV cache under --mem-fraction-static=${frac}").`,
+        fix: "Raise TP (or PP), quantize the weights, or use a larger card.",
+        source: `${SGLANG_SRC} python/sglang/srt/mem_cache/kv_cache_configurator.py _profile_available_bytes`
+      });
+    } else if (conc < 1) {
+      findings.push({
+        rule: "kv-under-one-sequence",
+        area: "memory",
+        severity: "warn",
+        title: `The KV pool holds ${tokens.toLocaleString("en-US")} tokens, under one ${servedLen}-token request`,
+        detail: `${gib(kvBudget)} for KV at ${Math.round(cell).toLocaleString("en-US")} bytes per token (${x.kvName}). The server starts, and the longest requests it advertises cannot be scheduled.`,
+        fix: `Serve at most ~${Math.floor(tokens / 1024) * 1024} tokens, use an fp8 KV cache, or raise TP.`
+      });
+    } else {
+      checked.push("memory-fit");
+      if (args.maxNumSeqs != null && args.maxNumSeqs > Math.floor(conc)) findings.push({
+        rule: "seqs-over-capacity",
+        area: "memory",
+        severity: "warn",
+        title: `--max-running-requests ${args.maxNumSeqs}, but at most ${Math.floor(conc)} requests fit at the full ${servedLen} tokens`,
+        detail: `max_total_num_tokens would be ~${tokens.toLocaleString("en-US")} (${gib(kvBudget)} at ${Math.round(cell).toLocaleString("en-US")} bytes per token). Shorter requests pack more; long ones queue past ~${Math.floor(conc)}.`,
+        fix: `Set the flag to what fits (${Math.max(1, Math.floor(conc))}), shorten the context, use an fp8 KV cache, or add DP replicas.`
+      });
+      if (!findings.some((f) => f.rule === "seqs-over-capacity")) findings.push({
+        rule: "kv-capacity",
+        area: "memory",
+        severity: "info",
+        title: `SGLang would allocate ~${tokens.toLocaleString("en-US")} KV tokens (max_total_num_tokens, predicted): ${Math.floor(conc)} full ${servedLen}-token requests`,
+        detail: `Per GPU: ${gib(total.gib)} x mem_fraction_static ${frac}${args.memFractionStatic == null ? " (SGLang's own default)" : ""} = ${gib(total.gib * frac)}, less weights ${gib(weightsGib)}${x.shareWord}, at ${Math.round(cell).toLocaleString("en-US")} bytes per token (${x.kvName}).`,
+        fix: ""
+      });
+    }
+    return { memory, findings, checked };
+  }
+  if (engine === "llamacpp") {
+    const nCtx = x.kvTokensAllocated ?? servedLen;
+    const nSeq = args.nParallel ?? 1;
+    const unified = args.kvUnified ?? args.nParallel == null;
+    const ub = args.nUbatch ?? 512;
+    const scale = x.kvBytes / 2;
+    let kvAlloc = 0;
+    const swaNotes = [];
+    const tcfg = textConfigOf(x.config);
+    const lora = num4(tcfg.kv_lora_rank) ?? 0, ropeD = num4(tcfg.qk_rope_head_dim) ?? 0;
+    const mlaFactor = lora ? (2 * lora + ropeD) / (lora + ropeD) : 1;
+    for (const l of stage.layers) {
+      if (l.kind === "mamba") {
+        kvAlloc += (l.stateBytes ?? 0) * nSeq;
+        continue;
+      }
+      if (l.kind === "cross") continue;
+      const perTok = l.bytesPerToken * scale * (l.kind === "mla" ? mlaFactor : 1);
+      const cells = (l.kind === "sliding" || l.kind === "chunked") && !args.swaFull ? llamacppSwaCells(nCtx, l.window ?? nCtx, nSeq, unified, ub) : nCtx;
+      if (cells < nCtx && !swaNotes.length) swaNotes.push(`sliding-window layers keep ${cells.toLocaleString("en-US")} cells, not ${nCtx.toLocaleString("en-US")} (GGML_PAD(min(n_ctx, n_swa x n_seq + n_ubatch), 256), ${LLAMACPP_SRC} src/llama-kv-cache-iswa.cpp)`);
+      kvAlloc += perTok * cells;
+    }
+    const kvGb = kvAlloc / 1e9;
+    const conc = unified ? Math.max(1, Math.floor(nCtx / servedLen)) : nSeq;
+    const memory = {
+      ...base,
+      kvBytesPerTokenPerGpu: kvPerTok * scale,
+      budgetGbPerGpu: card.memoryGB,
+      kvGbPerSequencePerGpu: kvPerTok * scale * servedLen / 1e9,
+      kvCapacityGbPerGpu: kvGb,
+      tokenCapacity: nCtx,
+      maxConcurrentFullLength: conc,
+      layoutNotes: [...stage.notes, ...swaNotes],
+      notCounted: ["llama.cpp's compute buffers (measured by --fit / llama-fit-params; not counted here)", "host RAM for layers left on the CPU"]
+    };
+    const need = x.weightsPerGpuBytes / 1e9 + kvGb;
+    if (need > card.memoryGB) {
+      const ngl = args.nGpuLayers;
+      const explicitAll = ngl === "all" || typeof ngl === "number" && ngl > 0;
+      findings.push({
+        rule: "memory-over-card",
+        area: "memory",
+        severity: explicitAll ? "block" : "warn",
+        title: `Weights ${gbs(x.weightsPerGpuBytes / 1e9)} + KV for ${nCtx} tokens ${gbs(kvGb)} = ${gbs(need)} per GPU, over the ${card.label}`,
+        detail: explicitAll ? "llama.cpp allocates the whole -c context up front; with these layers forced onto the GPU the allocation fails at load." : "With -ngl auto llama.cpp keeps the layers that do not fit on the CPU, which runs, at CPU memory bandwidth for those layers.",
+        fix: "Lower -c, quantize the cache (-ctk q8_0 -ctv q8_0 halves it), pick a smaller quant, or offload fewer layers; llama-fit-params --model <file> prints the -c / -ngl / -ot llama.cpp itself would choose."
+      });
+    } else checked.push("memory-fit");
+    return { memory, findings, checked };
+  }
+  return null;
+}
+var RECIPE_GPU_OF = { "h100-sxm": "h100", "h200": "h200", "b200": "b200", "l40s": "l40s", "a100-80g": "a100", "a100-40g": "a100" };
+function findRecipe(modelId) {
+  if (!modelId) return null;
+  const want = modelId.toLowerCase();
+  for (const [id, rc] of Object.entries(VLLM_RECIPES.recipes)) if (id.toLowerCase() === want) return { id, recipe: rc, variant: "default" in rc.variants ? "default" : null };
+  for (const [id, rc] of Object.entries(VLLM_RECIPES.recipes)) for (const [vn, v] of Object.entries(rc.variants)) if (v.modelId && v.modelId.toLowerCase() === want) return { id, recipe: rc, variant: vn };
+  return null;
 }
 var gbs = (x) => `${x.toFixed(x < 10 ? 2 : 1)} GB`;
 var divisors2 = (n2) => {
@@ -10435,6 +12325,35 @@ function checkServeConfig(input) {
   const modelType = String(config?.model_type ?? "");
   const ident = `${modelType} ${input.modelId ?? ""} ${model.name ?? ""}`;
   const ckpt = checkpointQuant(config);
+  const defaultsAssumed = [];
+  const givenVersion = input.engineVersion != null ? readEngineVersion(input.engineVersion) : null;
+  const ver = lc ? null : givenVersion ?? readEngineVersion(engine === "vllm" ? ASSUMED_VLLM_VERSION : ASSUMED_SGLANG_VERSION);
+  const versionLabel = lc ? null : `${engine === "vllm" ? "vLLM" : "SGLang"} ${givenVersion ? input.engineVersion : engine === "vllm" ? ASSUMED_VLLM_VERSION : ASSUMED_SGLANG_VERSION}`;
+  if (!lc && !givenVersion) defaultsAssumed.push(`${versionLabel} (no --${engine}-version given; the newest release the tables were read from)`);
+  const vllmDefaults = engine === "vllm" && card && ver ? vllmVersionDefaults(ver, card, pp) : null;
+  if (vllmDefaults) {
+    if (args.gpuMemoryUtilization == null) defaultsAssumed.push(`gpu_memory_utilization ${vllmDefaults.gpuMemoryUtilization} (vLLM ${vllmDefaults.gpuMemoryUtilization === 0.92 ? ">= 0.20.0" : "< 0.20.0"} default)`);
+    defaultsAssumed.push(`CUDA graph memory ${vllmDefaults.cudaGraphsCounted ? args.enforceEager ? "none (--enforce-eager)" : "taken from the KV budget (vLLM >= 0.20.0)" : "not taken from the KV budget (vLLM < 0.20.0)"}`);
+    if (args.maxNumBatchedTokens == null) defaultsAssumed.push(`max_num_batched_tokens ${vllmDefaults.maxNumBatchedTokens} (vllm serve default on ${card.label})`);
+    if (args.maxNumSeqs == null) defaultsAssumed.push(`max_num_seqs ${vllmDefaults.maxNumSeqs} (vllm serve default on ${card.label})`);
+  }
+  const sglMib = card ? CARD_NVSMI_MIB[card.id]?.mib ?? card.memoryGB * 1024 : null;
+  const sglDefault = engine === "sglang" && sglMib != null ? sglangMemoryDefaults({
+    gpuMemMiB: sglMib,
+    tp,
+    pp,
+    chunkedPrefill: args.chunkedPrefillSize,
+    maxRunningRequests: args.maxNumSeqs,
+    mla: hasMla || posInt3(config ? textConfigOf(config).kv_lora_rank : null) != null,
+    dpAttention: args.dpAttention ? dp : void 0,
+    deepep: args.deepep,
+    disableCudaGraph: args.enforceEager,
+    modelPath: args.model ?? input.modelId
+  }) : null;
+  if (sglDefault) {
+    if (args.memFractionStatic == null) defaultsAssumed.push(`mem_fraction_static ${sglDefault.memFractionStatic} (SGLang's own formula on a ${sglMib} MiB card)`);
+    if (args.chunkedPrefillSize == null) defaultsAssumed.push(`chunked_prefill_size ${sglDefault.chunkedPrefill} (SGLang tier default)`);
+  }
   if (lc) {
     skipped.push({ check: "parallel", reason: "llama.cpp splits whole layers (and their KV) across GPUs by default (--split-mode layer), so no head or width divisibility applies." });
   } else {
@@ -10638,7 +12557,32 @@ function checkServeConfig(input) {
   }
   const flagQuant = normalizeQuant(args.quantization);
   const quant = lc ? "gguf" : flagQuant ?? ckpt.method;
-  const ggufType = lc ? ggufQuantOf(args.ggufFile) : null;
+  const gguf = lc ? input.gguf ?? null : null;
+  const ggufType = lc ? gguf?.fileType && GGUF_BPW[gguf.fileType] != null ? gguf.fileType : gguf?.dominantType ?? ggufQuantOf(args.ggufFile) : null;
+  if (gguf) {
+    checked.push("gguf-header");
+    const cfgLayers = posInt3(config ? textConfigOf(config).num_hidden_layers : null);
+    if (cfgLayers != null && gguf.blockCount != null && gguf.blockCount !== cfgLayers) {
+      add({
+        rule: "gguf-config-mismatch",
+        area: "context",
+        severity: "warn",
+        title: `The GGUF has ${gguf.blockCount} blocks; the config.json given has ${cfgLayers} layers`,
+        detail: `The repo named for the config is not the one ${gguf.source} was converted from (or the file is a pruned / merged build), so the context, template and sampler checks read the wrong model.`,
+        fix: "Give the Hugging Face id the GGUF was converted from as the model."
+      });
+    }
+    if (gguf.contextLength != null && derivedMaxLenRaw(config) != null && gguf.contextLength !== derivedMaxLenRaw(config)) {
+      add({
+        rule: "gguf-context",
+        area: "context",
+        severity: "info",
+        title: `The GGUF records a ${gguf.contextLength}-token training context (${gguf.arch}.context_length); config.json says ${derivedMaxLenRaw(config)}`,
+        detail: "llama.cpp reads the GGUF value (n_ctx_train), not config.json, for -c 0 and for its past-the-trained-length warning.",
+        fix: ""
+      });
+    }
+  }
   if (!lc && flagQuant && ckpt.method && flagQuant !== ckpt.method) {
     const compatible = flagQuant === "marlin" && (ckpt.method === "gptq" || ckpt.method === "awq");
     if (!compatible) {
@@ -10683,28 +12627,91 @@ function checkServeConfig(input) {
       }
     }
     if (quant != null) {
-      const row = QUANT_SUPPORT.find((r) => r.method === quant);
-      if (!row) skipped.push({ check: "quant-support", reason: `no support row for quant method "${quant}".` });
-      else if (sm < row.fallbackSm) {
-        add({
-          rule: "quant-unsupported",
-          area: "quant",
-          severity: "block",
-          title: `${quant} weights on ${card.label} (sm${sm}): not supported`,
-          detail: `${quant} needs sm${row.fallbackSm} or newer${row.nativeSm !== row.fallbackSm ? ` (sm${row.nativeSm} for the native kernels)` : ""}; the engine refuses at load.`,
-          fix: `Use a ${quant === "mxfp4" ? "bf16 build of the model" : "different quantization"} on this card, or an sm${row.fallbackSm}+ card.`,
-          source: row.source
-        });
-      } else if (sm < row.nativeSm) {
-        add({
-          rule: "quant-fallback",
-          area: "quant",
-          severity: "warn",
-          title: `${quant} on ${card.label} (sm${sm}) is not native: it runs on a fallback kernel`,
-          detail: `Native ${quant} kernels need sm${row.nativeSm}+. On this card it ${row.fallbackNote ?? "runs on a slower path"}.`,
-          fix: `Expect the memory saving and not the speedup; for native ${quant} use an sm${row.nativeSm}+ card.`,
-          source: row.source
-        });
+      const table = quantTableFor(engine, ver);
+      const rawMethod = (args.quantization ?? ckpt.raw ?? "").toLowerCase();
+      const key = engineQuantKey(args.quantization ? rawMethod : ckpt.raw ?? null, args.quantization ? null : config?.quantization_config ?? null);
+      const where = (at) => table && at ? `github.com/${table.repo}/blob/${table.commit.slice(0, 10)}/${at.replace("#L", "#L")}` : null;
+      if (table && key) {
+        const entry = table.methods[key.method] ?? (!args.quantization ? table.methods[`${key.method}_marlin`] : void 0);
+        const label = `${engine === "vllm" ? "vLLM" : "SGLang"} ${table.tag}`;
+        const plugin = engine === "vllm" ? VLLM_PLUGIN_MIGRATIONS[key.method] : void 0;
+        if (plugin && ver && vAtLeast(ver, readEngineVersion(plugin.since))) {
+          add({
+            rule: "quant-method-plugin",
+            area: "quant",
+            severity: "warn",
+            title: `${key.method} left vLLM's tree in ${plugin.since}: it loads only with ${plugin.plugin} installed`,
+            detail: `${plugin.pr} moved it to an out-of-tree plugin; without the plugin the registry has no "${key.method}" and vLLM ${versionLabel?.replace("vLLM ", "")} refuses the model at load.`,
+            fix: `uv pip install ${plugin.plugin}, or pin vLLM below ${plugin.since}.`,
+            source: `github.com/vllm-project/vllm/pull/${plugin.pr.slice(1)}`
+          });
+        } else if (!entry) {
+          add({
+            rule: "quant-method-unknown",
+            area: "quant",
+            severity: "block",
+            title: `${label} has no quantization method "${key.method}"`,
+            detail: `The method registry at ${table.tag} (${Object.keys(table.methods).length} methods) does not list it, so the engine refuses it at load ("Invalid quantization method" / "Unknown quantization method").${engine === "vllm" && /bitsandbytes|gguf/.test(key.method) ? " vLLM removed it from the registry after 0.19." : ""}`,
+            fix: `Use a release that lists it (pass --${engine}-version to check another), or a checkpoint in a method this release lists.`,
+            source: `github.com/${table.repo}/blob/${table.commit.slice(0, 10)}/${engine === "vllm" ? "vllm/model_executor/layers/quantization/__init__.py" : "python/sglang/srt/layers/quantization/__init__.py"}`
+          });
+        } else {
+          const scheme = key.scheme ? table.compressedTensorsSchemes[key.scheme] : null;
+          const minSm = scheme?.minSm ?? entry.minSm;
+          const at = scheme?.at ?? entry.at;
+          if (minSm != null && sm < minSm) {
+            add({
+              rule: "quant-unsupported",
+              area: "quant",
+              severity: "block",
+              title: `${key.method}${key.scheme ? ` (${key.scheme})` : ""} needs sm${minSm} on ${label}; ${card.label} is sm${sm}`,
+              detail: `${label}'s ${entry.cls}${key.scheme ? ` / ${key.scheme} scheme` : ""} declares get_min_capability() = ${minSm}; the engine compares it with the card at load and refuses below it.`,
+              fix: `Use a card at sm${minSm} or newer, a different quantization, or the unquantized checkpoint.`,
+              source: where(at) ?? void 0
+            });
+          } else {
+            const row = QUANT_SUPPORT.find((r) => r.method === quant);
+            if (row && sm < row.nativeSm) {
+              add({
+                rule: "quant-fallback",
+                area: "quant",
+                severity: "warn",
+                title: `${quant} on ${card.label} (sm${sm}) is not native: it runs on a fallback kernel`,
+                detail: `${label} accepts it here (minimum sm${minSm ?? "?"}), but native ${quant} kernels need sm${row.nativeSm}+. On this card it ${row.fallbackNote ?? "runs on a slower path"}.`,
+                fix: `Expect the memory saving and not the speedup; for native ${quant} use an sm${row.nativeSm}+ card.`,
+                source: row.source
+              });
+            }
+          }
+          const other = quantTableFor(engine === "vllm" ? "sglang" : "vllm", null);
+          const oe = other?.methods[key.method];
+          const oMin = key.scheme ? other?.compressedTensorsSchemes[key.scheme]?.minSm ?? oe?.minSm : oe?.minSm;
+          if (other && oMin != null && minSm != null && oMin !== minSm && sm >= Math.min(oMin, minSm) && sm < Math.max(oMin, minSm)) {
+            add({
+              rule: "quant-engine-differs",
+              area: "quant",
+              severity: "info",
+              title: `${key.method}${key.scheme ? ` (${key.scheme})` : ""} on sm${sm}: ${label} needs sm${minSm}, ${other.engine === "vllm" ? "vLLM" : "SGLang"} ${other.tag} needs sm${oMin}`,
+              detail: "The two engines gate the same method at different compute capabilities, so a launch that loads on one is refused by the other on this card.",
+              fix: "Keep it in mind if the deployment moves engines.",
+              source: [where(at), other && oe?.at ? `github.com/${other.repo}/blob/${other.commit.slice(0, 10)}/${oe.at}` : null].filter(Boolean).join("; ")
+            });
+          }
+        }
+      } else {
+        const row = QUANT_SUPPORT.find((r) => r.method === quant);
+        if (!row) skipped.push({ check: "quant-support", reason: `no support row for quant method "${quant}".` });
+        else if (sm < row.fallbackSm) {
+          add({
+            rule: "quant-unsupported",
+            area: "quant",
+            severity: "block",
+            title: `${quant} weights on ${card.label} (sm${sm}): not supported`,
+            detail: `${quant} needs sm${row.fallbackSm} or newer${row.nativeSm !== row.fallbackSm ? ` (sm${row.nativeSm} for the native kernels)` : ""}; the engine refuses at load.`,
+            fix: `Use a ${quant === "mxfp4" ? "bf16 build of the model" : "different quantization"} on this card, or an sm${row.fallbackSm}+ card.`,
+            source: row.source
+          });
+        }
       }
     }
   }
@@ -10714,7 +12721,7 @@ function checkServeConfig(input) {
   else {
     const peak = inferencePeakFor(model, { promptTokens: servedLen, genTokens: 0, batch: 1, precision: "bf16" });
     const split = paramSplit(model);
-    const w = weightBytes(split, DTYPE_BYTES[dtype], quant, ckpt.bits, engine, ggufType);
+    const w = gguf ? { bytes: gguf.tensorBytes, basis: `${gguf.tensorCount} tensors in the GGUF header, mostly ${gguf.dominantType ?? "?"}${gguf.fileType ? ` (file type ${gguf.fileType})` : ""}, summed at ggml's block sizes (${LLAMACPP_SRC} ggml-common.h); read from ${gguf.source}` } : weightBytes(split, DTYPE_BYTES[dtype], quant, ckpt.bits, engine, ggufType);
     if (!peak || !w || !(split.total > 0)) {
       skipped.push({ check: "memory", reason: !w && lc ? `the GGUF quant type is not readable from "${args.ggufFile ?? "(no -m)"}"; name the file with its type (e.g. model-Q4_K_M.gguf).` : "the graph has no parameter count to size." });
     } else {
@@ -10769,6 +12776,7 @@ function checkServeConfig(input) {
         kvCapacityGbPerGpu: Math.max(0, capGb),
         tokenCapacity,
         maxConcurrentFullLength: Math.floor(conc * 100) / 100,
+        method: "upper-bound",
         notCounted: [
           "the engine's activation reserve from its profiling run, CUDA graphs and communication buffers (they come out of the same budget, so capacity here is an upper bound)",
           "the card's real usable memory, which is below the nominal figure",
@@ -10777,7 +12785,34 @@ function checkServeConfig(input) {
       };
       const budgetWord = lc ? `${card.memoryGB} GB on the card` : `${card.memoryGB} GB x ${fraction} = ${gbs(budgetGb)}`;
       const shareWord = lc ? gpus > 1 ? ` (layers split over ${gpus} GPUs)` : "" : ` after TP ${tp}${pp > 1 ? ` x PP ${pp}` : ""}${ep && split.expert > 0 ? " with experts spread by EP" : ""}`;
-      if (lc) {
+      const layout = config ? kvLayoutFromConfig(config, { tp: lc ? 1 : tp, kvBytes: lc ? 2 : kvBytes, modelBytes: DTYPE_BYTES[dtype] }) : null;
+      const eng = layout && config ? engineMemory({
+        engine,
+        args,
+        card,
+        config,
+        layout,
+        tp,
+        pp,
+        ep,
+        servedLen,
+        kvTokensAllocated,
+        weightsPerGpuBytes: weightsPerGpu,
+        weights: w,
+        kvBytes,
+        kvName,
+        actBytes: DTYPE_BYTES[dtype],
+        vllmDefaults,
+        sglDefault,
+        versionLabel,
+        gpus,
+        shareWord
+      }) : null;
+      if (eng) {
+        memory = eng.memory;
+        checked.push(...eng.checked);
+        for (const f of eng.findings) add(f);
+      } else if (lc) {
         const need = weightsGb + kvPerTokGpu * (kvTokensAllocated ?? servedLen) / 1e9;
         const ngl = args.nGpuLayers;
         if (need > budgetGb) {
@@ -10906,6 +12941,91 @@ function checkServeConfig(input) {
       fix: "Add --tool-call-parser for this family (e.g. hermes for Qwen, llama3_json for Llama 3, kimi_k2, openai for gpt-oss)."
     });
   }
+  if (engine === "vllm") {
+    const hit = findRecipe(input.modelId ?? args.model ?? null);
+    if (!hit) skipped.push({ check: "recipe", reason: `no vLLM recipe for "${input.modelId ?? args.model ?? "(no model id)"}" in the ${VLLM_RECIPES.count}-recipe index (vllm-project/recipes@${VLLM_RECIPES.commit.slice(0, 10)}).` });
+    else {
+      checked.push("recipe");
+      const { id, recipe: rc, variant } = hit;
+      const src = `github.com/vllm-project/recipes/blob/${VLLM_RECIPES.commit.slice(0, 10)}/${rc.file}`;
+      const flags = new Set(args.flags ?? []);
+      if (rc.minVllmVersion && ver && !vAtLeast(ver, readEngineVersion(rc.minVllmVersion))) {
+        add({
+          rule: "recipe-min-version",
+          area: "template",
+          severity: "warn",
+          title: `The vLLM recipe for ${id} needs vLLM ${rc.minVllmVersion}; this launch assumes ${versionLabel}`,
+          detail: "min_vllm_version is the earliest release the recipe maintainers say supports the model; an older release may lack the architecture, parser or kernels it relies on.",
+          fix: `Run vLLM ${rc.minVllmVersion} or newer${rc.nightlyRequired ? " (the recipe says a nightly build is required)" : ""}.`,
+          source: src
+        });
+      } else if (rc.nightlyRequired) {
+        add({ rule: "recipe-nightly", area: "template", severity: "info", title: `The vLLM recipe for ${id} says a nightly build is required`, detail: `min_vllm_version ${rc.minVllmVersion ?? "?"} had not shipped when the recipe was written.`, fix: "Install from the nightly index, or check a newer release.", source: src });
+      }
+      if ((rc.baseArgs ?? []).includes("--trust-remote-code") && !flags.has("--trust-remote-code")) {
+        add({
+          rule: "recipe-trust-remote-code",
+          area: "template",
+          severity: "warn",
+          title: `The vLLM recipe for ${id} launches with --trust-remote-code; this command does not`,
+          detail: "The model ships Python code in its repo (a config class, tokenizer or architecture). Without the flag vLLM refuses to load it.",
+          fix: "Add --trust-remote-code (after reading the repo code).",
+          source: src
+        });
+      }
+      if (rc.toolCallParser && args.toolCallParser && args.toolCallParser !== rc.toolCallParser) {
+        add({
+          rule: "recipe-tool-parser",
+          area: "template",
+          severity: "warn",
+          title: `--tool-call-parser ${args.toolCallParser}, but the vLLM recipe for ${id} uses ${rc.toolCallParser}`,
+          detail: "A parser written for another family does not recognise this model's tool-call syntax: tool calls come back as plain text in content, or are cut.",
+          fix: `Use --tool-call-parser ${rc.toolCallParser}.`,
+          source: src
+        });
+      } else if (rc.toolCallParser && args.enableAutoToolChoice && !args.toolCallParser) {
+        const f = findings.find((x) => x.rule === "tool-parser-missing");
+        if (f) {
+          f.fix = `Add --tool-call-parser ${rc.toolCallParser} (the vLLM recipe for ${id}).`;
+          f.source = src;
+        }
+      }
+      if (rc.reasoningParser && args.reasoningParser && args.reasoningParser !== rc.reasoningParser) {
+        add({
+          rule: "recipe-reasoning-parser",
+          area: "template",
+          severity: "warn",
+          title: `--reasoning-parser ${args.reasoningParser}, but the vLLM recipe for ${id} uses ${rc.reasoningParser}`,
+          detail: "A reasoning parser looks for the family's own thinking markers; the wrong one leaves the reasoning inside content or swallows the answer.",
+          fix: `Use --reasoning-parser ${rc.reasoningParser}.`,
+          source: src
+        });
+      } else if (rc.reasoningParser && !args.reasoningParser) {
+        const f = findings.find((x) => x.rule === "reasoning-parser-missing");
+        if (f) {
+          f.fix = `Add --reasoning-parser ${rc.reasoningParser} (the vLLM recipe for ${id}).`;
+          f.source = src;
+        } else add({
+          rule: "recipe-reasoning-parser",
+          area: "template",
+          severity: "info",
+          title: `The vLLM recipe for ${id} passes --reasoning-parser ${rc.reasoningParser}; this command does not`,
+          detail: "Without it the reasoning text comes back inside message.content instead of reasoning_content.",
+          fix: `Add --reasoning-parser ${rc.reasoningParser} if clients read reasoning_content.`,
+          source: src
+        });
+      }
+      const va = variant ? rc.variants[variant] : null;
+      if (va?.extraArgs?.includes("--kv-cache-dtype") && !args.kvCacheDtype) {
+        const want = va.extraArgs[va.extraArgs.indexOf("--kv-cache-dtype") + 1];
+        add({ rule: "recipe-variant-args", area: "template", severity: "info", title: `The vLLM recipe's ${variant} variant passes --kv-cache-dtype ${want}`, detail: `${va.modelId ?? id} is served there with: ${va.extraArgs.join(" ")}.`, fix: `Add --kv-cache-dtype ${want} unless you measured otherwise.`, source: src });
+      }
+      const rg = card ? RECIPE_GPU_OF[card.id] : void 0;
+      if (rg && rc.unsupportedGpus?.includes(rg)) {
+        add({ rule: "recipe-gpu-unsupported", area: "template", severity: "warn", title: `The vLLM recipe for ${id} marks ${card.label} unsupported`, detail: "The recipe maintainers record a confirmed blocker on this card.", fix: "Use a card the recipe lists as verified or supported.", source: src });
+      }
+    }
+  }
   const effSampler = effectiveSampler(input);
   for (const k of KNOWN_SERVE_ISSUES) {
     if (!k.match.test(modelType) && !k.match.test(input.modelId ?? "") && !k.match.test(model.name ?? "")) continue;
@@ -10980,15 +13100,18 @@ function checkServeConfig(input) {
       servedLen,
       servedLenSource,
       derivedMaxLen: derived.len,
-      memFraction: lc ? null : engine === "vllm" ? args.gpuMemoryUtilization ?? 0.9 : args.memFractionStatic ?? 0.88,
-      maxNumSeqs: args.maxNumSeqs ?? null
+      memFraction: lc ? null : engine === "vllm" ? args.gpuMemoryUtilization ?? vllmDefaults?.gpuMemoryUtilization ?? 0.92 : args.memFractionStatic ?? sglDefault?.memFractionStatic ?? null,
+      maxNumSeqs: args.maxNumSeqs ?? null,
+      engineVersion: lc ? input.engineVersion ?? null : versionLabel,
+      engineVersionAssumed: !lc && input.engineVersion == null,
+      defaultsAssumed
     },
     checked,
     skipped,
     findings,
     memory,
     change,
-    basis: SERVE_BASIS
+    basis: memory?.method === "upper-bound" ? `${SERVE_BASIS} ${SERVE_BASIS_UPPER_BOUND}` : SERVE_BASIS
   };
 }
 function effectiveSampler(input) {
@@ -11105,18 +13228,34 @@ function renderServeText(r, name = "model") {
   const par = r.engine === "llamacpp" ? "" : `TP ${R.tp} x PP ${R.pp} x DP ${R.dp}${R.expertParallel ? " + EP" : ""}, `;
   L.push(`  ${par}${R.gpus} x ${R.gpu ?? "(no card given)"}${R.sm ? ` (sm${R.sm})` : ""}${r.engine === "llamacpp" ? "" : `, dtype ${R.dtype}`}, weights ${R.quant ?? "unquantized"}, KV cache ${R.kvCacheDtype}`);
   L.push(`  served length ${R.servedLen ?? "n/a"} (${R.servedLenSource}); the model's derived maximum ${R.derivedMaxLen ?? "n/a"}`);
+  if (R.engineVersion) L.push(`  engine ${R.engineVersion}${R.engineVersionAssumed ? " (assumed; pass --" + r.engine + "-version to change)" : ""}`);
+  for (const d of R.defaultsAssumed.filter((x) => !/^(vLLM|SGLang) /.test(x))) L.push(`  default assumed: ${d}`);
   if (r.memory) {
     const m = r.memory;
     L.push("");
-    if (r.engine === "llamacpp") {
-      L.push(`  memory per GPU   card ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV for ${m.tokenCapacity.toLocaleString("en-US")} tokens ${m.kvCapacityGbPerGpu.toFixed(2)} GB (allocated up front), total ${(m.weightsGbPerGpu + m.kvCapacityGbPerGpu).toFixed(2)} GB`);
+    const g = (x) => `${x.toFixed(2)} GiB`;
+    const gb2gib = (x) => x * 1e9 / 1024 ** 3;
+    if (m.method === "engine" && r.engine === "vllm" && m.reserve && m.pool) {
+      L.push(`  memory per GPU, predicted: ${g(m.cardTotalGib)} x ${R.memFraction} = ${g(gb2gib(m.budgetGbPerGpu))}`);
+      for (const t of m.reserve) L.push(`                   - ${t.what} ${g(t.gib)}${t.measuredByEngine ? " (estimate; vLLM measures this)" : ""}`);
+      L.push(`                   = KV cache ${g(gb2gib(m.kvCapacityGbPerGpu))}: ${m.pool.numBlocks.toLocaleString("en-US")} blocks of ${m.pool.blockSize} tokens (${m.pool.groups.map((x) => `${x.layers} ${x.kind}`).join(", ")})`);
+      L.push(`                   ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} KV bytes per token over the full-length layers; one full-length request ${g(gb2gib(m.kvGbPerSequencePerGpu))}`);
+      L.push(`                   vLLM would print: GPU KV cache size: ${m.tokenCapacity.toLocaleString("en-US")} tokens; Maximum concurrency for ${(R.servedLen ?? 0).toLocaleString("en-US")} tokens per request: ${m.maxConcurrentFullLength.toFixed(2)}x`);
+    } else if (m.method === "engine" && r.engine === "sglang") {
+      L.push(`  memory per GPU, predicted: ${g(m.cardTotalGib)} x mem_fraction_static ${R.memFraction}${m.sglangDefault && m.sglangDefault.memFractionStatic !== R.memFraction ? ` (SGLang's own default here: ${m.sglangDefault.memFractionStatic})` : " (SGLang's own default)"} = ${g(gb2gib(m.budgetGbPerGpu))}`);
+      L.push(`                   - weights ${g(gb2gib(m.weightsGbPerGpu))}`);
+      L.push(`                   = KV cache ${g(gb2gib(m.kvCapacityGbPerGpu))}: ~${m.tokenCapacity.toLocaleString("en-US")} tokens at ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} bytes per token, ${Math.floor(m.maxConcurrentFullLength)} full-length requests`);
+    } else if (r.engine === "llamacpp") {
+      L.push(`  memory per GPU, predicted: card ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV for ${m.tokenCapacity.toLocaleString("en-US")} tokens ${m.kvCapacityGbPerGpu.toFixed(2)} GB (allocated up front), total ${(m.weightsGbPerGpu + m.kvCapacityGbPerGpu).toFixed(2)} GB`);
       L.push(`                   ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} KV bytes per token; one full-length sequence ${m.kvGbPerSequencePerGpu.toFixed(2)} GB`);
     } else {
-      L.push(`  memory per GPU   budget ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV room ${m.kvCapacityGbPerGpu.toFixed(2)} GB`);
+      L.push(`  memory per GPU, upper bound   budget ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV room ${m.kvCapacityGbPerGpu.toFixed(2)} GB`);
       L.push(`                   ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} KV bytes per token; one full-length sequence ${m.kvGbPerSequencePerGpu.toFixed(2)} GB`);
       L.push(`                   at most ${Math.floor(m.maxConcurrentFullLength)} concurrent full-length sequences (${m.tokenCapacity.toLocaleString("en-US")} tokens)`);
     }
     L.push(`                   weights: ${m.weightsBasis}`);
+    if (m.cardTotalSource && m.method === "engine" && r.engine !== "llamacpp") L.push(`                   card total: ${m.cardTotalSource}`);
+    for (const n2 of m.layoutNotes ?? []) L.push(`                   ${n2}`);
   }
   const order = { block: 0, warn: 1, info: 2 };
   const fs = [...r.findings].sort((a, b) => order[a.severity] - order[b.severity]);
@@ -11225,3 +13364,18 @@ export {
   verdictWord,
   withSeqLen
 };
+/*! @license Data derived from NeuSight (MIT) and PyTorch (BSD-3-Clause); notices below.
+ * GENERATED by scripts/gemm-efficiency/fit_gemm_efficiency.py. Do not edit by hand.
+ *
+ * Per-card GEMM efficiency SHAPE (measured throughput over the same card's
+ * large-GEMM throughput) against log2 of the GEMM's time at that plateau, in
+ * microseconds. Fitted offline from NeuSight's measured linear-kernel
+ * latencies (https://github.com/scai-tech/NeuSight @ 6945927d9afc, MIT,
+ * Copyright (c) 2025 Georgia Institute of Technology and Microsoft Corporation).
+ * Datasheet peaks transcribed from PyTorch torch/_inductor/analysis/device_info.py
+ * (https://github.com/pytorch/pytorch @ 6a6db44e15f9, BSD-3-Clause,
+ * Copyright (c) 2016- Facebook, Inc and the PyTorch contributors). Full notices: NOTICE.
+ * NeuSight's rows for these cards are FP32 GEMMs; see the fit script for the
+ * one assumption that carries their shape over to bf16.
+ */
+/*! @license Schedule tables and simulation ported from AMD-AGI/Primus, MIT, Copyright (c) 2025 Advanced Micro Devices, Inc. Full notice: NOTICE. */

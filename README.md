@@ -139,12 +139,12 @@ Every read tool also takes an optional `model_path`, so **one server covers a wh
 
 ### Before a multi-GPU or serving launch
 
-`check_parallel_layout` says whether a TP / PP / DP / CP / EP split is legal, which pipeline stage is the straggler, the predicted step slowdown against a balanced split and the split that removes it, every time labelled predicted (matmul FLOPs at 40% of peak plus memory-bound bytes at 80% of bandwidth, never timed):
+`check_parallel_layout` says whether a TP / PP / DP / CP / EP split is legal, which pipeline stage is the straggler, the predicted step slowdown against a balanced split and the split that removes it, every time labelled predicted (per-card matmul efficiency fitted on public GEMM measurements, the 1F1B schedule simulated op by op, never timed):
 
 ```text
 check_parallel_layout { model_path: "hf:Qwen/Qwen3-8B", tp: 4, pp: 4, micro_batch: 1, global_batch: 32, seq_len: 4096, gpu: "h100" }
--> legal on 16 x h100-sxm; predicted 21.4% slower per step than a balanced split (slowest stage 3);
-   split 10,10,10,6 is predicted 18.8% faster; bubble 8.6%; 1 warning
+-> legal on 16 x h100-sxm; predicted 15.5% slower per step than a balanced split (slowest stage 3);
+   split 10,10,9,7 is predicted 11.4% faster; bubble 8.6%; 1 warning
 ```
 
 `check_serving_config` reads a vLLM, SGLang or llama.cpp launch line against the model's `config.json`, `tokenizer_config.json`, `chat_template.jinja` and `generation_config.json` and the card, and returns findings on TP against the heads, served length against the context, KV memory and concurrency, quantization against the card, and the chat template and sampler defaults (with `against`, what changed from the model it replaces):

@@ -58,7 +58,7 @@ describe('vendored plan contract', () => {
     // a stale bundle (before neurarch #325's bandwidth term) says FLOPs only.
     expect(plan.LAYOUT_BASIS).toMatch(/^Derived from the graph, not measured\./);
     expect(plan.LAYOUT_BASIS).toMatch(/80% of its memory bandwidth/);
-    expect(plan.SERVE_BASIS).toMatch(/^Derived from config\.json, the engine flags and the card, not measured\./);
+    expect(plan.SERVE_BASIS).toMatch(/^Predicted from config\.json, the engine flags and the card, not measured\./);
     expect(Array.isArray(plan.QUANT_SUPPORT)).toBe(true);
   });
 

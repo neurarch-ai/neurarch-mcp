@@ -93,25 +93,28 @@ describe('check_parallel_layout on Qwen3-8B (real config.json, served offline)',
     // The last stage carries the LM head and the loss, and is the slowest.
     expect(out.predicted.label).toMatch(/^Predicted from the graph, not measured/);
     expect(out.predicted.slowestStage).toBe(3);
-    expect(out.predicted.stepSlowdown).toBeCloseTo(0.2135, 3);
-    expect(out.predicted.recommendedSplit).toEqual([10, 10, 10, 6]);
-    expect(out.predicted.recommendedSpeedup).toBeCloseTo(0.1883, 3);
+    expect(out.predicted.stepSlowdown).toBeCloseTo(0.1553, 3);
+    expect(out.predicted.recommendedSplit).toEqual([10, 10, 9, 7]);
+    expect(out.predicted.recommendedSpeedup).toBeCloseTo(0.1143, 3);
     expect(out.predicted.microbatches).toBe(32);
-    expect(out.predicted.formula).toMatch(/^t = m x max \+ \(sum - max\)/);
+    expect(out.predicted.formula).toMatch(/^1F1B schedule simulated op by op/);
     expect(out.findings.map((f: any) => `${f.severity}:${f.rule}`)).toContain('warn:stage-imbalance');
     expect(out.verdict).toBe(
-      'legal on 16 x h100-sxm; predicted 21.4% slower per step than a balanced split (slowest stage 3); '
-      + 'split 10,10,10,6 is predicted 18.8% faster; bubble 8.6%; 1 warning',
+      'legal on 16 x h100-sxm; predicted 15.5% slower per step than a balanced split (slowest stage 3); '
+      + 'split 10,10,9,7 is predicted 11.4% faster; bubble 8.6%; 1 warning',
     );
     expect(out.source).toBe(`model`);
   });
 
   it('takes the recommended split back and reports it balanced', async () => {
     const m = (await loadHFModel(QWEN3_8B)).model;
-    const out = await layout({ ...split, layers_per_stage: [10, 10, 10, 6] }, m);
-    expect(out.resolved.layersPerStage).toEqual([10, 10, 10, 6]);
-    expect(out.predicted.slowestOverMean).toBeLessThan(1.03);
-    expect(out.findings.map((f: any) => f.rule)).not.toContain('stage-imbalance');
+    const out = await layout({ ...split, layers_per_stage: [10, 10, 9, 7] }, m);
+    expect(out.resolved.layersPerStage).toEqual([10, 10, 9, 7]);
+    // 36 blocks over 4 stages move a whole layer at a time, so the best split still sits ~5% over the mean.
+    expect(out.predicted.slowestOverMean).toBeLessThan(1.05);
+    expect(out.predicted.recommendedSplit).toBeNull();
+    // At the best whole-block split the rule drops to info and says nothing contiguous does better.
+    expect(out.findings.filter((f: any) => f.rule === 'stage-imbalance').map((f: any) => f.severity)).not.toContain('warn');
   });
 
   it('says a TP that does not divide the 32 heads will not run', async () => {
