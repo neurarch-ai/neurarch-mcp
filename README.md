@@ -55,6 +55,8 @@ Get the graph by tracing the model for real shapes, or point the server at a sav
 claude mcp add neurarch -- npx -y neurarch-mcp /abs/path/to/model.py        # Claude Code
 ```
 
+Or, in Claude Code, the server, the launch hook and the skill in one [plugin](#claude-code-plugin): `/plugin marketplace add neurarch-ai/neurarch-mcp`, then `/plugin install neurarch@neurarch-ai`.
+
 [<img src="https://img.shields.io/badge/Add%20to-Cursor-000000?logo=cursor&logoColor=white" alt="Add to Cursor" height="28">](cursor://anysphere.cursor-deeplink/mcp/install?name=neurarch&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm5ldXJhcmNoLW1jcCIsIi4vbW9kZWwucHkiXX0=)
 [<img src="https://img.shields.io/badge/Install%20in-VS%20Code-0098FF?logo=visualstudiocode&logoColor=white" alt="Install in VS Code" height="28">](https://vscode.dev/redirect/mcp/install?name=neurarch&config=%7B%22name%22%3A%20%22neurarch%22%2C%20%22command%22%3A%20%22npx%22%2C%20%22args%22%3A%20%5B%22-y%22%2C%20%22neurarch-mcp%22%2C%20%22%24%7BworkspaceFolder%7D%2Fmodel.py%22%5D%7D)
 [<img src="https://img.shields.io/badge/Claude%20Desktop-.mcpb-D97757?logo=anthropic&logoColor=white" alt="Claude Desktop bundle" height="28">](https://github.com/neurarch-ai/neurarch-mcp/releases/latest)
@@ -276,6 +278,25 @@ job:
 A per-model `job:` applies when its entry's `path` (or its own `model`) names the model being launched, or when it is the only entry with one. The command line wins over the block, key by key. A pointer that does not resolve leaves its key unset rather than guessed.
 
 It fails open. A command it does not recognise, a job with no declared card or batch (including a `file:key` pointer that does not resolve), a model it cannot load, a card it cannot parse (a bare `A100` is ambiguous), or any error at all lets the call run. So does a job the estimate does not model: `--gradient_checkpointing`, LoRA or PEFT flags, 4- or 8-bit loading and CPU offload, since the number is a full fine-tune's peak. The estimate is a fit check, not a measurement, so `NEURARCH_ALLOW_OOM=1` in front of a command lets a refused launch through.
+
+### Claude Code plugin
+
+The server, the hook above and the [skill](./skills/neurarch-skill/SKILL.md) install together as one Claude Code plugin. This repository is its marketplace:
+
+```text
+/plugin marketplace add neurarch-ai/neurarch-mcp
+/plugin install neurarch@neurarch-ai
+```
+
+On Claude Code 2.1.275 or later, `/plugin install neurarch --marketplace neurarch-ai/neurarch-mcp` does both in one step. From a shell, the same two steps are `claude plugin marketplace add neurarch-ai/neurarch-mcp` and `claude plugin install neurarch@neurarch-ai`.
+
+What it adds, all from [`.claude-plugin/plugin.json`](./.claude-plugin/plugin.json) and [`hooks/hooks.json`](./hooks/hooks.json):
+
+- **The MCP server**, as `npx -y neurarch-mcp --hosted --hf`: no model of its own, so every tool takes `model_path` (a `.py`, a `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`) or `hf_id`. `--hf` lets an `hf:` model read `config.json` from huggingface.co.
+- **The hook**, `npx -y neurarch-mcp hook --hf` before every Bash call, exactly as configured by hand above.
+- **The skill**, `/neurarch:neurarch-skill`: size the job before it launches, then the evidence-gated edit loop.
+
+Both commands contact huggingface.co only for a model named by its Hugging Face id. To stay offline, or to point the server at one model, configure the server and the hook by hand as above instead of installing the plugin.
 
 ## Client setup
 

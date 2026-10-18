@@ -1,0 +1,14 @@
+{
+  "name": "neurarch-ai",
+  "description": "Claude Code plugins from Neurarch.",
+  "owner": { "name": "neurarch-ai", "url": "https://neurarch.com" },
+  "plugins": [
+    {
+      "name": "neurarch",
+      "source": "./",
+      "description": "Size a training job before it takes a GPU: the neurarch-mcp server, a PreToolUse hook that blocks a launch that will not fit its card, and the neurarch skill.",
+      "category": "development",
+      "tags": ["gpu", "training", "mcp", "hook"]
+    }
+  ]
+}

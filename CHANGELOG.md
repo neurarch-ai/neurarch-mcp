@@ -6,6 +6,16 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- **A Claude Code plugin.** `/plugin marketplace add neurarch-ai/neurarch-mcp`
+  then `/plugin install neurarch@neurarch-ai` installs the server
+  (`npx -y neurarch-mcp --hosted --hf`), the PreToolUse launch hook
+  (`hooks/hooks.json`, the same `npx -y neurarch-mcp hook --hf` the README
+  configures by hand) and `skills/neurarch-skill`. This repository is the
+  marketplace (`.claude-plugin/marketplace.json`); `claude plugin validate .
+  --strict` passes. `plugin.json` carries the package version and
+  `src/plugin.test.ts` fails a release that bumps one without the other.
+
 ## [0.17.3] - 2026-10-18
 
 ### Added

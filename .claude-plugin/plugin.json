@@ -1,0 +1,33 @@
+{
+  "name": "neurarch",
+  "version": "0.17.3",
+  "description": "Know what a GPU job needs before it takes a reservation. Bundles the neurarch-mcp server (size_training_job, diagnose_oom, check_edit, lint_model, check_design and the rest), a PreToolUse hook that blocks a training launch whose job will not fit the card it names, and the neurarch skill.",
+  "author": {
+    "name": "neurarch-ai",
+    "url": "https://neurarch.com"
+  },
+  "homepage": "https://github.com/neurarch-ai/neurarch-mcp#claude-code-plugin",
+  "repository": "https://github.com/neurarch-ai/neurarch-mcp",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": [
+    "gpu",
+    "training",
+    "memory",
+    "oom",
+    "pytorch",
+    "huggingface",
+    "mcp",
+    "hook"
+  ],
+  "mcpServers": {
+    "neurarch": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "neurarch-mcp",
+        "--hosted",
+        "--hf"
+      ]
+    }
+  }
+}
