@@ -6,6 +6,71 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.1] - 2026-10-17
+
+### Added
+- **`check_edit`**, the tool to call after editing a model's config or
+  architecture and before training. Given the base (`base_model_path`, or
+  `base_config`) and the changed model (`model_path`, `model_source`, or
+  `config`; a Hugging Face `config.json` as an object, JSON text or a path),
+  it returns the edits that load, run and are wrong, each under a stable rule
+  id with the public upstream reports of it: `vocab-resize-incomplete`,
+  `weight-tying-lost`, `attention-config-drift`, `rope-context-drift`, and,
+  with `lora_target_modules`, `lora-target-no-match`, `lora-target-partial`
+  and `lora-target-wrapper`; config divisibility comes back under the lint ids
+  `head-dim-divisibility` and `gqa-head-divisibility`. Then the memory delta:
+  the training peak before and after at `batch` (default 32) and `seq_len`,
+  and whether the job still fits `gpu`. No logic of its own: the checks are
+  the app's `checkGraphEdit`, `checkConfigEdit` and `checkLoraTargets`, the
+  memory is `size_training_job`'s, and a config with no graph is read by the
+  engine's `convertHFConfigToModel`. In the core listing after `diagnose_oom`.
+- **`neurarch-mcp hook`**, a Claude Code PreToolUse hook. It reads the hook
+  JSON on stdin; when a Bash command launches training (`python train.py`,
+  `accelerate launch`, `torchrun`, `deepspeed`, `sky launch`) and the model,
+  batch and card can be read off the command line or a `job:` block in the
+  nearest `.neurarch.yml`, it sizes the job as `size_training_job` does and
+  exits 2 with the peak, the card, the largest batch that fits and the
+  smallest card that holds it when the job will not fit the declared card.
+  Every other case exits 0 and prints nothing. It fails open: an unrecognised
+  command, a missing card or batch, a model it cannot load, an ambiguous card,
+  or any error lets the call run, and so do jobs the estimate does not model
+  (gradient checkpointing, LoRA / PEFT, 4- and 8-bit loading, CPU offload).
+  `NEURARCH_ALLOW_OOM=1` in the command lets a refused launch through. The
+  `.claude/settings.json` snippet is in the README.
+
+### Changed
+- **The memory estimate is the six-term refit** (neurarch-ai/neurarch #306,
+  vendored from `a1bac74e`): 1.2 x 16 bytes per parameter, plus, per sample in
+  bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager
+  only), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate
+  states and 2.02 x the largest single tensor. Fitted on 178 measured runs
+  across 41 architectures with out-of-memory runs as constraints; held out one
+  architecture at a time, the median error is 7% above 1 GB and it flagged
+  113 of the 131 times a run did not fit a card, where accelerate
+  estimate-memory flagged at most 8; on 25 runs measured after the fit, at the
+  edge of a 24 GB card, the median miss is 14%. Numbers move with it: phi3-mini
+  at batch 32 under SDPA now peaks at 26 GB (was 18), and its smallest card is
+  an L40S (was an L4).
+- **The accuracy sentence cannot drift from the bundle.** `size_training_job`'s
+  sentence is written from the bundle's six factors and its
+  `calibrationSentence()` (from `MEMORY_CALIBRATION`); the tool description
+  reads the same object; the fit headroom and default sequence length are the
+  bundle's `FIT_HEADROOM` and `DEFAULT_SEQ_LEN`. A test holds the README,
+  package.json, manifest.json, AGENTS.md and the skill's tool reference to
+  `MEMORY_CALIBRATION`, so a refit fails CI until every copy moves.
+- The `model_path` description injected on every read tool is shorter
+  ("Path, zoo:<id> or hf:<org/name>."), which is what pays for `check_edit`
+  under the tool-list token caps.
+- The engine, verifier and plan bundles are refreshed from neurarch-ai/neurarch
+  `a1bac74e`; `plan.bundle.d.mts` declares the new exports (the six factors,
+  `MEMORY_CALIBRATION`, `calibrationSentence`, the edit checks and their rule
+  ids). `plan.contract.test.ts` pins the six-term numbers, each printed by the
+  app's own TypeScript source and by this bundle, which agree to the last digit.
+
+### Removed
+- The caveat that recurrent cells are under-counted by 70 to 80%: that was the
+  three-factor fit's miss, and the six-term model counts gate states.
+
 ## [0.17.0] - 2026-10-17
 
 ### Added

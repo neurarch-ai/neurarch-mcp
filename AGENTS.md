@@ -31,15 +31,34 @@ It returns the training peak at that batch (weights and optimizer state,
 activations, stored attention scores), the smallest card that holds it, the
 largest batch each card holds, a two-card split when one card does not, one
 run's cost, and a verdict line you can quote: `fits an A100-40 with 22%
-headroom` or `will not fit an A100-40: needs ~55 GB ... use A100-80 or batch <=
-22`. If the verdict says it will not fit, change the batch or the card before
+headroom` or `will not fit an A100-40: needs ~76 GB ... use A100-80 or batch <=
+15`. If the verdict says it will not fit, change the batch or the card before
 launching, not after the OOM.
 
 Pass `attention: "eager"` if the job uses eager attention; the default is SDPA,
 which keeps no score matrix. The number is a calibrated estimate under AdamW
-with bf16 autocast (fitted on 141 measured runs; checked on 187, it flagged 54
-of the 90 times a run did not fit a card, and on new edge-of-card configurations
-the median miss is 42%), not a measurement; say so when you quote it.
+with bf16 autocast (fitted on 178 measured runs across 41 architectures; held
+out, the median error is 7% and it flagged 113 of the 131 times a run did not
+fit a card, where accelerate estimate-memory flagged at most 8; on 25 runs
+measured after the fit the median miss is 14%), not a measurement; say so when
+you quote it, and quote the 14% with the 7%.
+
+## After editing a model's config or architecture
+
+**Call `check_edit` after an edit and before training**, with the model before
+and after:
+
+```
+check_edit { base_model_path: "hf:Qwen/Qwen2.5-0.5B", model_path: "Model.neurarch.json", batch: 16, gpu: "L4" }
+check_edit { base_config: "base/config.json", config: "config.json", lora_target_modules: ["q_proj", "v_proj"] }
+```
+
+The edits it reports load, run and are wrong, so nothing else will tell you: a
+`resize_token_embeddings` that left a tensor at the old vocabulary, a tied head
+that came untied, attention keys that had to move together and did not, a
+longer context with no RoPE scaling, LoRA targets that match nothing. Fix
+every `block` finding before the run. It also returns the training peak before
+and after the edit, and says when the edit is what pushed the job off its card.
 
 ## After a CUDA out-of-memory error
 
@@ -117,6 +136,7 @@ the same package.
 |---|---|
 | What will this job need, and on which card? | `size_training_job` |
 | Why did it run out of memory, and what is the smallest fix? | `diagnose_oom` |
+| I edited the config or the architecture: is the edit silently wrong, and what did it do to memory? | `check_edit` |
 | What is this model? | `describe_architecture`, `get_model_summary`, `mermaid_diagram` |
 | Where is the budget? | `param_count_by_block`, `flops_by_block`, `list_blocks`, `get_block` |
 | Will it run? | `validate_model`, `lint_model`, `check_design` |

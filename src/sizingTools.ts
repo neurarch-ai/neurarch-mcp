@@ -16,6 +16,8 @@ import type { ModelArchitecture } from './lib/types.js';
 import type { ToolDef } from './tools.js';
 import { sizeJob, type Attention } from './lib/sizeJob.js';
 import { loadHFModel } from './sources.js';
+import { MEMORY_CALIBRATION as CAL } from './vendor/plan.bundle.mjs';
+import { ACCELERATE_FLAGGED_AT_MOST } from './lib/sizeJob.js';
 
 export const sizeTrainingJobTool: ToolDef = {
   name: 'size_training_job',
@@ -25,11 +27,13 @@ export const sizeTrainingJobTool: ToolDef = {
     + 'batch, split into weights plus optimizer state, activations and stored attention scores; the smallest card that '
     + 'holds it; the largest batch each card (T4, L4, A10G, L40S, A100-40, A100-80, H100-80) holds; a two-card split when '
     + 'one card does not; what one run costs on the requested card or the cheapest that fits; and a one-line verdict such '
-    + 'as "fits an A100-40 with 22% headroom" or "will not fit an A100-40: needs ~51 GB, use H100-80 or batch <= 48". '
+    + 'as "fits an A100-40 with 22% headroom" or "will not fit an A100-40: needs ~76 GB with headroom, use A100-80 or batch <= 15". '
     + 'It also says whether the graph forward-passes, and returns the structural fingerprint to pass to `history` for '
     + 'what this structure measured the last time it ran. The number is a calibrated estimate of the training peak under '
-    + 'AdamW with bf16 autocast, not a measurement: fitted on 141 measured runs; of 90 measured runs that did not fit a card it flagged 54 '
-    + '(accelerate estimate-memory: at most 9), and on new edge-of-card configurations the median miss is 42%. Recurrent cells are under-counted. The model is the server\'s, or model_path (a .py, a .neurarch.json from '
+    + `AdamW with bf16 autocast, not a measurement: fitted on ${CAL.fittedRuns} measured runs across ${CAL.architectures} architectures; held out, the median error is ${CAL.heldOutMedianPct}% `
+    + `and it flagged ${CAL.flagged} of the ${CAL.noFit} runs that did not fit a card (accelerate estimate-memory: at most ${ACCELERATE_FLAGGED_AT_MOST}); `
+    + `on ${CAL.afterFitRuns} runs measured after the fit the median miss is ${CAL.afterFitMedianPct}%, so at the edge of a card it is a fit check. `
+    + 'The model is the server\'s, or model_path (a .py, a .neurarch.json from '
     + 'neurarch-trace, zoo:<id>, hf:<org/name>), or hf_id. gpu takes "A100-40", "H100", "8xH100" (an N-card request is '
     + 'read both as plain DDP and as sharded FSDP / ZeRO-3). attention defaults to sdpa (the PyTorch and Hugging Face '
     + 'default, which keeps no score matrix); pass eager if the job uses it. Token models are sized at seq_len, or 2048 '

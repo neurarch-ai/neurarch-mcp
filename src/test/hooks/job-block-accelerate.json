@@ -1,0 +1,7 @@
+{
+  "session_id": "fixture",
+  "cwd": "__JOBDIR__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": { "command": "accelerate launch --num_processes 1 train.py" }
+}

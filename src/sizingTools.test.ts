@@ -6,6 +6,7 @@ import { TOOLS } from './tools.js';
 import { CORE_TOOLS } from './cli.js';
 import { setHfEnabled } from './sources.js';
 import { convertHFConfigToModel } from './vendor/engine.bundle.mjs';
+import { MEMORY_CALIBRATION } from './vendor/plan.bundle.mjs';
 import type { ModelArchitecture } from './lib/types.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -34,7 +35,9 @@ describe('size_training_job, the tool', () => {
     expect(CORE_TOOLS[0]).toBe('size_training_job');
     expect(tool.description).toMatch(/BEFORE submitting or launching any training job/);
     expect(tool.description).toMatch(/calibrated estimate.*AdamW with bf16 autocast/);
-    expect(tool.description).toMatch(/flagged 54/);
+    expect(tool.description).toMatch(new RegExp(`flagged ${MEMORY_CALIBRATION.flagged} of the ${MEMORY_CALIBRATION.noFit}`));
+    expect(tool.description).toMatch(new RegExp(`median miss is ${MEMORY_CALIBRATION.afterFitMedianPct}%`));
+    expect(tool.description).not.toMatch(/flagged 54|42%/);
     expect(tool.description).not.toMatch(/98%|median\s+error 8%/);
   });
 

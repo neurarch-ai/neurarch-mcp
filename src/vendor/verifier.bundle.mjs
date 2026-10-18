@@ -2683,10 +2683,39 @@ var matryoshkaDimsExceedWidth = (model) => {
   }
   return issues;
 };
+var POSITION_TABLE_NAME = /(^|[._\s-])(wpe|pos|position|positions|positional)([._\s-]|_?emb|_?embed|_?embedding|_?embeddings|$)/i;
+var MIN_POSITION_ROWS = 16;
+var hasLearnedPositionTable = (model) => {
+  const embeddings = model.components.filter((c) => c.type === "embedding");
+  if (embeddings.length < 2) return false;
+  const embById = new Map(embeddings.map((c) => [c.id, c]));
+  const typeById = new Map(model.components.map((c) => [c.id, c.type]));
+  const embInputsByAdd = /* @__PURE__ */ new Map();
+  for (const cn of model.connections ?? []) {
+    if (!embById.has(cn.from) || typeById.get(cn.to) !== "add") continue;
+    const list = embInputsByAdd.get(cn.to) ?? [];
+    if (!list.includes(cn.from)) list.push(cn.from);
+    embInputsByAdd.set(cn.to, list);
+  }
+  for (const ids of embInputsByAdd.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      const e = embById.get(id);
+      if (POSITION_TABLE_NAME.test(e.name ?? "") || POSITION_TABLE_NAME.test(e.id)) return true;
+      const rows = Number(e.params?.vocabSize ?? e.params?.numEmbeddings);
+      if (Number.isFinite(rows) && rows >= MIN_POSITION_ROWS) {
+        const others = ids.filter((o) => o !== id).map((o) => Number(embById.get(o).params?.vocabSize ?? embById.get(o).params?.numEmbeddings));
+        if (others.some((n2) => Number.isFinite(n2) && n2 > rows)) return true;
+      }
+    }
+  }
+  return false;
+};
 var attentionNoPE = (model) => {
   const attnNodes = model.components.filter((c) => ATTENTION_TYPES.has(c.type));
   if (attnNodes.length === 0) return [];
   if (model.components.some((c) => PE_TYPES.has(c.type))) return [];
+  if (hasLearnedPositionTable(model)) return [];
   return [{
     id: "attention-no-pe",
     ruleId: "attention-no-pe",
@@ -4068,6 +4097,15 @@ function num(v, fallback = 0) {
   const n2 = typeof v === "number" ? v : Number(v);
   return isFinite(n2) && n2 >= 0 ? n2 : fallback;
 }
+function gqaParams(p) {
+  const D = num(p.embedDim, 4096);
+  const H = num(p.numHeads, 32);
+  const Hkv = num(p.numKVHeads, H);
+  const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
+  const qDim = H * headDim;
+  const kvDim = Hkv * headDim;
+  return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
+}
 function estimateLayerParams(type, params, inputShape) {
   const p = params ?? {};
   if (p.tied === true) return 0;
@@ -4201,6 +4239,9 @@ function estimateLayerParams(type, params, inputShape) {
     case "coAttention":
     case "linearAttention":
     case "localAttention": {
+      if (type === "localAttention" && (p.numKVHeads != null || p.headDim != null)) {
+        return gqaParams(p);
+      }
       const d = num(p.embedDim ?? p.hiddenDim);
       return d > 0 ? 4 * d * d + 4 * d : 0;
     }
@@ -4208,7 +4249,8 @@ function estimateLayerParams(type, params, inputShape) {
     case "feedForward": {
       const d = num(p.hiddenDim ?? p.embedDim);
       const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
-      return d > 0 && ff > 0 ? d * ff + ff + ff * d + d : 0;
+      const b = p.bias === false ? 0 : ff + d;
+      return d > 0 && ff > 0 ? d * ff + ff * d + b : 0;
     }
     case "transformerBlock": {
       const d = num(p.embedDim ?? p.hiddenDim ?? p.dModel);
@@ -4310,15 +4352,8 @@ function estimateLayerParams(type, params, inputShape) {
       const D = num(p.embedDim, 96);
       return D > 0 ? 4 * D * D : 0;
     }
-    case "groupedQueryAttention": {
-      const D = num(p.embedDim, 4096);
-      const H = num(p.numHeads, 32);
-      const Hkv = num(p.numKVHeads, H);
-      const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
-      const qDim = H * headDim;
-      const kvDim = Hkv * headDim;
-      return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
-    }
+    case "groupedQueryAttention":
+      return gqaParams(p);
     case "causalAttention": {
       const D = num(p.embedDim, 512);
       return D > 0 ? 4 * D * D : 0;
@@ -4344,7 +4379,8 @@ function estimateLayerParams(type, params, inputShape) {
       const D = num(p.embedDim, 512);
       const E = num(p.numExperts, 8);
       const I = num(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
-      return D > 0 && I > 0 ? D * E + E * 3 * D * I : 0;
+      const m = p.gatedExperts === false ? 2 : 3;
+      return D > 0 && I > 0 ? D * E + E * m * D * I : 0;
     }
     case "patchEmbed": {
       const inC = num(p.inChans ?? p.inChannels, 3);
@@ -4368,12 +4404,32 @@ function estimateLayerParams(type, params, inputShape) {
     case "mla": {
       const D = num(p.embedDim, 512);
       const kv = num(p.kvLatentDim, 128);
+      const H = num(p.numHeads);
+      const nope = num(p.qkNopeHeadDim);
+      const vd = num(p.vHeadDim);
+      if (D > 0 && H > 0 && nope > 0 && vd > 0) {
+        const rope = num(p.ropeHeadDim);
+        const qk = nope + rope;
+        const qLora = num(p.qLoraRank);
+        const q = qLora > 0 ? D * qLora + qLora + qLora * H * qk : D * H * qk;
+        return q + D * (kv + rope) + kv + kv * H * (nope + vd) + H * vd * D;
+      }
       return D > 0 ? 2 * D * D + 2 * D * kv : 0;
     }
     case "mamba2": {
       const D = num(p.dModel, 512);
       const E = num(p.expand, 2);
       const S = num(p.dState, 128);
+      const H = num(p.numHeads);
+      if (D > 0 && H > 0) {
+        const di = H * num(p.headDim, 64);
+        const G = num(p.nGroups, 1);
+        const K = num(p.dConv, 4);
+        const convDim2 = di + 2 * G * S;
+        const inOut = 2 * di + 2 * G * S + H;
+        const pb = p.projBias === true;
+        return D * inOut + (pb ? inOut : 0) + convDim2 * K + (p.convBias === false ? 0 : convDim2) + 3 * H + di + di * D + (pb ? D : 0);
+      }
       const inner = D * E;
       return D > 0 ? 2 * D * inner + inner * D + inner * S : 0;
     }
@@ -4440,6 +4496,16 @@ function estimateLayerParams(type, params, inputShape) {
     case "gatedDeltaNet":
     case "gatedLinearAttention": {
       const d = num(p.dModel, 512);
+      const Hk = num(p.numKeyHeads);
+      if (type === "gatedDeltaNet" && d > 0 && Hk > 0) {
+        const Hv = num(p.numHeads, Hk);
+        const dv = num(p.headDim, 128);
+        const dk = num(p.keyHeadDim, dv);
+        const K = num(p.convKernel, 4);
+        const keyDim = Hk * dk;
+        const valDim = Hv * dv;
+        return d * (2 * keyDim + 2 * valDim) + d * 2 * Hv + (2 * keyDim + valDim) * K + 2 * Hv + dv + valDim * d;
+      }
       return d > 0 ? 4 * d * d : 0;
     }
     case "nativeSparseAttention": {
@@ -4451,7 +4517,11 @@ function estimateLayerParams(type, params, inputShape) {
       const e = num(p.numExperts, 64);
       const s = num(p.numSharedExperts, 2);
       const I = num(p.expertDim, 1408);
-      return d > 0 && I > 0 ? d * e + (e + s) * 3 * d * I : 0;
+      const Is = num(p.sharedExpertDim, I);
+      const m = p.gatedExperts === false ? 2 : 3;
+      const lat = num(p.latentDim);
+      if (d > 0 && I > 0 && lat > 0) return d * e + 2 * d * lat + e * m * lat * I + s * m * d * Is;
+      return d > 0 && I > 0 ? d * e + e * m * d * I + s * m * d * Is : 0;
     }
     case "ditBlock": {
       const d = num(p.hiddenDim, 1152);
@@ -4650,6 +4720,11 @@ function estimateLayerParams(type, params, inputShape) {
       const dConv = num(p.dConv, 4);
       if (d <= 0) return 0;
       const di = d * e;
+      const dtRank = num(p.dtRank);
+      if (dtRank > 0) {
+        const pb = p.projBias === true;
+        return d * 2 * di + (pb ? 2 * di : 0) + di * dConv + (p.convBias === false ? 0 : di) + di * (dtRank + 2 * dState) + dtRank * di + di + di * dState + di + di * d + (pb ? d : 0);
+      }
       return d * (2 * di) + di * dConv + di * (2 * dState) + di * dState + di * d;
     }
     case "relativePositionBias": {
@@ -4705,6 +4780,20 @@ function spatialElements(shape) {
 }
 function estimateLayerFlops(type, params, inputShape, outputShape) {
   const p = params;
+  {
+    const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+    const exact = type === "mla" && n(p.qkNopeHeadDim) > 0 && n(p.vHeadDim) > 0 && n(p.numHeads) > 0 || type === "mamba" && n(p.dtRank) > 0 || type === "mamba2" && n(p.numHeads) > 0 || type === "gatedDeltaNet" && n(p.numKeyHeads) > 0 || type === "localAttention" && (p.numKVHeads != null || p.headDim != null);
+    if (exact) {
+      const proj = T * estimateLayerParams(type, p, inputShape);
+      if (type === "mla") return proj + T * T * n(p.numHeads) * (n(p.qkNopeHeadDim) + n(p.ropeHeadDim));
+      if (type === "localAttention") {
+        const H = n(p.numHeads, 8);
+        const hd = n(p.headDim, H > 0 ? Math.floor(n(p.embedDim, 512) / H) : 64);
+        return proj + T * Math.min(T, n(p.windowSize, 256)) * H * hd;
+      }
+      return proj;
+    }
+  }
   switch (type) {
     // ── Linear / Dense ──────────────────────────────────────────────────────
     case "linear": {

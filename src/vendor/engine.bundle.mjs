@@ -6564,10 +6564,39 @@ var matryoshkaDimsExceedWidth = (model) => {
   }
   return issues;
 };
+var POSITION_TABLE_NAME = /(^|[._\s-])(wpe|pos|position|positions|positional)([._\s-]|_?emb|_?embed|_?embedding|_?embeddings|$)/i;
+var MIN_POSITION_ROWS = 16;
+var hasLearnedPositionTable = (model) => {
+  const embeddings = model.components.filter((c) => c.type === "embedding");
+  if (embeddings.length < 2) return false;
+  const embById = new Map(embeddings.map((c) => [c.id, c]));
+  const typeById = new Map(model.components.map((c) => [c.id, c.type]));
+  const embInputsByAdd = /* @__PURE__ */ new Map();
+  for (const cn of model.connections ?? []) {
+    if (!embById.has(cn.from) || typeById.get(cn.to) !== "add") continue;
+    const list = embInputsByAdd.get(cn.to) ?? [];
+    if (!list.includes(cn.from)) list.push(cn.from);
+    embInputsByAdd.set(cn.to, list);
+  }
+  for (const ids of embInputsByAdd.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      const e = embById.get(id);
+      if (POSITION_TABLE_NAME.test(e.name ?? "") || POSITION_TABLE_NAME.test(e.id)) return true;
+      const rows = Number(e.params?.vocabSize ?? e.params?.numEmbeddings);
+      if (Number.isFinite(rows) && rows >= MIN_POSITION_ROWS) {
+        const others = ids.filter((o) => o !== id).map((o) => Number(embById.get(o).params?.vocabSize ?? embById.get(o).params?.numEmbeddings));
+        if (others.some((n) => Number.isFinite(n) && n > rows)) return true;
+      }
+    }
+  }
+  return false;
+};
 var attentionNoPE = (model) => {
   const attnNodes = model.components.filter((c) => ATTENTION_TYPES.has(c.type));
   if (attnNodes.length === 0) return [];
   if (model.components.some((c) => PE_TYPES.has(c.type))) return [];
+  if (hasLearnedPositionTable(model)) return [];
   return [{
     id: "attention-no-pe",
     ruleId: "attention-no-pe",
@@ -7385,6 +7414,12 @@ function runAdvisorRules(model, opts = {}) {
 }
 
 // src/utils/lintEngine.ts
+init_paramEstimator();
+
+// src/utils/flopsEstimator.ts
+init_paramEstimator();
+
+// src/utils/costEstimator.ts
 init_paramEstimator();
 
 // src/utils/hardwareSpecs.ts
@@ -8595,7 +8630,10 @@ var MOE_FORWARD_METHOD = `
             hit = flat_i == e_idx
             rows = hit.any(dim=-1)
             w = (flat_w * hit).sum(dim=-1)[rows].unsqueeze(-1)
-            out[rows] += w * moe['experts'][int(e_idx)](flat_x[rows])
+            e, xe = moe['experts'][int(e_idx)], flat_x[rows]
+            # A gated (SwiGLU) expert is a ModuleDict of three matrices; an ungated one is a Sequential.
+            ye = e['down_proj'](F.silu(e['gate_proj'](xe)) * e['up_proj'](xe)) if isinstance(e, nn.ModuleDict) else e(xe)
+            out[rows] += w * ye
         return out.view_as(x)
 `;
 var HELPER_CLASSES = {
@@ -9828,13 +9866,18 @@ function generateLayerCode(comp, model, compMap, connToFrom) {
       const E = params.numExperts ?? 8;
       const K = params.topK ?? 2;
       const I = params.expertDim ?? params.ffDim ?? Math.round(D * 8 / 3);
+      const expert = params.gatedExperts === false ? `nn.Sequential(
+                    nn.Linear(${D}, ${I}, bias=False), nn.SiLU(),
+                    nn.Linear(${I}, ${D}, bias=False),
+                )` : `nn.ModuleDict({
+                    'gate_proj': nn.Linear(${D}, ${I}, bias=False),
+                    'up_proj':   nn.Linear(${D}, ${I}, bias=False),
+                    'down_proj': nn.Linear(${I}, ${D}, bias=False),
+                })`;
       return `nn.ModuleDict({
             'router': nn.Linear(${D}, ${E}, bias=False),
             'experts': nn.ModuleList([
-                nn.Sequential(
-                    nn.Linear(${D}, ${I}, bias=False), nn.SiLU(),
-                    nn.Linear(${I}, ${D}, bias=False),
-                ) for _ in range(${E})
+                ${expert} for _ in range(${E})
             ]),
         })  # MoE top-${K}`;
     }
@@ -11621,6 +11664,72 @@ function buildModalityTower(a) {
   connect(projId, rsId);
   return rsId;
 }
+function posInt(v) {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+}
+function decoderLayerSchedule(config, numLayers, layerIsMoE) {
+  const c = config;
+  const type = String(c.model_type ?? "").toLowerCase();
+  const textType = String(c._textModelType ?? "").toLowerCase();
+  const isType = (t) => type === t || textType === t;
+  const widths = Array.isArray(c.intermediate_size) ? c.intermediate_size : null;
+  const widthAt = (i) => widths ? posInt(widths[i]) ?? void 0 : void 0;
+  const pattern = typeof c.hybrid_override_pattern === "string" ? c.hybrid_override_pattern : null;
+  if (pattern && /^[M*\-E]+$/.test(pattern)) {
+    return [...pattern].map((ch) => ch === "M" ? { mixer: "mamba2", ffn: null } : ch === "*" ? { mixer: "attention", ffn: null } : ch === "E" ? { mixer: null, ffn: "moe" } : { mixer: null, ffn: "mlp" });
+  }
+  if (isType("mamba") || isType("falcon_mamba")) return Array.from({ length: numLayers }, () => ({ mixer: "mamba", ffn: null }));
+  if (isType("mamba2")) return Array.from({ length: numLayers }, () => ({ mixer: "mamba2", ffn: null }));
+  const mla = posInt(c.kv_lora_rank) != null && posInt(c.qk_nope_head_dim) != null && posInt(c.v_head_dim) != null;
+  const window2 = posInt(c.sliding_window);
+  const slidingOn = window2 != null && c.use_sliding_window !== false;
+  const deltaNet = posInt(c.linear_num_value_heads) != null && posInt(c.linear_num_key_heads) != null;
+  const attnPeriod = posInt(c.attn_layer_period);
+  const expertPeriod = posInt(c.expert_layer_period);
+  const jamba = attnPeriod != null && (isType("jamba") || c.mamba_d_state != null);
+  const layerTypes = Array.isArray(c.layer_types) && c.layer_types.length === numLayers ? c.layer_types : null;
+  const gemma2 = isType("gemma2");
+  const gemma3 = isType("gemma3") || isType("gemma3_text");
+  const slidingPattern = posInt(c.sliding_window_pattern) ?? (gemma3 ? 6 : gemma2 ? 2 : null);
+  const fullInterval = posInt(c.full_attention_interval);
+  const mixerAt = (i) => {
+    if (jamba) return i % attnPeriod === (Number(c.attn_layer_offset) || 0) ? "attention" : "mamba";
+    let kind = "full";
+    if (layerTypes) {
+      const t = String(layerTypes[i]);
+      kind = t === "sliding_attention" ? "sliding" : t === "linear_attention" ? "linear" : "full";
+    } else if (fullInterval != null && deltaNet) {
+      kind = (i + 1) % fullInterval === 0 ? "full" : "linear";
+    } else if (slidingPattern != null && (gemma2 || gemma3 || c.sliding_window_pattern != null)) {
+      kind = (i + 1) % slidingPattern === 0 ? "full" : "sliding";
+    }
+    if (kind === "linear" && deltaNet) return "gatedDeltaNet";
+    if (kind === "sliding" && slidingOn) return "sliding";
+    return mla ? "mla" : "attention";
+  };
+  const ffnAt = (i) => {
+    if (jamba && expertPeriod != null) {
+      const n = Number(c.num_experts ?? c.num_local_experts ?? 0);
+      return n > 1 && i % expertPeriod === (Number(c.expert_layer_offset) || 0) ? "moe" : "dense";
+    }
+    return layerIsMoE(i) ? "moe" : "dense";
+  };
+  return Array.from({ length: numLayers }, (_, i) => {
+    const mixer = mixerAt(i);
+    const spec = { mixer, ffn: ffnAt(i) };
+    const w = widthAt(i);
+    if (w != null) spec.ffnWidth = w;
+    if (mixer === "sliding") spec.window = window2;
+    return spec;
+  });
+}
+function mtpModuleCount(config) {
+  const c = config;
+  const declared = posInt(c.num_nextn_predict_layers) ?? posInt(c.mtp_num_hidden_layers) ?? posInt(c.num_mtp_layers);
+  if (declared != null) return declared;
+  const type = String(c._textModelType ?? c.model_type ?? "").toLowerCase();
+  return type === "qwen3_next" ? 1 : 0;
+}
 function hfVisionFamilyOf(modelType) {
   const t = String(modelType ?? "").toLowerCase();
   if (t === "convnext") return "convnext";
@@ -11634,6 +11743,7 @@ function convertHFConfigToModel(modelId, config) {
   const connections = [];
   const generateId = () => `comp-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
   const generateConnId = () => `conn-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+  const extraOutputs = [];
   let yPos = 50;
   const xPos = 200;
   const verticalSpacing = 200;
@@ -12194,16 +12304,18 @@ function convertHFConfigToModel(modelId, config) {
     const numLayers = config.num_hidden_layers || config.n_layer || 12;
     const hiddenSize = config.hidden_size || config.n_embd || 768;
     const numHeads = config.num_attention_heads || config.n_head || 12;
-    const intermediateSize = config.intermediate_size || config.n_inner || config.ffn_dim_hidden || 3072;
+    const intermediateSize = (Array.isArray(config.intermediate_size) ? Number(config.intermediate_size[0]) || void 0 : config.intermediate_size) || config.n_inner || config.ffn_dim_hidden || 3072;
     const numKVHeads = config.num_key_value_heads ?? config.num_kv_heads ?? numHeads;
     const headDim = config.head_dim ?? (numHeads > 0 ? Math.floor(hiddenSize / numHeads) : 64);
     const useGQA = isGatedDecoder || config.num_key_value_heads != null;
     const cfgAny = config;
-    const useRMSNorm = cfgAny.rms_norm_eps != null || isGatedDecoder && cfgAny.layer_norm_epsilon == null && cfgAny.layer_norm_eps == null;
+    const hybridSSM = typeLower === "jamba" || typeLower === "nemotron_h" || typeof cfgAny.hybrid_override_pattern === "string" || cfgAny.attn_layer_period != null;
+    const useRMSNorm = cfgAny.rms_norm_eps != null || hybridSSM || isGatedDecoder && cfgAny.layer_norm_epsilon == null && cfgAny.layer_norm_eps == null;
     const normType = useRMSNorm ? "rmsNorm" : "layerNorm";
     const normLabel = useRMSNorm ? "RMSNorm" : "LayerNorm";
     const useRoPE = useRMSNorm || cfgAny.rope_theta != null || cfgAny.rope_scaling != null;
     const maxPositions = cfgAny.max_position_embeddings ?? cfgAny.n_positions ?? 0;
+    const noPositional = hybridSSM;
     const numExperts = config.num_local_experts ?? config.num_experts ?? config.n_routed_experts ?? 0;
     const numSharedExperts = config.n_shared_experts ?? config.num_shared_experts ?? 0;
     const expertDim = config.moe_intermediate_size ?? config.expert_intermediate_size ?? intermediateSize;
@@ -12242,19 +12354,21 @@ function convertHFConfigToModel(modelId, config) {
     });
     lastId = embeddingId;
     yPos += verticalSpacing;
-    const posId = generateId();
-    components.push({
-      id: posId,
-      type: useRoPE ? "rope" : "learnedPositionalEmbedding",
-      name: useRoPE ? "RoPE" : "Positional_Embedding",
-      position: { x: xPos, y: yPos },
-      params: useRoPE ? { headDim, theta: cfgAny.rope_theta ?? 1e4 } : { maxLen: maxPositions || 1024, embedDim: hiddenSize },
-      inputs: [],
-      outputs: []
-    });
-    connections.push({ id: generateConnId(), from: lastId, to: posId, fromPort: "bottom", toPort: "top" });
-    lastId = posId;
-    yPos += verticalSpacing;
+    if (!noPositional) {
+      const posId = generateId();
+      components.push({
+        id: posId,
+        type: useRoPE ? "rope" : "learnedPositionalEmbedding",
+        name: useRoPE ? "RoPE" : "Positional_Embedding",
+        position: { x: xPos, y: yPos },
+        params: useRoPE ? { headDim, theta: cfgAny.rope_theta ?? 1e4 } : { maxLen: maxPositions || 1024, embedDim: hiddenSize },
+        inputs: [],
+        outputs: []
+      });
+      connections.push({ id: generateConnId(), from: lastId, to: posId, fromPort: "bottom", toPort: "top" });
+      lastId = posId;
+      yPos += verticalSpacing;
+    }
     const visionCfg = config.vision_config;
     const audioCfg = config.audio_config;
     const towerOuts = [];
@@ -12304,84 +12418,196 @@ function convertHFConfigToModel(modelId, config) {
     }
     const layerSpacing = 600;
     const componentSpacing = 120;
-    for (let i = 0; i < numLayers; i++) {
-      const layerStartY = yPos;
+    const schedule = decoderLayerSchedule(config, numLayers, layerIsMoE);
+    const streamStartId = lastId;
+    const nemotronH = typeof cfgAny.hybrid_override_pattern === "string";
+    const mixerNode = (kind, label, window2) => {
+      switch (kind) {
+        case "sliding":
+          return {
+            type: "localAttention",
+            name: `Attention_${label}`,
+            params: { embedDim: hiddenSize, numHeads, numKVHeads, headDim, windowSize: window2 }
+          };
+        case "mla": {
+          const p = {
+            embedDim: hiddenSize,
+            numHeads,
+            kvLatentDim: cfgAny.kv_lora_rank,
+            ropeHeadDim: cfgAny.qk_rope_head_dim ?? 0,
+            qkNopeHeadDim: cfgAny.qk_nope_head_dim,
+            vHeadDim: cfgAny.v_head_dim
+          };
+          if (posInt(cfgAny.q_lora_rank) != null) p.qLoraRank = cfgAny.q_lora_rank;
+          return { type: "mla", name: `Attention_${label}`, params: p };
+        }
+        case "mamba": {
+          const p = {
+            dModel: hiddenSize,
+            dState: cfgAny.mamba_d_state ?? cfgAny.state_size ?? 16,
+            dConv: cfgAny.mamba_d_conv ?? cfgAny.conv_kernel ?? 4,
+            expand: cfgAny.mamba_expand ?? cfgAny.expand ?? 2,
+            dtRank: cfgAny.mamba_dt_rank ?? cfgAny.time_step_rank ?? Math.ceil(hiddenSize / 16)
+          };
+          const convBias = cfgAny.mamba_conv_bias ?? cfgAny.use_conv_bias;
+          const projBias = cfgAny.mamba_proj_bias ?? cfgAny.use_bias;
+          if (typeof convBias === "boolean") p.convBias = convBias;
+          if (typeof projBias === "boolean") p.projBias = projBias;
+          return { type: "mamba", name: `Mamba_${label}`, params: p };
+        }
+        case "mamba2": {
+          const heads = nemotronH ? cfgAny.mamba_num_heads : cfgAny.num_heads ?? cfgAny.mamba_num_heads;
+          const hd = nemotronH ? cfgAny.mamba_head_dim : cfgAny.mamba_head_dim ?? cfgAny.head_dim;
+          const p = {
+            dModel: hiddenSize,
+            dState: cfgAny.ssm_state_size ?? cfgAny.mamba_state_dim ?? cfgAny.state_size ?? 128,
+            expand: posInt(heads) && posInt(hd) ? heads * hd / hiddenSize : cfgAny.expand ?? 2,
+            headDim: hd ?? 64,
+            chunkSize: cfgAny.chunk_size ?? 256
+          };
+          if (posInt(heads) != null) p.numHeads = heads;
+          p.nGroups = cfgAny.n_groups ?? cfgAny.mamba_num_groups ?? 1;
+          p.dConv = cfgAny.conv_kernel ?? cfgAny.mamba_d_conv ?? 4;
+          if (typeof cfgAny.use_conv_bias === "boolean") p.convBias = cfgAny.use_conv_bias;
+          const projBias = cfgAny.mamba_proj_bias ?? cfgAny.use_bias;
+          if (typeof projBias === "boolean") p.projBias = projBias;
+          return { type: "mamba2", name: `Mamba_${label}`, params: p };
+        }
+        case "gatedDeltaNet":
+          return { type: "gatedDeltaNet", name: `DeltaNet_${label}`, params: {
+            dModel: hiddenSize,
+            numHeads: cfgAny.linear_num_value_heads,
+            headDim: cfgAny.linear_value_head_dim ?? 128,
+            numKeyHeads: cfgAny.linear_num_key_heads,
+            keyHeadDim: cfgAny.linear_key_head_dim ?? cfgAny.linear_value_head_dim ?? 128,
+            convKernel: cfgAny.linear_conv_kernel_dim ?? 4
+          } };
+        default:
+          return {
+            type: useGQA ? "groupedQueryAttention" : "multiHeadAttention",
+            name: `Attention_${label}`,
+            params: useGQA ? { embedDim: hiddenSize, numHeads, numKVHeads, headDim } : { numHeads, hiddenDim: hiddenSize }
+          };
+      }
+    };
+    const ffnNode = (kind, label, width) => {
+      if (kind === "moe") {
+        const params = numSharedExperts > 0 ? { embedDim: hiddenSize, numExperts, numSharedExperts, expertDim, topK } : { embedDim: hiddenSize, numExperts, expertDim, topK };
+        if (nemotronH && String(cfgAny.mlp_hidden_act ?? "").toLowerCase() === "relu2") params.gatedExperts = false;
+        const sharedDim = cfgAny.moe_shared_expert_intermediate_size ?? cfgAny.shared_expert_intermediate_size;
+        if (numSharedExperts > 0 && posInt(sharedDim) != null && sharedDim !== expertDim) params.sharedExpertDim = sharedDim;
+        if (numSharedExperts > 0 && posInt(cfgAny.moe_latent_size) != null) params.latentDim = cfgAny.moe_latent_size;
+        return { type: numSharedExperts > 0 ? "sharedExpertMoE" : "moeLayer", name: `MoE_${label}`, params };
+      }
+      const I = width ?? intermediateSize;
+      if (kind === "mlp") {
+        const params = { hiddenDim: hiddenSize, ffDim: I };
+        if (cfgAny.mlp_bias === false) params.bias = false;
+        return { type: "feedForward", name: `FFN_${label}`, params };
+      }
+      return isGatedDecoder ? { type: "swiglu", name: `FFN_${label}`, params: { embedDim: hiddenSize, dim: hiddenSize, intermediateSize: I } } : { type: "feedForward", name: `FFN_${label}`, params: { hiddenDim: hiddenSize, ffDim: I } };
+    };
+    const sublayer = (node, normName, addName, y) => {
       const skipId = lastId;
-      const norm1Id = generateId();
+      const normId = generateId();
       components.push({
-        id: norm1Id,
+        id: normId,
         type: normType,
-        name: `${normLabel}_${i + 1}_1`,
-        position: { x: xPos, y: layerStartY },
+        name: normName,
+        position: { x: xPos, y },
         params: { normalizedShape: hiddenSize },
         inputs: [],
         outputs: []
       });
-      connections.push({ id: generateConnId(), from: lastId, to: norm1Id, fromPort: "bottom", toPort: "top" });
-      const attentionId = generateId();
+      connections.push({ id: generateConnId(), from: lastId, to: normId, fromPort: "bottom", toPort: "top" });
+      const nodeId = generateId();
       components.push({
-        id: attentionId,
-        type: useGQA ? "groupedQueryAttention" : "multiHeadAttention",
-        name: `Attention_${i + 1}`,
-        position: { x: xPos, y: layerStartY + componentSpacing },
-        params: useGQA ? { embedDim: hiddenSize, numHeads, numKVHeads, headDim } : { numHeads, hiddenDim: hiddenSize },
+        id: nodeId,
+        type: node.type,
+        name: node.name,
+        position: { x: xPos, y: y + componentSpacing },
+        params: node.params,
         inputs: [],
         outputs: []
       });
-      connections.push({ id: generateConnId(), from: norm1Id, to: attentionId, fromPort: "bottom", toPort: "top" });
-      const add1Id = generateId();
+      connections.push({ id: generateConnId(), from: normId, to: nodeId, fromPort: "bottom", toPort: "top" });
+      const addId = generateId();
       components.push({
-        id: add1Id,
+        id: addId,
         type: "add",
-        name: `Add_${i + 1}_attn`,
-        position: { x: xPos, y: layerStartY + componentSpacing * 2 },
+        name: addName,
+        position: { x: xPos, y: y + componentSpacing * 2 },
         params: {},
         inputs: [],
         outputs: []
       });
-      connections.push({ id: generateConnId(), from: attentionId, to: add1Id, fromPort: "bottom", toPort: "top" });
-      connections.push({ id: generateConnId(), from: skipId, to: add1Id, fromPort: "bottom", toPort: "left" });
-      const norm2Id = generateId();
-      components.push({
-        id: norm2Id,
-        type: normType,
-        name: `${normLabel}_${i + 1}_2`,
-        position: { x: xPos, y: layerStartY + componentSpacing * 3 },
-        params: { normalizedShape: hiddenSize },
-        inputs: [],
-        outputs: []
-      });
-      connections.push({ id: generateConnId(), from: add1Id, to: norm2Id, fromPort: "bottom", toPort: "top" });
-      const ffId = generateId();
-      const thisMoE = layerIsMoE(i);
-      const moeType = numSharedExperts > 0 ? "sharedExpertMoE" : "moeLayer";
-      components.push({
-        id: ffId,
-        type: thisMoE ? moeType : isGatedDecoder ? "swiglu" : "feedForward",
-        name: thisMoE ? `MoE_${i + 1}` : `FFN_${i + 1}`,
-        position: { x: xPos, y: layerStartY + componentSpacing * 4 },
-        // `dim` is what pythonExporter reads for SwiGLU; `embedDim`/`intermediateSize`
-        // are what codeGenerator + paramEstimator read. Emit all three so every
-        // consumer resolves the real size (not the 512 literal fallback).
-        params: thisMoE ? numSharedExperts > 0 ? { embedDim: hiddenSize, numExperts, numSharedExperts, expertDim, topK } : { embedDim: hiddenSize, numExperts, expertDim, topK } : isGatedDecoder ? { embedDim: hiddenSize, dim: hiddenSize, intermediateSize } : { hiddenDim: hiddenSize, ffDim: intermediateSize },
-        inputs: [],
-        outputs: []
-      });
-      connections.push({ id: generateConnId(), from: norm2Id, to: ffId, fromPort: "bottom", toPort: "top" });
-      const add2Id = generateId();
-      components.push({
-        id: add2Id,
-        type: "add",
-        name: `Add_${i + 1}_ffn`,
-        position: { x: xPos, y: layerStartY + componentSpacing * 5 },
-        params: {},
-        inputs: [],
-        outputs: []
-      });
-      connections.push({ id: generateConnId(), from: ffId, to: add2Id, fromPort: "bottom", toPort: "top" });
-      connections.push({ id: generateConnId(), from: add1Id, to: add2Id, fromPort: "bottom", toPort: "left" });
-      lastId = add2Id;
+      connections.push({ id: generateConnId(), from: nodeId, to: addId, fromPort: "bottom", toPort: "top" });
+      connections.push({ id: generateConnId(), from: skipId, to: addId, fromPort: "bottom", toPort: "left" });
+      lastId = addId;
+    };
+    const decoderBlock = (spec, label) => {
+      const layerStartY = yPos;
+      if (spec.mixer) sublayer(mixerNode(spec.mixer, label, spec.window), `${normLabel}_${label}_1`, `Add_${label}_attn`, layerStartY);
+      if (spec.ffn) sublayer(ffnNode(spec.ffn, label, spec.ffnWidth), `${normLabel}_${label}_2`, `Add_${label}_ffn`, layerStartY + componentSpacing * 3);
       yPos = layerStartY + layerSpacing;
+    };
+    for (let i = 0; i < schedule.length; i++) decoderBlock(schedule[i], String(i + 1));
+    const mtpCount = mtpModuleCount(config);
+    const mainEndId = lastId;
+    const mainY = yPos;
+    if (mtpCount > 0) {
+      const deepseekStyle = typeLower.startsWith("deepseek") || textTypeLower.startsWith("deepseek");
+      const mtpX = xPos + 520;
+      let mtpY = mainY;
+      let hiddenId = mainEndId;
+      const lastFullAttention = [...schedule].reverse().find((sp) => sp.mixer === "attention" || sp.mixer === "mla");
+      const lastMoE = schedule[schedule.length - 1]?.ffn ?? "dense";
+      for (let m = 0; m < mtpCount; m++) {
+        const tag = `MTP_${m + 1}`;
+        const push = (type, name, params) => {
+          const id = generateId();
+          components.push({ id, type, name, position: { x: mtpX, y: mtpY }, params, inputs: [], outputs: [] });
+          mtpY += verticalSpacing / 2;
+          return id;
+        };
+        const hNorm = push(normType, `${tag}_HiddenNorm`, { normalizedShape: hiddenSize });
+        connections.push({ id: generateConnId(), from: hiddenId, to: hNorm, fromPort: "right", toPort: "top" });
+        let embSrc = streamStartId;
+        if (deepseekStyle) {
+          embSrc = push("embedding", `${tag}_Embedding`, { vocabSize: config.vocab_size || 50257, embeddingDim: hiddenSize, maxSeqLen: config.max_position_embeddings || 1024 });
+          connections.push({ id: generateConnId(), from: inputId, to: embSrc, fromPort: "right", toPort: "top" });
+        }
+        const eNorm = push(normType, `${tag}_EmbeddingNorm`, { normalizedShape: hiddenSize });
+        connections.push({ id: generateConnId(), from: embSrc, to: eNorm, fromPort: "right", toPort: "top" });
+        const cat = push("concatenate", `${tag}_Concat`, { dim: -1 });
+        connections.push({ id: generateConnId(), from: eNorm, to: cat, fromPort: "bottom", toPort: "top" });
+        connections.push({ id: generateConnId(), from: hNorm, to: cat, fromPort: "bottom", toPort: "left" });
+        const proj = push("linear", `${tag}_Projection`, { inFeatures: 2 * hiddenSize, outFeatures: hiddenSize, bias: false });
+        connections.push({ id: generateConnId(), from: cat, to: proj, fromPort: "bottom", toPort: "top" });
+        lastId = proj;
+        const savedY = yPos;
+        yPos = mtpY;
+        const spec = { mixer: lastFullAttention?.mixer ?? "attention", ffn: lastMoE };
+        const before = components.length;
+        decoderBlock(spec, tag);
+        for (let k = before; k < components.length; k++) {
+          components[k].position.x = mtpX;
+          if (components[k].name === `Attention_${tag}`) components[k].params.mtp = true;
+        }
+        mtpY = yPos;
+        yPos = savedY;
+        const outNorm = push(normType, `${tag}_Norm`, { normalizedShape: hiddenSize });
+        connections.push({ id: generateConnId(), from: lastId, to: outNorm, fromPort: "bottom", toPort: "top" });
+        let tail = outNorm;
+        if (deepseekStyle) {
+          tail = push("linear", `${tag}_Head`, { inFeatures: hiddenSize, outFeatures: config.vocab_size || 50257, bias: false });
+          connections.push({ id: generateConnId(), from: outNorm, to: tail, fromPort: "bottom", toPort: "top" });
+        }
+        hiddenId = lastId;
+        extraOutputs.push({ from: tail, name: `${tag}_Output` });
+      }
+      lastId = mainEndId;
+      yPos = mainY;
     }
     if (config.tie_word_embeddings === false) {
       const finalNormId = generateId();
@@ -13544,6 +13770,20 @@ function convertHFConfigToModel(modelId, config) {
     fromPort: "bottom",
     toPort: "top"
   });
+  for (const extra of extraOutputs) {
+    const id = generateId();
+    const src = components.find((c) => c.id === extra.from);
+    components.push({
+      id,
+      type: "output",
+      name: extra.name,
+      position: { x: src?.position.x ?? xPos, y: (src?.position.y ?? yPos) + verticalSpacing / 2 },
+      params: {},
+      inputs: [],
+      outputs: []
+    });
+    connections.push({ id: generateConnId(), from: extra.from, to: id, fromPort: "bottom", toPort: "top" });
+  }
   rebuildNodeIO(components, connections);
   components.forEach((comp) => {
     const inferred = inferScopeFromHFName(comp.name);
@@ -13561,7 +13801,7 @@ function inferScopeFromHFName(name) {
   if (m) return `decoder.layer.${parseInt(m[2], 10) - 1}.attention`;
   m = /^Dec_FFN_(\d+)$/.exec(name);
   if (m) return `decoder.layer.${parseInt(m[1], 10) - 1}.ffn`;
-  m = /^(Attention|Add)_(\d+)$/.exec(name);
+  m = /^(Attention|Mamba|DeltaNet|Add)_(\d+)$/.exec(name);
   if (m) return `layer.${parseInt(m[2], 10) - 1}.attention`;
   m = /^LayerNorm_(\d+)_1$/.exec(name);
   if (m) return `layer.${parseInt(m[1], 10) - 1}.attention`;
