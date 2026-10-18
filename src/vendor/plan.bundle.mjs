@@ -7497,7 +7497,7 @@ function inferenceSizeFixes(facts, cardGb) {
     });
     out.push({
       action: "load the weights in 8 or 4 bits",
-      because: "halving or quartering the weight bytes is the largest single saving",
+      because: "halving or quartering the weight bytes is the largest single reduction",
       changesTraining: true
     });
   }
@@ -7508,10 +7508,12 @@ function sizeFixes(facts, cardGb) {
   const out = [];
   const b = batchThatFits(facts, cardGb);
   if (b != null && facts.batch != null && b < facts.batch) {
-    const accum = Math.ceil(facts.batch / b);
+    let micro = b;
+    while (micro > 1 && facts.batch % micro !== 0) micro--;
+    const accum = facts.batch / micro;
     out.push({
-      action: `batch ${b} with gradient accumulation of ${accum} steps`,
-      because: `${b} is the largest batch whose predicted peak fits ${f2(cardGb)} GB with ${Math.round((HEADROOM2 - 1) * 100)}% headroom; accumulating ${accum} steps keeps the effective batch at ${b * accum}`,
+      action: `batch ${micro} with gradient accumulation of ${accum} steps`,
+      because: `${b} is the largest batch whose predicted peak fits ${f2(cardGb)} GB with ${Math.round((HEADROOM2 - 1) * 100)}% headroom; ${micro} x ${accum} keeps the effective batch at ${facts.batch}`,
       changesTraining: false
     });
   }
