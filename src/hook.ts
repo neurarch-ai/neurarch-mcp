@@ -6,7 +6,18 @@
  * the call is a Bash command that launches training (`python train.py`,
  * `accelerate launch`, `torchrun`, `deepspeed`, `sky launch`) and the model,
  * batch and card can be read off the command line or a `.neurarch.yml`
- * `job:` block, the job is sized exactly as size_training_job sizes it. If it
+ * `job:` block, the job is sized exactly as size_training_job sizes it.
+ *
+ * The `job:` block is the one the neurarch-bot Action reads (its
+ * scripts/job.py), with the same semantics: a top-level `job:` and a model
+ * entry's own `job:` merged over it key by key; keys gpu, batch, seq_len,
+ * grad_accum, attention, epochs, samples, each a value or a `file:key`
+ * pointer into a YAML or JSON training config read relative to the
+ * repository root (the directory of the .neurarch.yml), dotted keys allowed;
+ * unknown keys ignored. `batch` is the per-step batch the memory is sized at,
+ * and `grad_accum` only sets the effective batch the reason quotes. One key is
+ * the hook's own: `model`, because the bot takes the model from its traced
+ * file list and the hook has no trace to read it from. If it
  * will not fit the card it declares, the hook exits 2 with the reason on
  * stderr, which blocks the call and hands the reason to the agent. Every other
  * case exits 0 and prints nothing.
@@ -50,20 +61,32 @@ export interface LaunchSpec {
   /** Processes, from `--nproc_per_node`, `--num_processes` or `--num_gpus`. */
   processes?: number;
   seqLen?: number;
+  /** Gradient accumulation steps (`--gradient_accumulation_steps`), for the effective batch. */
+  gradAccum?: number;
   gpu?: string;
   attention?: Attention;
   /** A flag that means the full fine-tune peak does not describe this job. */
   unmodelled?: string;
 }
 
-/** The `job:` block of a .neurarch.yml. */
+/** The `job:` block of a .neurarch.yml, after `file:key` pointers are read. */
 export interface JobBlock {
+  /** Hook-only: the bot reads the model from its traced file list. */
   model?: string;
   gpu?: string;
   batch?: number;
   seq_len?: number;
+  grad_accum?: number;
   attention?: Attention;
+  epochs?: number;
+  samples?: number;
 }
+
+/** The keys neurarch-bot's scripts/job.py reads, plus `model`. Anything else is ignored. */
+export const JOB_KEYS = ['gpu', 'batch', 'seq_len', 'grad_accum', 'attention', 'epochs', 'samples', 'model'] as const;
+const NUMERIC_JOB_KEYS = new Set(['batch', 'seq_len', 'grad_accum', 'epochs', 'samples']);
+/** The bot's `file:key` pointer: a .yml / .yaml / .json path, a colon, a dotted key. */
+const JOB_REF = /^(?<file>[^:\s]+\.(?:ya?ml|json)):(?<key>[A-Za-z0-9_.\-]+)$/;
 
 /** A shell line split into words, quotes respected; `&&`, `;`, `|` become their own words. */
 export function shellWords(cmd: string): string[] {
@@ -103,6 +126,7 @@ const BATCH_FLAGS = ['--batch', '--batch_size', '--batch-size', '--train_batch_s
 const PER_DEVICE_FLAGS = ['--per_device_train_batch_size', '--per-device-train-batch-size', '--micro_batch_size', '--micro-batch-size'];
 const SEQ_FLAGS = ['--max_seq_length', '--max-seq-length', '--max_seq_len', '--seq_len', '--seq-len', '--max_length', '--max-length', '--block_size', '--block-size', '--sequence_len', '--context_length'];
 const MODEL_FLAGS = ['--model', '--model_name_or_path', '--model-name-or-path', '--model_name', '--model-name', '--model_path', '--model-path', '--model_id', '--base_model'];
+const ACCUM_FLAGS = ['--gradient_accumulation_steps', '--gradient-accumulation-steps', '--grad_accum', '--grad-accum', '--accumulation_steps'];
 const PROC_FLAGS = ['--nproc_per_node', '--nproc-per-node', '--num_processes', '--num-processes', '--num_gpus', '--num-gpus'];
 const GPU_FLAGS = ['--gpu', '--gpus'];
 const ATTN_FLAGS = ['--attn_implementation', '--attn-implementation', '--attention'];
@@ -178,6 +202,7 @@ function readFlags(args: string[], launcher: LaunchSpec['launcher']): Omit<Launc
     else if (PER_DEVICE_FLAGS.includes(name)) spec.perDeviceBatch = positiveInt(value) ?? spec.perDeviceBatch;
     else if (SEQ_FLAGS.includes(name)) spec.seqLen = positiveInt(value) ?? spec.seqLen;
     else if (MODEL_FLAGS.includes(name) && value) spec.model = value;
+    else if (ACCUM_FLAGS.includes(name)) spec.gradAccum = positiveInt(value) ?? spec.gradAccum;
     else if (PROC_FLAGS.includes(name)) spec.processes = positiveInt(value) ?? spec.processes;
     else if (GPU_FLAGS.includes(name) && value) spec.gpu = launcher === 'sky' ? skyGpu(value) : value;
     else if (ATTN_FLAGS.includes(name) && value) {
@@ -188,37 +213,123 @@ function readFlags(args: string[], launcher: LaunchSpec['launcher']): Omit<Launc
   return spec;
 }
 
-/** The nearest .neurarch.yml or .neurarch.yaml at or above `dir`, as a parsed object, or null. */
-export async function findJobBlock(dir: string): Promise<{ path: string; job: JobBlock } | null> {
+const isMap = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+
+function dig(data: unknown, key: string): unknown {
+  let d = data;
+  for (const part of key.split('.')) {
+    if (!isMap(d) || !(part in d)) throw new Error(`key ${key} not found`);
+    d = d[part];
+  }
+  return d;
+}
+
+/** One `file:key` pointer read at `root`, or throws. JSON by extension, else the YAML subset. */
+async function readRef(root: string, file: string, key: string): Promise<unknown> {
+  const text = await readFile(isAbsolute(file) ? file : join(root, file), 'utf-8');
+  return dig(file.endsWith('.json') ? JSON.parse(text) : parseYamlSubset(text), key);
+}
+
+/**
+ * A raw job block resolved the way neurarch-bot resolves it: pointers read,
+ * numeric keys coerced to positive whole numbers. A key that cannot be read
+ * or is not a number is dropped and named in `problems`, never guessed.
+ */
+export async function resolveJob(raw: Record<string, unknown>, root: string): Promise<{ job: JobBlock; sources: Record<string, string>; problems: string[] }> {
+  const job: Record<string, unknown> = {};
+  const sources: Record<string, string> = {};
+  const problems: string[] = [];
+  for (const k of JOB_KEYS) {
+    if (!(k in raw) || raw[k] == null) continue;
+    let v: unknown = raw[k];
+    const m = typeof v === 'string' ? JOB_REF.exec(v.trim()) : null;
+    if (m?.groups) {
+      try {
+        v = await readRef(root, m.groups.file, m.groups.key);
+        sources[k] = `${m.groups.file}:${m.groups.key}`;
+      } catch (e) {
+        problems.push(`job.${k} reads ${m.groups.file}:${m.groups.key}: ${(e as Error).message}`);
+        continue;
+      }
+    }
+    if (NUMERIC_JOB_KEYS.has(k)) {
+      const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN;
+      if (!(Number.isInteger(n) && n > 0)) { problems.push(`job.${k} is ${JSON.stringify(v)}, not a positive whole number`); continue; }
+      job[k] = n;
+    } else if (k === 'attention') {
+      const a = String(v).trim().toLowerCase();
+      if (a === 'sdpa' || a === 'flash' || a === 'eager') job[k] = a;
+      else problems.push(`job.attention is ${JSON.stringify(v)}, not sdpa, flash or eager`);
+    } else if (typeof v === 'string' || typeof v === 'number') {
+      job[k] = String(v).trim();
+    }
+  }
+  return { job: job as JobBlock, sources, problems };
+}
+
+/** The file part of a model reference: `models/doc_lm.py:DocLM` -> `models/doc_lm.py`. */
+const fileOf = (ref: string) => ref.replace(/:[A-Za-z_][\w.]*$/, '');
+
+/**
+ * Which job block applies, by the bot's merge rule: the top-level `job:`,
+ * then one model entry's own `job:` over it, key by key. The entry is the one
+ * whose `path` (or hook-only `job.model`) names the model being launched;
+ * with no such match, the only entry that has a `job:`, if there is exactly
+ * one. Several candidates and no match: the top level alone, rather than a
+ * guess.
+ */
+export function pickJob(cfg: Record<string, unknown>, modelHint: string | undefined, root: string): Record<string, unknown> | null {
+  const top = isMap(cfg.job) ? cfg.job : {};
+  const entries = (Array.isArray(cfg.models) ? cfg.models : []).filter(isMap).filter(e => isMap(e.job));
+  const norm = (x: string) => resolve(root, fileOf(x.trim()));
+  let own: Record<string, unknown> | undefined;
+  if (modelHint) {
+    const hint = /^(zoo|hf):/i.test(modelHint) ? modelHint : norm(modelHint);
+    own = entries.find(e => {
+      const j = e.job as Record<string, unknown>;
+      if (typeof j.model === 'string' && (j.model === modelHint || (!/^(zoo|hf):/i.test(j.model) && norm(j.model) === hint))) return true;
+      return typeof e.path === 'string' && norm(e.path) === hint;
+    })?.job as Record<string, unknown> | undefined;
+  }
+  if (!own && entries.length === 1) own = entries[0].job as Record<string, unknown>;
+  const merged = { ...top, ...(own ?? {}) };
+  return Object.keys(merged).length ? merged : null;
+}
+
+/**
+ * The nearest .neurarch.yml or .neurarch.yaml at or above `dir`, its job for
+ * the model being launched, resolved. Null when there is no file or no job.
+ */
+export async function findJobBlock(dir: string, modelHint?: string): Promise<{ path: string; root: string; job: JobBlock; sources: Record<string, string>; problems: string[] } | null> {
   let d = resolve(dir);
   for (let depth = 0; depth <= MAX_SEARCH_DEPTH; depth++) {
     for (const name of ['.neurarch.yml', '.neurarch.yaml']) {
       const p = join(d, name);
       const st = await stat(p).catch(() => null);
       if (!st?.isFile()) continue;
-      const cfg = parseYamlSubset(await readFile(p, 'utf-8'));
-      const raw = cfg.job;
-      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-      const j = raw as Record<string, unknown>;
-      const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : typeof v === 'string' ? positiveInt(v) : undefined);
-      const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : typeof v === 'number' ? String(v) : undefined);
-      const attn = str(j.attention);
-      return {
-        path: p,
-        job: {
-          model: str(j.model),
-          gpu: str(j.gpu),
-          batch: int(j.batch ?? j.batch_size),
-          seq_len: int(j.seq_len),
-          attention: attn === 'eager' || attn === 'flash' || attn === 'sdpa' ? attn : undefined,
-        },
-      };
+      const raw = pickJob(parseYamlSubset(await readFile(p, 'utf-8')), modelHint, d);
+      if (!raw) return null;
+      return { path: p, root: d, ...(await resolveJob(raw, d)) };
     }
     const up = dirname(d);
     if (up === d) break;
     d = up;
   }
   return null;
+}
+
+/**
+ * (micro, steps) for a target effective batch under a per-step cap: the
+ * bot's `accumulation_split`, so the hook and the PR comment offer the same
+ * fix. A divisor is preferred so the effective batch does not move; when the
+ * only divisors are far below the cap, the cap and the rounded-up steps.
+ */
+export function accumulationSplit(target: number, maxBatch: number): [number, number] {
+  if (maxBatch >= target) return [target, 1];
+  let best = 1;
+  for (let d = 1; d <= maxBatch; d++) if (target % d === 0) best = d;
+  if (best * 2 >= maxBatch) return [best, target / best];
+  return [maxBatch, Math.ceil(target / maxBatch)];
 }
 
 /**
@@ -267,10 +378,11 @@ export async function decide(payload: unknown): Promise<HookDecision> {
     const launch = parseLaunch(command);
     if (!launch || launch.unmodelled) return NO();
     const cwd = typeof p.cwd === 'string' && p.cwd ? p.cwd : process.cwd();
-    const block = await findJobBlock(cwd).catch(() => null);
+    const block = await findJobBlock(cwd, launch.model).catch(() => null);
     const job = block?.job ?? {};
 
     const modelSpec = launch.model ?? job.model;
+    const modelCwd = launch.model ? cwd : block?.root ?? cwd;
     let card = launch.gpu ?? job.gpu;
     const processes = launch.processes;
     let batch = launch.batch;
@@ -283,9 +395,10 @@ export async function decide(payload: unknown): Promise<HookDecision> {
     if ('error' in parsed) return NO();
     if (processes && processes > 1 && parsed.count === 1) card = `${processes}x${parsed.card.id}`;
 
-    const model = await loadJobModel(modelSpec, cwd);
+    const model = await loadJobModel(modelSpec, modelCwd);
     const seqLen = launch.seqLen ?? job.seq_len;
     const attention = launch.attention ?? job.attention;
+    const accum = launch.gradAccum ?? job.grad_accum ?? 1;
     const r = sizeJob(model, { batchSize: batch, gpu: card, seqLen, attention });
     if (!r.sized || r.fits !== false || !r.memory) return NO();
 
@@ -297,16 +410,25 @@ export async function decide(payload: unknown): Promise<HookDecision> {
       `  ${r.verdict}.`,
       `  peak ~${r.memory.peakGb} GB (${r.memory.needGb} GB with headroom), card ${label}${one ? ` (${parsed.card.gb} GB)` : ''}.`,
       largest != null
-        ? `  largest batch that fits ${label}: ${largest}${r.job.seqLen ? ` at seq ${r.job.seqLen}` : ''}.`
+        ? `  largest batch that fits ${label}: ${largest}${r.job.seqLen ? ` at seq ${r.job.seqLen}` : ''}.${accumLine(batch * accum, largest)}`
         : `  no batch fits ${label}: weights and optimizer state alone are ${r.memory.weightsAndOptimizerGb} GB.`,
       `  smallest card that holds it at batch ${batch}: ${r.smallestFitGpu ?? (r.twoCardSplit ? `two ${r.twoCardSplit.gpu}` : 'none listed')}.`,
-      `  job read from: ${[`the command (${launch.launcher})`, block ? block.path : null].filter(Boolean).join(' and ')}; model ${modelSpec}, batch ${batch}${r.job.seqLen ? `, seq ${r.job.seqLen}` : ''}, attention ${r.job.attention}.`,
+      `  job read from: ${[`the command (${launch.launcher})`, block ? block.path : null, ...Object.entries(block?.sources ?? {}).map(([k, v]) => `${k} from ${v}`)].filter(Boolean).join(', ')}; model ${modelSpec}, batch ${batch}${accum > 1 ? ` x ${accum} accumulation steps (effective ${batch * accum})` : ''}${r.job.seqLen ? `, seq ${r.job.seqLen}` : ''}, attention ${r.job.attention}.`,
       '  A calibrated estimate, not a measurement: at the edge of a card it is a fit check. If you are sure it fits, prefix the command with NEURARCH_ALLOW_OOM=1.',
     ];
     return { block: true, reason: lines.join('\n') + '\n' };
   } catch {
     return NO();
   }
+}
+
+/** " Batch 4 with 8 gradient-accumulation steps keeps the effective batch at 32." or ''. */
+function accumLine(target: number, largest: number): string {
+  if (!(target > 0) || largest < 1) return '';
+  const [micro, steps] = accumulationSplit(target, largest);
+  if (steps <= 1) return '';
+  const eff = micro * steps;
+  return ` Batch ${micro} with ${steps} gradient-accumulation steps keeps the effective batch at ${eff}${eff === target ? '' : ` (the job had ${target})`}.`;
 }
 
 /** Read stdin, decide, exit. 2 blocks the Bash call in Claude Code; 0 lets it run. */

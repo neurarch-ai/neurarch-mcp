@@ -1,0 +1,5 @@
+# The training config the bot's example points at (job.batch: configs/pretrain.yaml:batch_size).
+batch_size: 32
+seq_len: 2048
+grad_accum: 4
+lr: 3.0e-4
