@@ -23,9 +23,17 @@ Call `size_training_job` before a job launches and the agent learns, for the mod
 
 ![size_training_job refusing batch 32 on a T4, then confirming batch 12 fits](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/size-training-job.gif)
 
+**A model straight from Hugging Face.** Qwen3-8B fits no single card at batch 8, and on eight A100-40s only sharded:
+
+![size_training_job on hf:Qwen/Qwen3-8B: no single card holds it, 8xA100-40 fits only under FSDP / ZeRO-3](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/size-qwen3-8b.gif)
+
 **After a CUDA out-of-memory error.** The message is read against the same estimate, and the cause comes back with the fix that leaves training unchanged listed first:
 
 ![diagnose_oom naming too-big-for-card and batch 8 with 4 accumulation steps](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/diagnose-oom.gif)
+
+**Not every OOM means a smaller batch.** When the job fits and the allocator does not, the fix leaves training as it is:
+
+![diagnose_oom naming fragmentation and expandable_segments, with batch 8 unchanged](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/oom-fragmentation.gif)
 
 **Whether it forward-passes.** The shipped [`examples/tiny-vit.py`](./examples/tiny-vit.py) builds an attention layer its head count does not divide:
 
@@ -35,7 +43,7 @@ Call `size_training_job` before a job launches and the agent learns, for the mod
 
 ![the PreToolUse hook blocking batch 32 on a T4 and letting batch 12 through](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/hook.gif)
 
-<sub>Every number in these recordings is copied from the 0.17.1 tools' output on [`phi3-mini`](./src/test/templates/phi3-mini.neurarch.json) and [`tiny-vit.py`](./examples/tiny-vit.py); the model's closing sentences are scripted.</sub>
+<sub>Every number in these recordings is copied from the tools' real output (0.17.1 and 0.17.2) on [`phi3-mini`](./src/test/templates/phi3-mini.neurarch.json), [`tiny-vit.py`](./examples/tiny-vit.py) and `hf:Qwen/Qwen3-8B`; the error texts are examples and the model's closing sentences are scripted. [`scripts/demo-anim/`](./scripts/demo-anim/) has the calls.</sub>
 
 The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.2 x 16 bytes per parameter, plus, per sample in bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager attention only; SDPA and flash keep none), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate states and 2.02 x the largest single tensor. Fitted on 178 measured runs across 41 architectures, out-of-memory runs included. Held out one architecture at a time, the median error is 7% above 1 GB and it flagged 113 of the 131 times a run did not fit a 16, 24, 40 or 80 GB card, where `accelerate estimate-memory` flagged at most 8. On 25 runs measured after the fit, at the edge of a 24 GB card, the median miss is 14%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html).
 
@@ -95,14 +103,7 @@ Claude ▸ (calls describe_architecture)
   embedding/head would do far more.
 ```
 
-And whether it forward-passes. Point it at [`examples/tiny-vit.py`](./examples/tiny-vit.py), plain PyTorch source with a bug planted in it, and ask *"lint this model"*:
-
-```
-block  head-dim-divisibility [attn:multiHeadAttention]: embed dim (258) must be
-       divisible by numHeads (8); head_dim would be 32.25
-```
-
-That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run. The rules are measured (the crash rules: 96 of 96 blocked graphs crashed PyTorch forward, 80 of 80 passes ran); the static parser in front of them is the weaker half, and [we measured that too](#what-the-static-parser-can-read).
+And whether it forward-passes, shown on [`examples/tiny-vit.py`](./examples/tiny-vit.py) in the [recording above](#see-it). That is a runtime crash sitting in source that reads fine, found offline in milliseconds, with no key and no account. The same rule set the [Neurarch CI action](https://github.com/neurarch-ai/neurarch-lint) reports, so a clean result here is a clean CI run. The rules are measured (the crash rules: 96 of 96 blocked graphs crashed PyTorch forward, 80 of 80 passes ran); the static parser in front of them is the weaker half, and [we measured that too](#what-the-static-parser-can-read).
 
 ## Three ways in, in order of how well they work
 
@@ -220,6 +221,20 @@ npx -y neurarch-mcp lint a.py b.py --json         # for CI
 npx -y neurarch-mcp check model.py                # the full verdict
 npx -y neurarch-mcp check zoo:qwen2.5-7b          # on a reference architecture
 ```
+
+### The same estimate in a shell: `npx neurarch`
+
+The [`neurarch`](https://www.npmjs.com/package/neurarch) CLI runs the estimate this server vendors on a Hugging Face id, with no agent in the loop.
+
+**Data the config cannot take.** Both of these pass the architecture checks and crash on the first batch, after the GPU is reserved:
+
+![npx neurarch blocking 1024-token sequences on a 512-row position table and a tokenizer 2 ids larger than the embedding](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/data-fit.gif)
+
+**Past jobs, requested against needed**, from a CSV of what your team already ran:
+
+![npx neurarch rightsize over six sample jobs: four over, one right-sized, one under](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/rightsize.gif)
+
+<sub>Real output: `rightsize` from `neurarch` 0.1.1 on the `examples/jobs.sample.csv` it ships, columns cut; the data-fit block trimmed, sentences the CLI's own.</sub>
 
 ### A Claude Code hook: refuse the launch that will not fit
 
