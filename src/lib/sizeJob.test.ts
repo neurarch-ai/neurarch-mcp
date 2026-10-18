@@ -56,7 +56,8 @@ describe('a template that fits a T4 and one that does not', () => {
     expect(s.cost?.gpu).toBe('T4');
     expect(s.cost?.usd).toBeGreaterThan(0);
     expect(s.accuracy).toBe(ACCURACY_SENTENCE);
-    expect(s.accuracy).toMatch(/141 measured runs across 44 architectures.*median error is 8%.*98%/);
+    expect(s.accuracy).toMatch(/141 measured runs across 44 architectures.*flagged 54.*42%/);
+    expect(s.accuracy).not.toMatch(/98%/);
   });
 
   it('phi3-mini at batch 32 does not fit a T4, and names the card and the batch that would', async () => {

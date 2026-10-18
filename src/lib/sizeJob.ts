@@ -142,8 +142,8 @@ export const ACCURACY_SENTENCE =
   'Calibrated estimate of the training peak under AdamW with bf16 autocast: '
   + `${OPTIMIZER_K} x 16 bytes per parameter (weights, gradients, optimizer state) + ${OUTPUT_K} x the bf16 size of every layer output `
   + `+ ${ATTENTION_K} x the bf16 size of stored attention scores (eager attention only; SDPA and flash keep none). `
-  + 'Fitted on 141 measured runs across 44 architectures; held out one architecture at a time, the median error is 8% on runs above 1 GB, '
-  + 'and the fits / does-not-fit verdict on 16, 24, 40 and 80 GB cards agrees with measurement 98% of the time. '
+  + 'Fitted on 141 measured runs across 44 architectures and checked on 187: of the 90 times a measured run did not fit a 16, 24, 40 or 80 GB card it flagged 54 '
+  + '(accelerate estimate-memory flagged at most 9); on new configurations at the edge of a card the median miss is 42%, so treat it as a fit check. '
   + `A card "fits" when it holds the peak x ${HEADROOM} (allocator fragmentation and the CUDA context).`;
 
 export interface SizeJobInput {
