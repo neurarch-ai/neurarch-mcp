@@ -1,5 +1,6 @@
-// Every number below is copied from the real neurarch-mcp 0.17.1 (origin/main a23497d)
-// tool output for the named model; nothing is invented for the animation.
+// Every number below is copied from real tool output for the named model; nothing is
+// invented for the animation. The first four are neurarch-mcp 0.17.1 (origin/main a23497d);
+// the rest say which version and command they were captured from.
 export const C = {
   bg: '#0d1117', title: '#161b22', border: '#21262d',
   text: '#c9d1d9', dim: '#8b949e', green: '#3fb950', cyan: '#58a6ff',
@@ -17,6 +18,8 @@ const bash = (a, b) => [
   { line: [['       ' + b + ')', C.cyan]], ms: 600 },
 ];
 const hk = (...segs) => ({ line: [['    ', C.dim], ...segs], ms: 120 });
+const sh = (t) => ({ type: [['$ ', C.green], [t, C.white]], cps: 40 });
+const o = (...segs) => ({ line: [['  ', C.dim], ...segs], ms: 120 });
 
 export const SCRIPTS = {
   // phi3-mini template, batch 32 on a T4, then the agent re-sizes at the batch the tool named.
@@ -112,6 +115,122 @@ export const SCRIPTS = {
       say(['The hook refused batch 32 before it took the card. Relaunched at batch 12,', C.text]),
       say(['which it let through; an ', C.text], ['L40S', C.white], [' would hold 32 if you would rather keep it.', C.text]),
       { pause: 2600 },
+    ],
+  },
+  // neurarch-mcp 0.17.2 (origin/main c417843) with --hf, hf_id "Qwen/Qwen3-8B" (8,190,878,080
+  // params from config.json), seq 2048 default, SDPA default:
+  //   size_training_job({ hf_id: "Qwen/Qwen3-8B", batch_size: 8, gpu: "A100-40" })
+  //   size_training_job({ hf_id: "Qwen/Qwen3-8B", batch_size: 8, gpu: "8xA100-40" })
+  'size-qwen3-8b': {
+    title: 'neurarch-mcp · size_training_job · Qwen/Qwen3-8B from Hugging Face',
+    rows: 17,
+    steps: [
+      { pause: 400 },
+      you('Will a full fine-tune of Qwen3-8B fit one A100-40 at batch 8?'),
+      { pause: 300 }, blank, claude, { pause: 200 },
+      call('size_training_job({ hf_id: "Qwen/Qwen3-8B", batch_size: 8, gpu: "A100-40" })'),
+      out(['✗ will not fit an A100-40', C.red], [': needs ~298 GB with headroom (peak 259 GB)', C.text]),
+      out(['peak     ', C.dim], ['259.08 GB', C.green], [' = 157.26 weights + optimizer, 101.82 activations', C.dim]),
+      out(['maxBatch ', C.dim], ['none', C.red], [' on T4 · L4 · A10G · L40S · A100-40 · A100-80 · H100-80', C.dim]),
+      out(['         ', C.dim], ['no batch fits, weights and optimizer state alone are 157 GB', C.text]),
+      { pause: 900 }, blank,
+      call('size_training_job({ hf_id: "Qwen/Qwen3-8B", batch_size: 8, gpu: "8xA100-40" })'),
+      out(['✓ fits 8xA100-40 only sharded', C.green], [' (FSDP / ZeRO-3): ~298 GB across 320 GB', C.text]),
+      out(['✗ plain DDP', C.red], [': each A100-40 would need ~195 GB', C.text]),
+      out(['sharded  ', C.dim], ['max global batch 9', C.green], [' · $258.55 for 10 epochs over 50,000 samples (assumed)', C.dim]),
+      { pause: 700 }, blank,
+      say(['No single card holds it: weights and optimizer state alone are 157 GB.', C.text]),
+      say(['On ', C.text], ['8 A100-40s', C.white], [' it fits only sharded with FSDP or ZeRO-3, not under plain DDP.', C.text]),
+      { pause: 2600 },
+    ],
+  },
+
+  // neurarch-mcp 0.17.2 (origin/main c417843), phi3-mini template at batch 8 on a T4, which
+  // size_training_job says fits (peak 11.06 GB). The error text is a T4-shaped example:
+  //   diagnose_oom({ error: "torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB.
+  //     GPU 0 has a total capacity of 14.74 GiB of which 1.12 GiB is free. Including non-PyTorch
+  //     memory, this process has 13.62 GiB memory in use. Of the allocated memory 9.84 GiB is
+  //     allocated by PyTorch, and 3.46 GiB is reserved by PyTorch but unallocated. If reserved but
+  //     unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+  //     to avoid fragmentation.", batch: 8, seq_len: 2048 })
+  'oom-fragmentation': {
+    title: 'neurarch-mcp · diagnose_oom · phi3-mini, batch 8 on a T4',
+    rows: 16,
+    steps: [
+      { pause: 400 },
+      you('OOM again, and batch 8 already fits the T4:'),
+      { line: [['  torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB. ...', C.dim]], ms: 80 },
+      { line: [['  ... 9.84 GiB is allocated by PyTorch, and 3.46 GiB is reserved by PyTorch but unallocated.', C.dim]], ms: 80 },
+      { pause: 300 }, blank, claude, { pause: 200 },
+      call('diagnose_oom({ error, batch: 8, seq_len: 2048 })'),
+      out(['cause    ', C.dim], ['fragmentation', C.yellow]),
+      out(['         Memory is fragmented: 3.72 GB is reserved and empty, more than', C.text]),
+      out(['         the 2.15 GB request that failed.', C.text]),
+      out(['evidence ', C.dim], ['10.6 GB live tensors · predicted peak 11.1 GB · 15.8 GB card', C.dim]),
+      out(['fix 1    ', C.dim], ['PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True', C.green], [' (training unchanged)', C.dim]),
+      out(['fix 2    ', C.dim], ['keep tensor shapes steady between steps', C.green], [' (training unchanged)', C.dim]),
+      { pause: 900 }, blank,
+      say(['The job fits the card; the allocator is what failed. Setting', C.text]),
+      say(['expandable_segments', C.white], [' before the process starts keeps batch 8 as it is.', C.text]),
+      { pause: 2600 },
+    ],
+  },
+
+  // The sibling CLI `npx neurarch`, data-fit check from neurarch-ai/neurarch branch
+  // feat/config-data-fit (not yet in the published CLI). Output trimmed to the data-fit
+  // block; the sentences are the CLI's, wrapped, with "(a device-side assert on GPU)" and
+  // the "Any of the 2 ids past 30521 ..." sentence left out. Exit code 1.
+  //   node packages/neurarch-cli/bin/neurarch.mjs bert-base-uncased --seq-len 1024 --tokenizer-size 30524
+  'data-fit': {
+    title: 'npx neurarch · does the data fit the config · bert-base-uncased',
+    rows: 15,
+    steps: [
+      { pause: 400 },
+      sh('npx neurarch bert-base-uncased --seq-len 1024 --tokenizer-size 30524'),
+      { pause: 500 },
+      o(['bert-base-uncased  ', C.white], ['bert · fill-mask · 110.1M published, 108.9M derived', C.dim]),
+      o(['checks  ', C.dim], ['clean', C.green]),
+      { pause: 600 }, blank,
+      o(['data fit checked: sequence length, tokenizer size', C.text]),
+      { pause: 400 },
+      o(['  block ', C.red], ['Sequences of 1024 tokens are longer than the 512-row position table', C.white]),
+      o(['        Position ids past 511 index outside a learned table, so the first batch', C.dim]),
+      o(['        that long raises an IndexError after the reservation is taken.', C.dim]),
+      o(['        fix: ', C.dim], ['Truncate or chunk to 512 tokens', C.green], [', or pick a model whose context covers 1024.', C.dim]),
+      { pause: 700 },
+      o(['  block ', C.red], ['The tokenizer has 30524 ids and the embedding has 30522 rows', C.white]),
+      o(['        The usual cause is special tokens added to the tokenizer without resizing the model.', C.dim]),
+      o(['        fix: ', C.dim], ['model.resize_token_embeddings(len(tokenizer))', C.green], [' before training.', C.dim]),
+      { pause: 400 }, blank,
+      o(['exit 1', C.red]),
+      { pause: 2800 },
+    ],
+  },
+
+  // The sibling CLI `npx neurarch` 0.1.1 from npm, on the jobs.sample.csv it ships in examples/.
+  // The headline and the six rows are its markdown report, columns cut to job, requested,
+  // needed, verdict and right-sized request. Model configs are read from huggingface.co.
+  //   npx neurarch rightsize examples/jobs.sample.csv
+  'rightsize': {
+    title: 'npx neurarch rightsize · requested vs needed over past jobs',
+    rows: 15,
+    steps: [
+      { pause: 400 },
+      sh('npx neurarch rightsize jobs.sample.csv'),
+      { pause: 600 },
+      o(['6 jobs, 174 GPU-hours, ', C.text], ['$507.85', C.white], [' spent; ', C.text], ['$328.53', C.yellow], [' of that was reserved', C.text]),
+      o(['capacity no job needed, claiming nothing on 1 row marked under or unknown.', C.text]),
+      { pause: 600 }, blank,
+      o(['job              requested  needed   verdict                   right-sized request', C.dim]),
+      o(['ft-qwen-small    8xH100     211 GB   ', C.text], ['over (borderline)         ', C.yellow], ['2xH200', C.green]),
+      o(['lora-qwen-8b     A100-80     78 GB   ', C.text], ['right-sized (borderline)  ', C.green], ['as requested', C.dim]),
+      o(['bert-classifier  A100-80    8.4 GB   ', C.text], ['over                      ', C.yellow], ['T4', C.green]),
+      o(['tinyllama-lora   H100        35 GB   ', C.text], ['over (borderline)         ', C.yellow], ['L40S', C.green]),
+      o(['phi3-sft         A100-40    230 GB   ', C.text], ['under                     ', C.red], ['-  (needs 230 GB, has 40)', C.dim]),
+      o(['gpt2-pretrain    4xA100-80   29 GB   ', C.text], ['over                      ', C.yellow], ['L40S', C.green]),
+      { pause: 500 }, blank,
+      o(['borderline: the upper bound does not fit; measure once', C.dim]),
+      { pause: 2800 },
     ],
   },
 };
