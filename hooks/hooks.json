@@ -1,0 +1,13 @@
+{
+  "description": "Before each Bash call, neurarch-mcp hook sizes a training launch (python train.py, accelerate launch, torchrun, deepspeed, sky launch) and exits 2 with the reason when the job will not fit the card it names. Every other command runs untouched.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "npx -y neurarch-mcp hook --hf", "timeout": 120 }
+        ]
+      }
+    ]
+  }
+}
