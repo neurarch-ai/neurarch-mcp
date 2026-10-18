@@ -1,6 +1,10 @@
 # neurarch-mcp
 
-**Before a training job takes a GPU reservation, your agent learns what it actually needs and what it will cost. An MCP server for Claude Code, Cursor, Claude Desktop, VS Code, Windsurf and Codex.**
+**Know what a GPU job needs before it takes a reservation, from inside your agent. An MCP server for Claude Code, Cursor, Claude Desktop, VS Code, Windsurf and Codex.**
+
+- **Small jobs:** pack them or move them to a smaller card.
+- **Large jobs:** the right card count and sharding the first time.
+- **Agent-launched jobs:** a gate before the GPU, because an agent cannot size its own job.
 
 [![CI](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/neurarch-ai/neurarch-mcp/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/neurarch-mcp.svg)](https://www.npmjs.com/package/neurarch-mcp)
