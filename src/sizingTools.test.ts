@@ -34,7 +34,8 @@ describe('size_training_job, the tool', () => {
     expect(CORE_TOOLS[0]).toBe('size_training_job');
     expect(tool.description).toMatch(/BEFORE submitting or launching any training job/);
     expect(tool.description).toMatch(/calibrated estimate.*AdamW with bf16 autocast/);
-    expect(tool.description).toMatch(/median\s+error 8%/);
+    expect(tool.description).toMatch(/flagged 54/);
+    expect(tool.description).not.toMatch(/98%|median\s+error 8%/);
   });
 
   it('answers on the model it is handed', async () => {

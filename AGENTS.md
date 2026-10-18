@@ -37,9 +37,9 @@ launching, not after the OOM.
 
 Pass `attention: "eager"` if the job uses eager attention; the default is SDPA,
 which keeps no score matrix. The number is a calibrated estimate under AdamW
-with bf16 autocast (141 measured runs, 44 architectures, held-out median error
-8% above 1 GB, card verdict agrees with measurement 98% of the time), not a
-measurement; say so when you quote it.
+with bf16 autocast (fitted on 141 measured runs; checked on 187, it flagged 54
+of the 90 times a run did not fit a card, and on new edge-of-card configurations
+the median miss is 42%), not a measurement; say so when you quote it.
 
 ## After a CUDA out-of-memory error
 
