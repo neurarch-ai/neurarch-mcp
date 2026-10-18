@@ -130,6 +130,21 @@ steps past warmup passes.
 The MCP server also exposes this as the `trace_model` tool, which shells out to
 the same package.
 
+## Before a multi-GPU training job or a serving launch
+
+**Call `check_parallel_layout` before launching a job split by TP / PP / DP**, and
+**`check_serving_config` before a vLLM, SGLang or llama.cpp launch**:
+
+```
+check_parallel_layout { model_path: "hf:Qwen/Qwen3-8B", tp: 4, pp: 4, micro_batch: 1, global_batch: 32, seq_len: 4096, gpu: "h100" }
+check_serving_config { command: "vllm serve Qwen/Qwen3-8B -tp 4 --max-model-len 32768", gpu: "l4", gpus: 4 }
+```
+
+Fix every `block` finding before launching. The layout times are predicted
+from the graph, not measured: say so when you quote the slowdown or the
+recommended split. A serving concurrency is an upper bound (the engine's own
+reserve is not counted).
+
 ## The tools, by the question they answer
 
 | Question | Tool |
@@ -137,6 +152,8 @@ the same package.
 | What will this job need, and on which card? | `size_training_job` |
 | Why did it run out of memory, and what is the smallest fix? | `diagnose_oom` |
 | I edited the config or the architecture: is the edit silently wrong, and what did it do to memory? | `check_edit` |
+| Is this TP / PP / DP split legal, and which stage is the straggler? | `check_parallel_layout` |
+| Will this vLLM / SGLang / llama.cpp launch start and serve the model as published? | `check_serving_config` |
 | What is this model? | `describe_architecture`, `get_model_summary`, `mermaid_diagram` |
 | Where is the budget? | `param_count_by_block`, `flops_by_block`, `list_blocks`, `get_block` |
 | Will it run? | `validate_model`, `lint_model`, `check_design` |

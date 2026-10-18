@@ -137,6 +137,26 @@ Every read tool also takes an optional `model_path`, so **one server covers a wh
 | `diagnose_oom` | **Why a job ran out of GPU memory, and the smallest change that fixes it.** Call it after a CUDA out-of-memory error, before changing batch size. Inputs: `error` (the text as printed, either PyTorch wording), and optionally the model (as above, or `hf_id`, read from the local config cache with no network when it is there), `batch`, `seq_len`, `step`, `attention`, and `inference: true` with `gen_tokens` for a generation job. It reads the allocated, reserved-but-empty, other-process and failing-request numbers out of the message, compares them with the same predicted peak `size_training_job` uses, and returns one `cause` (`too-big-for-card`, `fragmentation`, `other-process`, `large-logits`, `undeclared-memory`, `grows-during-run`, `unknown`), a `summary`, the `evidence` lines it was read from, `fixes` ordered least invasive first with a `changesTraining` flag on each, and the `job` facts used. A smaller batch is offered only when the job is too big for the card, and then with the gradient accumulation that keeps the effective batch. The diagnosis is the app's own (`npx neurarch oom`), vendored in the plan bundle. |
 | `check_edit` | **Whether an edit to a model's config or architecture is one that runs and is wrong, and what it did to memory.** Call it after editing and before training. Inputs: the base (`base_model_path`: a `.py`, a `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`; or `base_config`) and the changed model (the server's, `model_path`, `model_source`, or `config`); `base_config` and `config` take a Hugging Face `config.json` as an object, JSON text or a path. Optionally `lora_target_modules`, `batch` (default 32), `seq_len`, `gpu`, `attention`. Returns `findings`, each with a stable `rule`, a severity, the tensors or keys it is about, and `seenIn` (the public upstream reports of that failure): `vocab-resize-incomplete` (a resize that left a token-indexed tensor at the old vocabulary), `weight-tying-lost`, `attention-config-drift` (heads, `head_dim`, `hidden_size` and kv heads that have to move together), `rope-context-drift` (a longer context with no RoPE scaling), and, against `lora_target_modules` matched the way PEFT matches it, `lora-target-no-match`, `lora-target-partial` and `lora-target-wrapper`; config divisibility comes back under the lint ids `head-dim-divisibility` and `gqa-head-divisibility`. Then `memory`: the training peak before and after at that batch and sequence length, the delta, and whether the job still fits `gpu` (or the smallest card that holds it, before and after), from the same estimate `size_training_job` uses. The checks are the app's own (`src/utils/editChecks.ts`), vendored in the plan bundle. |
 
+### Before a multi-GPU or serving launch
+
+`check_parallel_layout` says whether a TP / PP / DP / CP / EP split is legal, which pipeline stage is the straggler, the predicted step slowdown against a balanced split and the split that removes it, every time labelled predicted (matmul FLOPs at 40% of peak plus memory-bound bytes at 80% of bandwidth, never timed):
+
+```text
+check_parallel_layout { model_path: "hf:Qwen/Qwen3-8B", tp: 4, pp: 4, micro_batch: 1, global_batch: 32, seq_len: 4096, gpu: "h100" }
+-> legal on 16 x h100-sxm; predicted 21.4% slower per step than a balanced split (slowest stage 3);
+   split 10,10,10,6 is predicted 18.8% faster; bubble 8.6%; 1 warning
+```
+
+`check_serving_config` reads a vLLM, SGLang or llama.cpp launch line against the model's `config.json`, `tokenizer_config.json`, `chat_template.jinja` and `generation_config.json` and the card, and returns findings on TP against the heads, served length against the context, KV memory and concurrency, quantization against the card, and the chat template and sampler defaults (with `against`, what changed from the model it replaces):
+
+```text
+check_serving_config { command: "vllm serve Qwen/Qwen3-8B -tp 4 --max-model-len 131072 --max-num-seqs 64", gpu: "l4", gpus: 4 }
+-> blocked: Served length 131072 is past the model's 40960-token context
+   (+ warn: --max-num-seqs 64, but at most 3 sequences fit at the full 131072 tokens; info: no --reasoning-parser)
+```
+
+Both are the app's own checks (`npx neurarch layout`, `npx neurarch serve-check`), vendored in the plan bundle and offline; an `hf:` model needs `--hf` the first time.
+
 ### The plan card, and the memory behind it
 
 These two are the only two tools in this package that reach the network. `plan` is the artifact: the same card the [Neurarch CI bot](https://github.com/neurarch-ai/neurarch-bot) posts on a pull request and the `neurarch-trace` CLI prints, so the agent and the reviewer read the same words about the same graph.
@@ -279,6 +299,14 @@ A per-model `job:` applies when its entry's `path` (or its own `model`) names th
 
 It fails open. A command it does not recognise, a job with no declared card or batch (including a `file:key` pointer that does not resolve), a model it cannot load, a card it cannot parse (a bare `A100` is ambiguous), or any error at all lets the call run. So does a job the estimate does not model: `--gradient_checkpointing`, LoRA or PEFT flags, 4- or 8-bit loading and CPU offload, since the number is a full fine-tune's peak. The estimate is a fit check, not a measurement, so `NEURARCH_ALLOW_OOM=1` in front of a command lets a refused launch through.
 
+The same hook pre-checks a vLLM or SGLang launch (`vllm serve`, `python -m vllm.entrypoints...`, `python -m sglang.launch_server`) with `check_serving_config`, and blocks only on a finding read from the model's own `config.json` and the flags, such as a TP that does not divide the heads or a served length past the context; `NEURARCH_ALLOW_SERVE=1` lets it through:
+
+```text
+$ vllm serve Qwen/Qwen3-8B --tensor-parallel-size 3
+neurarch: this vLLM launch has 2 blocking findings for Qwen/Qwen3-8B.
+  TP 3 does not divide 32 attention heads.
+```
+
 ### Claude Code plugin
 
 The server, the hook above and the [skill](./skills/neurarch-skill/SKILL.md) install together as one Claude Code plugin. This repository is its marketplace:
@@ -293,7 +321,7 @@ On Claude Code 2.1.275 or later, `/plugin install neurarch --marketplace neurarc
 What it adds, all from [`.claude-plugin/plugin.json`](./.claude-plugin/plugin.json) and [`hooks/hooks.json`](./hooks/hooks.json):
 
 - **The MCP server**, as `npx -y neurarch-mcp --hosted --hf`: no model of its own, so every tool takes `model_path` (a `.py`, a `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`) or `hf_id`. `--hf` lets an `hf:` model read `config.json` from huggingface.co.
-- **The hook**, `npx -y neurarch-mcp hook --hf` before every Bash call, exactly as configured by hand above.
+- **The hook**, `npx -y neurarch-mcp hook --hf` before every Bash call, exactly as configured by hand above: training launches are sized, vLLM and SGLang launches are pre-checked.
 - **The skill**, `/neurarch:neurarch-skill`: size the job before it launches, then the evidence-gated edit loop.
 
 Both commands contact huggingface.co only for a model named by its Hugging Face id. To stay offline, or to point the server at one model, configure the server and the hook by hand as above instead of installing the plugin.
@@ -360,7 +388,7 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=full`: advertise every read tool. The default is the core fifteen, listed in the order they are meant to be reached for (`trace_model`, `plan`, `history`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 4.6k tokens per turn, the full one 6.5k.
+- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 4.7k tokens per turn, the full one 6.6k.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
@@ -370,7 +398,7 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 |---|---|---|
 | `plan` | Your graph (and the base graph, and the policy lines) to `POST /api/v1/plan`. `share` is pinned to false. | Only when the agent calls `plan`. |
 | `history` | An 8-character structural fingerprint and your `NEURARCH_API_KEY`, to `GET /api/v1/history`. **Never the graph.** | Only when the agent calls `history` **and** a key is set. With no key it makes no request. |
-| `--hf` | A request to huggingface.co for a repo's `config.json` (and `HF_TOKEN`, if set). Never your model. | Only on `load_hf_model` or an `hf:` ref. |
+| `--hf` | A request to huggingface.co for a repo's `config.json`, plus `tokenizer_config.json`, `chat_template.jinja` and `generation_config.json` for `check_serving_config` (and `HF_TOKEN`, if set). Never your model. | Only on `load_hf_model` or an `hf:` ref, each file cached for a day. |
 | `NEURARCH_REPORT=1` | One anonymous structure+verdict row: structural fingerprint, layer-type histogram, edge count, (rule id, severity) pairs. **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model`, `check_design` or `plan` call, fire and forget, 5s cap. |
 
 Both switches are off by default and `NEURARCH_REPORT` has not changed: `plan` joins the three tools that already send a row so that opting in means one thing across every tool that grades, and `history` grades nothing and sends none. Nothing here is new default-on behaviour; the two tools reach out when they are called, which their descriptions and their `openWorldHint` annotation say out loud.

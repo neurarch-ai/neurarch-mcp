@@ -17,6 +17,7 @@ import { LEDGER_TOOLS } from './ledgerTools.js';
 import { SIZING_TOOLS } from './sizingTools.js';
 import { OOM_TOOLS } from './oomTools.js';
 import { EDIT_TOOLS } from './editTools.js';
+import { LAUNCH_TOOLS } from './launchTools.js';
 import { DATA_SCHEMA, parseDataArg, hfConfigOf, dataFitFor } from './lib/dataFit.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
@@ -153,12 +154,12 @@ const findLayers: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      type:         { type: 'string', description: 'Exact type, e.g. "conv2d".' },
-      namePattern:  { type: 'string', description: 'Regex source matched against layer name.' },
-      scope:        { type: 'string', description: 'Scope prefix, e.g. "encoder.layer.3" (nested included).' },
-      augmentation: { type: 'string', description: 'Augmentation overlay, e.g. "freeze".' },
-      sortByParams: { type: 'boolean', description: 'Rank by parameter count, largest first.' },
-      limit:        { type: 'number', description: 'Max results (default 100).' },
+      type:         { type: 'string', description: 'e.g. "conv2d".' },
+      namePattern:  { type: 'string', description: 'Regex on name.' },
+      scope:        { type: 'string', description: 'Prefix, e.g. "encoder.layer.3".' },
+      augmentation: { type: 'string', description: 'e.g. "freeze".' },
+      sortByParams: { type: 'boolean', description: 'Largest first.' },
+      limit:        { type: 'number', description: 'Default 100.' },
     },
     additionalProperties: false,
   },
@@ -208,10 +209,10 @@ const layerImpact: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      names:        { type: 'array', items: { type: 'string' }, description: 'Layer names or ids to use as targets.' },
-      namePattern:  { type: 'string', description: 'Alternative to names — regex source matching layer names.' },
-      maxDistance:  { type: 'number', description: 'Limit BFS depth. Omit for full reachability.' },
-      includeUpstream: { type: 'boolean', description: 'Default true. Set false to only return downstream.' },
+      names:        { type: 'array', items: { type: 'string' }, description: 'Names or ids.' },
+      namePattern:  { type: 'string', description: 'Regex on names, instead of names.' },
+      maxDistance:  { type: 'number', description: 'BFS depth limit.' },
+      includeUpstream: { type: 'boolean', description: 'Default true.' },
     },
     additionalProperties: false,
   },
@@ -250,7 +251,7 @@ const paramCountByBlock: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      groupBy: { type: 'string', enum: ['block', 'scope', 'type'], description: 'Default "block" (collapsed groups). Falls back to scope when no groups exist.' },
+      groupBy: { type: 'string', enum: ['block', 'scope', 'type'], description: 'Default "block" (scope when no groups).' },
     },
     additionalProperties: false,
   },
@@ -289,7 +290,7 @@ const mermaidDiagram: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      maxLayers: { type: 'number', description: 'Truncate after N layers (default 60). Returns a note when truncated.' },
+      maxLayers: { type: 'number', description: 'Default 60.' },
     },
     additionalProperties: false,
   },
@@ -377,7 +378,7 @@ const getBlockTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: 'Group name or id, or a scope prefix (e.g. "encoder" matches "encoder.layer.0").' },
+      name: { type: 'string', description: 'Group name or id, or a scope prefix.' },
     },
     required: ['name'],
     additionalProperties: false,
@@ -392,7 +393,7 @@ const diffModelsTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'Path to the other .neurarch.json file to compare against.' },
+      path: { type: 'string', description: 'The other .neurarch.json.' },
     },
     required: ['path'],
     additionalProperties: false,
@@ -446,8 +447,8 @@ const checkDesignTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      verbose: { type: 'boolean', description: 'Add every stage\'s data (cost breakdown, deploy targets, contract).' },
-      ask_user: { type: 'boolean', description: 'Ask the human (MCP elicitation) a decision only they can make.' },
+      verbose: { type: 'boolean', description: 'Every stage\'s data.' },
+      ask_user: { type: 'boolean', description: 'Ask the human (elicitation).' },
       data: DATA_SCHEMA,
       config: { type: 'object', description: 'HF config.json (label count).' },
     },
@@ -510,7 +511,7 @@ const lintModelTool: ToolDef = {
       severity: {
         type: 'string',
         enum: ['block', 'warn', 'info'],
-        description: 'Optional minimum severity to report. Defaults to reporting everything.',
+        description: 'Minimum. Default: all.',
       },
     },
     additionalProperties: false,
@@ -634,9 +635,9 @@ const listConnections: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      from:  { type: 'string', description: 'Optional source layer name or id filter.' },
-      to:    { type: 'string', description: 'Optional target layer name or id filter.' },
-      limit: { type: 'number', description: 'Max results (default 200).' },
+      from:  { type: 'string', description: 'Source layer.' },
+      to:    { type: 'string', description: 'Target layer.' },
+      limit: { type: 'number', description: 'Default 200.' },
     },
     additionalProperties: false,
   },
@@ -684,7 +685,7 @@ const getDesignNotes: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      layer: { type: 'string', description: 'Optional layer name or id. When set, return only notes affecting that layer.' },
+      layer: { type: 'string', description: 'Only notes on this layer.' },
     },
     additionalProperties: false,
   },
@@ -751,6 +752,7 @@ export const TOOLS: ToolDef[] = [
   ...SIZING_TOOLS,
   ...OOM_TOOLS,
   ...EDIT_TOOLS,
+  ...LAUNCH_TOOLS,
   getModelSummary,
   describeArchitectureTool,
   getLayer,

@@ -165,19 +165,18 @@ export const planTool: ToolDef = {
       },
       base_path: {
         type: 'string',
-        description: 'A second model to diff against (a path, zoo:<id> or hf:<org/name>).',
+        description: 'A second model to diff against.',
       },
       spec: {
         type: 'object',
         description:
-          'A change spec: { base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }. '
-          + 'Adds a change section with a spec id and a gate on memory, fit and policy (never on adapter quality).',
+          '{ base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }: a change section gated on memory, fit and policy.',
         additionalProperties: true,
       },
       seq_len: {
         type: 'integer',
         minimum: 1,
-        description: 'Sequence length in tokens used for activation memory; default 2048 when omitted.',
+        description: 'Default 2048.',
       },
     },
     additionalProperties: false,

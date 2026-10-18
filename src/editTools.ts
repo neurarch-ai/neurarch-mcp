@@ -154,7 +154,7 @@ export const checkEditTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      base_model_path: { type: 'string', description: 'Before the edit: path, zoo:<id> or hf:<org/name>.' },
+      base_model_path: { type: 'string', description: 'The model before the edit.' },
       base_config: { description: 'config.json before: object, JSON or path.' },
       config: { description: 'config.json after.' },
       lora_target_modules: { type: ['array', 'string'], items: { type: 'string' } },

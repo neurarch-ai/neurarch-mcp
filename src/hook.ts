@@ -33,6 +33,20 @@
  * that the estimate refuses, because the estimate is a fit check and is
  * sometimes wrong at the edge of a card.
  *
+ * A vLLM or SGLang launch (`vllm serve`, `python -m vllm.entrypoints...`,
+ * `python -m sglang.launch_server`) gets the serving pre-check instead, the
+ * same `checkServeConfig` check_serving_config runs, on the model the command
+ * names (a checkpoint directory, or a Hugging Face id read under --hf). It
+ * blocks only on a `block` finding read off the model's own config.json and
+ * the flags: TP that does not divide the heads, a served length past the
+ * derived context, a --quantization that contradicts the checkpoint, auto tool
+ * choice with no parser. The card is not on a serve command line, so nothing
+ * that depends on it (memory, quant support) can block here. A family-template
+ * config never blocks, the engine's own override variables
+ * (VLLM_ALLOW_LONG_MAX_MODEL_LEN=1, SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1)
+ * clear the context finding, and `NEURARCH_ALLOW_SERVE=1` lets the launch
+ * through. Fail-open applies unchanged.
+ *
  * No memory logic here: `sizeJob` is the plan bundle's `buildPlan`.
  */
 import { readFile, stat } from 'node:fs/promises';
@@ -43,7 +57,8 @@ import { parseYamlSubset, MAX_SEARCH_DEPTH } from './lib/policyFile.js';
 import { loadModelCached } from './models.js';
 import { loadHFModel } from './sources.js';
 import { convertHFConfigToModel } from './vendor/engine.bundle.mjs';
-import { looksLikeHFConfig } from './vendor/plan.bundle.mjs';
+import { looksLikeHFConfig, parseServeCommand, checkServeConfig } from './vendor/plan.bundle.mjs';
+import { resolveServeSide } from './lib/serveSide.js';
 
 export interface HookIO {
   out: (s: string) => void;
@@ -358,6 +373,77 @@ export async function loadJobModel(spec: string, cwd: string): Promise<ModelArch
   throw new Error(`no model at ${s}`);
 }
 
+/** A vLLM or SGLang server launch: the engine and the words of its command, env prefixes dropped. */
+export interface ServeLaunch {
+  engine: 'vllm' | 'sglang';
+  words: string[];
+}
+
+const LAUNCH_PREFIXES = new Set(['env', 'exec', 'nohup', 'time', 'sudo']);
+
+/**
+ * The first vLLM or SGLang server launch in a Bash command, or null. Only the
+ * command word counts: `echo "vllm serve x"` and `pip install vllm` are not
+ * launches. llama.cpp is left alone: its model is a .gguf file, not a config.
+ */
+export function parseServeLaunch(command: string): ServeLaunch | null {
+  const w = shellWords(command);
+  let start = 0;
+  for (let i = 0; i <= w.length; i++) {
+    if (i < w.length && !SEPARATORS.has(w[i])) continue;
+    const seg = w.slice(start, i);
+    start = i + 1;
+    let j = 0;
+    while (j < seg.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(seg[j]) || LAUNCH_PREFIXES.has(seg[j]))) j++;
+    const c = seg.slice(j);
+    const base = (c[0] ?? '').split('/').pop() ?? '';
+    let engine: ServeLaunch['engine'] | null = null;
+    if (base === 'vllm' && c[1] === 'serve') engine = 'vllm';
+    else if (base === 'sglang' && c[1] === 'serve') engine = 'sglang';
+    else if (/^python(\d(\.\d+)?)?$/.test(base) && c[1] === '-m') {
+      if (/^vllm\.entrypoints\./.test(c[2] ?? '')) engine = 'vllm';
+      else if (c[2] === 'sglang.launch_server') engine = 'sglang';
+    }
+    if (engine) return { engine, words: c };
+  }
+  return null;
+}
+
+/** The env variable that lets each engine serve past the derived context. */
+const LONG_CONTEXT_OVERRIDE: Record<ServeLaunch['engine'], string> = {
+  vllm: 'VLLM_ALLOW_LONG_MAX_MODEL_LEN',
+  sglang: 'SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN',
+};
+
+/** The serving pre-check for one Bash command. Throws on anything unexpected; decide() catches. */
+export async function decideServe(command: string, cwd: string): Promise<HookDecision> {
+  if (/\bNEURARCH_ALLOW_SERVE=1\b/.test(command)) return NO();
+  const launch = parseServeLaunch(command);
+  if (!launch) return NO();
+  const parsed = parseServeCommand(launch.words, launch.engine);
+  const ref = parsed.args.model;
+  if (typeof ref !== 'string' || !ref.trim()) return NO();
+  const resolved = await resolveServeSide(ref, cwd);
+  // A guessed config (a family template) can be wrong about heads or context.
+  if (!resolved.exact) return NO();
+  const r = checkServeConfig({ ...resolved.side, engine: launch.engine, args: parsed.args });
+  const envVar = LONG_CONTEXT_OVERRIDE[launch.engine];
+  const overridden = new RegExp(`\\b${envVar}=(1|true)\\b`, 'i').test(command) || /^(1|true)$/i.test(process.env[envVar] ?? '');
+  const blocks = r.findings.filter(f => f.severity === 'block' && !(overridden && f.rule === 'context-over-derived'));
+  if (!blocks.length) return NO();
+  const engineName = launch.engine === 'vllm' ? 'vLLM' : 'SGLang';
+  const lines = [
+    `neurarch: this ${engineName} launch has ${blocks.length === 1 ? 'a blocking finding' : `${blocks.length} blocking findings`} for ${ref}.`,
+  ];
+  for (const f of blocks) {
+    lines.push(`  ${f.title}.`);
+    if (f.detail) lines.push(`    ${f.detail}`);
+    if (f.fix) lines.push(`    fix: ${f.fix}`);
+  }
+  lines.push(`  Read from ${resolved.source} and the flags, before anything loads; check_serving_config with the card (gpu, gpus) also checks memory, KV concurrency and quantization support. If you are sure, prefix the command with NEURARCH_ALLOW_SERVE=1.`);
+  return { block: true, reason: lines.join('\n') + '\n' };
+}
+
 export interface HookDecision {
   block: boolean;
   /** The text for stderr when blocking; empty otherwise. */
@@ -375,9 +461,10 @@ export async function decide(payload: unknown): Promise<HookDecision> {
     const command = p.tool_input?.command;
     if (typeof command !== 'string' || !command.trim()) return NO();
     if (/\bNEURARCH_ALLOW_OOM=1\b/.test(command)) return NO();
-    const launch = parseLaunch(command);
-    if (!launch || launch.unmodelled) return NO();
     const cwd = typeof p.cwd === 'string' && p.cwd ? p.cwd : process.cwd();
+    const launch = parseLaunch(command);
+    if (!launch) return await decideServe(command, cwd);
+    if (launch.unmodelled) return NO();
     const block = await findJobBlock(cwd, launch.model).catch(() => null);
     const job = block?.job ?? {};
 

@@ -3246,14 +3246,14 @@ var hugeLinearParams = (model) => {
     if (!Number.isFinite(inF) || !Number.isFinite(outF) || inF <= 0 || outF <= 0) continue;
     const count = inF * outF;
     if (count > LARGE_LINEAR_MAX_PARAMS) {
-      const gb = (count * 4 / 1073741824).toFixed(1);
+      const gb2 = (count * 4 / 1073741824).toFixed(1);
       issues.push({
         id: `huge-linear-${c.id}`,
         ruleId: "huge-linear-params",
         severity: "warning",
         category: "performance",
         title: `Very large Linear: "${c.name}" (~${Math.round(count / 1e6)}M params)`,
-        message: `Linear "${c.name}" is ${inF} \xD7 ${outF} = ${Math.round(count / 1e6)}M parameters (~${gb} GB float32). A single dense layer this large usually means a feature map was flattened without pooling first; embedding / vocab-projection heads are the expected exception.`,
+        message: `Linear "${c.name}" is ${inF} \xD7 ${outF} = ${Math.round(count / 1e6)}M parameters (~${gb2} GB float32). A single dense layer this large usually means a feature map was flattened without pooling first; embedding / vocab-projection heads are the expected exception.`,
         affectedIds: [c.id],
         suggestion: "Add a Global Average Pool or more downsampling before the Linear, or factorize it (low-rank / bottleneck projection)."
       });
@@ -5615,7 +5615,7 @@ function buildPreflightReport(model, opts) {
     const outShape = shapes.get(c.id)?.out;
     flops += estimateLayerFlops(c.type, c.params, inShape ?? [], outShape ?? []) ?? 0;
   }
-  const weightBytes = params * 4;
+  const weightBytes2 = params * 4;
   const trainFootprintBytes = params * 16;
   const footprintGb = trainFootprintBytes / 1e9;
   const gpu = PREFLIGHT_GPUS.find((g) => g.name === opts?.plan?.gpu) ?? PREFLIGHT_GPUS[2];
@@ -5693,7 +5693,7 @@ function buildPreflightReport(model, opts) {
       layers: realLayers.length,
       params,
       flops,
-      weightBytes,
+      weightBytes: weightBytes2,
       trainFootprintBytes,
       fitsGpu: gpu.name,
       estTrainSec,
@@ -6829,7 +6829,7 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
     }
   }
   const precision = spec.quant?.precision ?? "fp16";
-  const weightBytes = ctx.params > 0 ? computeQuantPreview(model).totalBytes[precision] : null;
+  const weightBytes2 = ctx.params > 0 ? computeQuantPreview(model).totalBytes[precision] : null;
   let adapterMatch = null;
   if (spec.adapter && ctx.lora && (spec.adapter.pattern || spec.adapter.targets.length)) {
     adapterMatch = checkLoraTargets(model, spec.adapter.pattern ?? spec.adapter.targets, ctx.lora);
@@ -6866,14 +6866,14 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
     });
   }
   let servingFits = null;
-  if (spec.serving && weightBytes != null) {
+  if (spec.serving && weightBytes2 != null) {
     const gpu = resolveGpu(spec.serving.gpu);
     if (!gpu) warnings.push({ title: `change: unknown serving GPU (${spec.serving.gpu})`, detail: `Known: ${GPU_HARDWARE.map((g) => g.id).join(", ")}.`, stage: "change" });
     else {
       const kvBytesPerToken = kvBytesPerTokenForModel(model, 2, spec.serving.promptTokens + spec.serving.genTokens);
       const sp = planServing({
         gpu,
-        weightBytes,
+        weightBytes: weightBytes2,
         kvBytesPerToken,
         stateBytesPerRequest: recurrentStateBytesForModel(model, 2),
         flopsPerToken: 2 * ctx.params,
@@ -6884,7 +6884,7 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
       servingFits = sp.fits;
       if (!sp.fits) {
         blockers.push({
-          title: `change: serving target ${gpu.label} does not fit (${precision} weights ${(weightBytes / 1e9).toFixed(1)} GB plus KV for batch ${spec.serving.batchSize} at ${spec.serving.promptTokens + spec.serving.genTokens} tokens)`,
+          title: `change: serving target ${gpu.label} does not fit (${precision} weights ${(weightBytes2 / 1e9).toFixed(1)} GB plus KV for batch ${spec.serving.batchSize} at ${spec.serving.promptTokens + spec.serving.genTokens} tokens)`,
           detail: `serving: ${spec.serving.gpu}`,
           stage: "change"
         });
@@ -6895,7 +6895,7 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
     specId: changeSpecId(spec, ctx.baseFingerprint),
     baseFingerprint: ctx.baseFingerprint,
     spec,
-    estimates: { trainableParams, trainMemGb, weightBytes, servingFits },
+    estimates: { trainableParams, trainMemGb, weightBytes: weightBytes2, servingFits },
     gate: { ok: blockers.length === 0, blockers, warnings },
     adapterMatch,
     problems
@@ -7145,7 +7145,7 @@ function readPolicy(input) {
   const raw = input;
   const policy = {};
   const problems = [];
-  const num4 = (k) => {
+  const num5 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     const n2 = typeof v === "string" ? Number(v) : v;
@@ -7173,11 +7173,11 @@ function readPolicy(input) {
     if (typeof raw.must_fit !== "string") problems.push("must_fit: expected a GPU name like A100-40GB");
     else policy.must_fit = raw.must_fit;
   }
-  const mm = num4("max_memory_gb");
+  const mm = num5("max_memory_gb");
   if (mm != null) policy.max_memory_gb = mm;
-  const ml = num4("max_layers");
+  const ml = num5("max_layers");
   if (ml != null) policy.max_layers = ml;
-  const mc = num4("max_cost_usd");
+  const mc = num5("max_cost_usd");
   if (mc != null) policy.max_cost_usd = mc;
   const ft = list2("forbid_types");
   if (ft) policy.forbid_types = ft;
@@ -7304,10 +7304,10 @@ function upperPeakGb(peakGb) {
   if (!(peakGb > 0)) return 0;
   return Math.max(peakGb * UPPER_K, UPPER_FLOOR_GB);
 }
-function fitVerdict(peakGb, params, gb) {
+function fitVerdict(peakGb, params, gb2) {
   if (params <= 0) return null;
-  if (upperPeakGb(peakGb) * FIT_HEADROOM <= gb) return "fits";
-  return peakGb <= gb ? "borderline" : "does_not_fit";
+  if (upperPeakGb(peakGb) * FIT_HEADROOM <= gb2) return "fits";
+  return peakGb <= gb2 ? "borderline" : "does_not_fit";
 }
 var MIG_PROFILES = {
   A100_40: [{ name: "1g.5gb", gb: 5 }, { name: "1g.10gb", gb: 10 }, { name: "2g.10gb", gb: 10 }, { name: "3g.20gb", gb: 20 }, { name: "4g.20gb", gb: 20 }, { name: "7g.40gb", gb: 40 }],
@@ -7422,12 +7422,12 @@ function activationGbFor(model, shapes, batchSize, attention = DEFAULT_ATTENTION
   return elems == null ? null : activationGbAt(elems, batchSize);
 }
 var FIT_HEADROOM = 1.15;
-function maxBatchFor(f, gb) {
+function maxBatchFor(f, gb2) {
   const per = f.activationPerSampleGb;
-  if (per == null || !(per > 0) || !(gb > 0)) return null;
-  const fits = (b2) => (f.footprintGb + (f.activationGbAt ? f.activationGbAt(b2) : per * b2)) * FIT_HEADROOM <= gb;
+  if (per == null || !(per > 0) || !(gb2 > 0)) return null;
+  const fits = (b2) => (f.footprintGb + (f.activationGbAt ? f.activationGbAt(b2) : per * b2)) * FIT_HEADROOM <= gb2;
   if (!fits(1)) return null;
-  let b = Math.max(1, Math.floor((gb / FIT_HEADROOM - f.footprintGb) / per));
+  let b = Math.max(1, Math.floor((gb2 / FIT_HEADROOM - f.footprintGb) / per));
   while (b > 1 && !fits(b)) b--;
   while (fits(b + 1)) b++;
   return b;
@@ -7499,13 +7499,13 @@ function deviceMapFor(model, gpus, opts = {}) {
 function twoCardSplitFor(model, peakGb, params, batchSize, attention) {
   if (params <= 0) return null;
   const sizes = [...new Set(PREFLIGHT_GPUS.map((g) => g.gb))].sort((a, b) => a - b);
-  for (const gb of sizes) {
-    if (peakGb * FIT_HEADROOM <= gb) return null;
-    if (peakGb * FIT_HEADROOM > 2 * gb) continue;
-    const map = deviceMapFor(model, [gb, gb], { batchSize, attention });
+  for (const gb2 of sizes) {
+    if (peakGb * FIT_HEADROOM <= gb2) return null;
+    if (peakGb * FIT_HEADROOM > 2 * gb2) continue;
+    const map = deviceMapFor(model, [gb2, gb2], { batchSize, attention });
     if (map.fits) {
-      const gpu = PREFLIGHT_GPUS.find((g) => g.gb === gb).name;
-      return { gpu, gbPerCard: gb, ...map };
+      const gpu = PREFLIGHT_GPUS.find((g) => g.gb === gb2).name;
+      return { gpu, gbPerCard: gb2, ...map };
     }
   }
   return null;
@@ -7550,9 +7550,9 @@ function factsFor(model, workload, run, attention = DEFAULT_ATTENTION) {
     seqLen: tokenSeqLenOf(model)
   };
 }
-function fitsCard(peakGb, params, gb) {
+function fitsCard(peakGb, params, gb2) {
   if (params <= 0) return null;
-  return peakGb * FIT_HEADROOM <= gb;
+  return peakGb * FIT_HEADROOM <= gb2;
 }
 function smallestCardFor(peakGb, params) {
   return PREFLIGHT_GPUS.find((g) => fitsCard(peakGb, params, g.gb))?.name ?? null;
@@ -8043,21 +8043,21 @@ function loraTargetsFor(model, shapesIn) {
     const ms = modules.filter(pick);
     const r8 = ms.reduce((a, m) => a + m.lora.r8, 0);
     const r16 = ms.reduce((a, m) => a + m.lora.r16, 0);
-    const pct = (x) => baseParams > 0 ? x / baseParams * 100 : 0;
+    const pct2 = (x) => baseParams > 0 ? x / baseParams * 100 : 0;
     return {
       targetModules: [...new Set(ms.map((m) => m.module))],
       modules: ms.length,
       loraParams: { r8, r16 },
-      pctOfBase: { r8: pct(r8), r16: pct(r16) }
+      pctOfBase: { r8: pct2(r8), r16: pct2(r16) }
     };
   };
-  const ATTN = /* @__PURE__ */ new Set(["q_proj", "k_proj", "v_proj", "o_proj"]);
+  const ATTN2 = /* @__PURE__ */ new Set(["q_proj", "k_proj", "v_proj", "o_proj"]);
   return {
     baseParams,
     modules,
     byRole,
     presets: {
-      attention: preset((m) => ATTN.has(m.role)),
+      attention: preset((m) => ATTN2.has(m.role)),
       allLinear: preset((m) => m.role !== "head")
     },
     uncovered
@@ -8084,11 +8084,11 @@ function trainingPeakFor(p, adapter) {
   return { trainableParams: Math.round(adapterParams), peakGb };
 }
 function renderLoraText(lora) {
-  const pct = (x) => x < 0.01 ? "<0.01%" : `${x.toFixed(2)}%`;
+  const pct2 = (x) => x < 0.01 ? "<0.01%" : `${x.toFixed(2)}%`;
   const L = [];
   L.push(`LoRA targets   base ${fmtParamCount(lora.baseParams)} params, ${lora.modules.length} linear module${lora.modules.length === 1 ? "" : "s"}`);
   const row = (label, pr) => {
-    L.push(`  ${label.padEnd(11)}  r=8 +${fmtParamCount(pr.loraParams.r8)} (${pct(pr.pctOfBase.r8)})  r=16 +${fmtParamCount(pr.loraParams.r16)} (${pct(pr.pctOfBase.r16)})  over ${pr.modules} module${pr.modules === 1 ? "" : "s"}`);
+    L.push(`  ${label.padEnd(11)}  r=8 +${fmtParamCount(pr.loraParams.r8)} (${pct2(pr.pctOfBase.r8)})  r=16 +${fmtParamCount(pr.loraParams.r16)} (${pct2(pr.pctOfBase.r16)})  over ${pr.modules} module${pr.modules === 1 ? "" : "s"}`);
     L.push(`  ${"".padEnd(11)}  target_modules=${JSON.stringify(pr.targetModules)}`);
   };
   row("attention", lora.presets.attention);
@@ -8199,10 +8199,10 @@ function renderPlanText(plan) {
   const d = plan.diff;
   if (d) {
     L.push(`Changes vs ${d.base.name}:`);
-    const pct = d.paramsDeltaPct == null ? "" : ` (${d.paramsDeltaPct >= 0 ? "+" : ""}${d.paramsDeltaPct.toFixed(0)}%)`;
+    const pct2 = d.paramsDeltaPct == null ? "" : ` (${d.paramsDeltaPct >= 0 ? "+" : ""}${d.paramsDeltaPct.toFixed(0)}%)`;
     const mem = d.memoryDeltaGb == null ? "" : `   memory ${d.memoryDeltaGb >= 0 ? "+" : "-"}${Math.abs(d.memoryDeltaGb).toFixed(2)} GB`;
     const cost = d.costDeltaUsd == null ? "" : `   cost ${fmtSignedUsd(d.costDeltaUsd)}`;
-    L.push(`  +${d.added} -${d.removed} ~${d.changed}   params ${fmtSigned(d.paramsDelta)}${pct}${mem}${cost}   blast radius ${d.blastRadius} layer${d.blastRadius === 1 ? "" : "s"}`);
+    L.push(`  +${d.added} -${d.removed} ~${d.changed}   params ${fmtSigned(d.paramsDelta)}${pct2}${mem}${cost}   blast radius ${d.blastRadius} layer${d.blastRadius === 1 ? "" : "s"}`);
     L.push(...clip(d.lines, (l) => `  ${l}`));
     if (d.legalityChanged === "became_illegal") L.push("  LEGALITY  base ran, this does not");
     if (d.legalityChanged === "became_legal") L.push("  LEGALITY  base did not run, this does");
@@ -8649,10 +8649,11 @@ function inputContractOf(model, config) {
   const first = (t) => comps.find((c) => c.type === t);
   const source = {};
   const emb = first("embedding");
-  const vocabSize = posInt(emb?.params?.vocabSize);
+  const vocabSize = posInt(emb?.params?.vocabSize) ?? posInt(emb?.params?.numEmbeddings);
   if (vocabSize != null) source.vocabSize = "the token embedding";
   const patch = first("patchEmbed");
   const learned = first("learnedPositionalEmbedding");
+  const sinusoidal = first("positionalEncoding");
   let maxPositions = null;
   let positionKind = null;
   if (!patch) {
@@ -8660,6 +8661,10 @@ function inputContractOf(model, config) {
       maxPositions = posInt(learned.params?.maxLen);
       positionKind = "learned";
       source.maxPositions = "the learned position table";
+    } else if (sinusoidal && posInt(sinusoidal.params?.maxLen) != null) {
+      maxPositions = posInt(sinusoidal.params?.maxLen);
+      positionKind = "buffer";
+      source.maxPositions = "the positional encoding buffer";
     } else if (posInt(emb?.params?.maxSeqLen) != null) {
       maxPositions = posInt(emb?.params?.maxSeqLen);
       positionKind = comps.some((c) => c.type === "rope") ? "rotary" : "declared";
@@ -8726,12 +8731,12 @@ function checkDataFit(contract, data) {
     } else {
       checked.push("sequence length");
       if (data.seqLen > c.maxPositions) {
-        if (c.positionKind === "learned") {
+        if (c.positionKind === "learned" || c.positionKind === "buffer") {
           findings.push({
             rule: "seq-over-positions",
             severity: "block",
-            title: `Sequences of ${data.seqLen} tokens are longer than the ${c.maxPositions}-row position table`,
-            detail: `Position ids past ${c.maxPositions - 1} index outside a learned table, so the first batch that long raises an IndexError (a device-side assert on GPU) after the reservation is taken.`,
+            title: `Sequences of ${data.seqLen} tokens are longer than the ${c.maxPositions}-row position ${c.positionKind === "learned" ? "table" : "buffer"}`,
+            detail: c.positionKind === "learned" ? `Position ids past ${c.maxPositions - 1} index outside a learned table, so the first batch that long raises an IndexError (a device-side assert on GPU) after the reservation is taken.` : `The encoding is a precomputed ${c.maxPositions}-row buffer, so adding it to a longer sequence fails on shape at the first batch that long, after the reservation is taken.`,
             fix: `Truncate or chunk to ${c.maxPositions} tokens, or pick a model whose context covers ${data.seqLen}.`
           });
         } else {
@@ -8816,6 +8821,2322 @@ function checkDataFit(contract, data) {
   }
   return { checked, skipped, findings, contract };
 }
+
+// src/utils/parallelismPlanner.ts
+var NODE_SIZE = 8;
+var COMPUTE_BOUND_MFU = 0.4;
+function tpCeilingFor(gpu, ffDim) {
+  const c = gpu.bf16TFLOPS * 1e12;
+  const linkGBs = gpu.nvlinkGBs > 0 ? gpu.nvlinkGBs : 32;
+  const cw = c / (linkGBs * 1e9);
+  return Math.max(1, Math.min(NODE_SIZE, Math.floor((ffDim > 0 ? ffDim : 4096) / cw)));
+}
+
+// src/utils/parallelLayout.ts
+var BUBBLE_WARN = 0.15;
+var STRAGGLE_THRESHOLD = 0.1;
+var SEQ_IMBALANCE_WARN = 0.05;
+var LOSS_FLOPS_PER_LOGIT = 10;
+var W_BYTES = 4;
+var G_BYTES = 4;
+var O_BYTES = 8;
+var ACT_BYTES = 2;
+var MEM_BW_EFFICIENCY = 0.8;
+var MEM_BYTES_PER_ELEM = {
+  /**
+   * transformers' LlamaRMSNorm / Qwen3RMSNorm: fwd to(fp32) 6, pow 8, mean 4,
+   * x*rsqrt 8, to(bf16) 6, *weight 4 = 36; bwd mirrors it with two gradient
+   * paths summed (weight grad 8, cast 6, mul 16, mean 4, pow 12, sum 12, cast 6) = 64.
+   */
+  rmsNorm: 100,
+  /** torch.nn.LayerNorm is one fused kernel each way: fwd read + write 4, bwd grad + input + write + weight-grad read 12. */
+  layerNorm: 16,
+  /** Residual add: fwd two reads + one write 6; bwd the gradient is summed where the residual stream forks, 6. */
+  add: 12,
+  /** SwiGLU per intermediate element: fwd silu 4 + mul 6; bwd mul (two grads) 12 + silu 6. */
+  swiglu: 28,
+  /** GELU MLP per intermediate element: fwd 4, bwd 6. */
+  gelu: 10,
+  /** RoPE per q / k element (transformers' rotate_half): fwd mul, neg, cat, mul, add = 26; bwd the same. */
+  rope: 52,
+  /**
+   * Cross-entropy per logit on the stock path, `cross_entropy(logits.float())`:
+   * fwd fp32 cast 6, log_softmax 12; bwd nll grad 4, log_softmax backward 12,
+   * cast back to bf16 6 = 40.
+   */
+  crossEntropy: 40,
+  /** Fused / chunked linear + cross-entropy: bf16 logits written and read once each way, never upcast whole. An assumption, not a count. */
+  crossEntropyFused: 8
+};
+var LAYOUT_BASIS = "Derived from the graph, not measured. A stage's time is the sum of its layers: matmul FLOPs at 40% of the card's peak, plus memory-bound bytes (norms, elementwise ops, RoPE, the fp32 loss) at 80% of its memory bandwidth. Step time uses the pipeline formula m x slowest + (sum - slowest) / v at this layout's microbatch count. On 2 and 4 L4 GPUs the predicted speedup of a split landed within 5.1 points of measured; on H100 this overprices the LM head. Memory uses the same per-layer terms and calibrated upper bound as the training-peak estimate, plus the fp32 logits on the stage with the loss. Nothing here was timed on a GPU.";
+var DEFAULT_GPU = "h100-sxm";
+var posInt2 = (v) => {
+  const n2 = typeof v === "string" && v.trim() !== "" ? Number(v) : typeof v === "number" ? v : NaN;
+  return Number.isInteger(n2) && n2 > 0 ? n2 : null;
+};
+function readLayout(raw) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return { error: "`layout` must be an object." };
+  const r = raw;
+  const pick = (...names) => {
+    const n2 = names.find((k) => r[k] != null);
+    return n2 == null ? null : { name: n2, v: r[n2] };
+  };
+  const int = (required, ...names) => {
+    const p = pick(...names);
+    if (!p) return required ? { error: `\`layout.${names[0]}\` is required.` } : void 0;
+    const v = posInt2(p.v);
+    return v == null ? { error: `\`layout.${p.name}\` must be a positive integer.` } : v;
+  };
+  const out = {};
+  const spec = [
+    ["tp", false, ["tp", "tensor_parallel"]],
+    ["pp", false, ["pp", "pipeline_parallel"]],
+    ["dp", false, ["dp", "data_parallel"]],
+    ["cp", false, ["cp", "context_parallel"]],
+    ["ep", false, ["ep", "expert_parallel"]],
+    ["numGpus", false, ["num_gpus", "numGpus", "gpus"]],
+    ["microBatch", true, ["micro_batch", "microBatch", "micro_batch_size"]],
+    ["globalBatch", false, ["global_batch", "globalBatch", "global_batch_size"]],
+    ["gradAccum", false, ["grad_accum", "gradAccum", "gradient_accumulation_steps"]],
+    ["seqLen", true, ["seq_len", "seqLen"]],
+    ["virtualStages", false, ["virtual_stages", "virtualStages", "virtual_pipeline_stages"]]
+  ];
+  for (const [key, req, names] of spec) {
+    const v = int(req, ...names);
+    if (v && typeof v === "object") return v;
+    if (v != null) out[key] = v;
+  }
+  out.tp = out.tp ?? 1;
+  out.pp = out.pp ?? 1;
+  out.dp = out.dp ?? 1;
+  const gpu = pick("gpu");
+  if (gpu) {
+    if (typeof gpu.v !== "string") return { error: "`layout.gpu` must be a string." };
+    out.gpu = gpu.v;
+  }
+  const sch = pick("schedule");
+  if (sch) {
+    const s = String(sch.v).toLowerCase();
+    if (s !== "1f1b" && s !== "interleaved") return { error: '`layout.schedule` must be "1f1b" or "interleaved".' };
+    out.schedule = s;
+  }
+  const lps = pick("layers_per_stage", "layersPerStage");
+  if (lps) {
+    const arr = typeof lps.v === "string" ? lps.v.split(",") : lps.v;
+    if (!Array.isArray(arr) || !arr.length) return { error: `\`layout.${lps.name}\` must be a list of positive integers.` };
+    const nums = arr.map(posInt2);
+    if (nums.some((n2) => n2 == null)) return { error: `\`layout.${lps.name}\` must be a list of positive integers.` };
+    out.layersPerStage = nums;
+  }
+  for (const [key, names] of [["embeddingOnFirst", ["embedding_on_first", "embeddingOnFirst"]], ["headOnLast", ["head_on_last", "headOnLast"]], ["fsdp", ["fsdp"]], ["activationCheckpointing", ["activation_checkpointing", "activationCheckpointing", "recompute"]], ["fusedCrossEntropy", ["fused_cross_entropy", "fusedCrossEntropy", "fused_ce"]]]) {
+    const p = pick(...names);
+    if (!p) continue;
+    if (typeof p.v !== "boolean") return { error: `\`layout.${p.name}\` must be true or false.` };
+    out[key] = p.v;
+  }
+  const z = pick("zero_stage", "zeroStage", "zero");
+  if (z) {
+    const v = Number(z.v);
+    if (![0, 1, 2, 3].includes(v)) return { error: `\`layout.${z.name}\` must be 0, 1, 2 or 3.` };
+    out.zeroStage = v;
+  }
+  const h = pick("seq_len_histogram", "seqLenHistogram");
+  if (h) {
+    const hist = readHistogram(h.v);
+    if ("error" in hist) return { error: `\`layout.${h.name}\`: ${hist.error}` };
+    out.seqLenHistogram = hist.histogram;
+  }
+  return out;
+}
+function readHistogram(raw) {
+  let rows = [];
+  if (typeof raw === "string") {
+    rows = raw.split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#")).map((l) => l.split(/[,\t ]+/)).filter(([a]) => !/^[a-z_]/i.test(String(a)));
+  } else if (Array.isArray(raw)) {
+    rows = raw.map((e) => Array.isArray(e) ? [e[0], e[1]] : e && typeof e === "object" ? [e.len ?? e.length, e.count] : [null, null]);
+  } else return { error: "must be a list of {len, count} or two-column CSV text." };
+  const out = [];
+  for (const [a, b] of rows) {
+    const len = posInt2(a), count = Number(b);
+    if (len == null || !(Number.isFinite(count) && count >= 0)) return { error: `unreadable row ${JSON.stringify([a, b])}; each row is a positive length and a non-negative count.` };
+    if (count > 0) out.push({ len, count });
+  }
+  if (!out.length) return { error: "no rows with a positive count." };
+  return { histogram: out };
+}
+function resolveLayoutGpu(id) {
+  const want = String(id ?? DEFAULT_GPU).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const exact = GPU_HARDWARE.find((g) => norm(g.id) === want) ?? gpuById(String(id ?? DEFAULT_GPU));
+  if (exact) return exact;
+  const hits = GPU_HARDWARE.filter((g) => norm(g.id).startsWith(want));
+  return hits.length === 1 ? hits[0] : null;
+}
+function topoOrder2(model) {
+  const idx = new Map(model.components.map((c, i) => [c.id, i]));
+  const indeg = new Map(model.components.map((c) => [c.id, 0]));
+  const next = new Map(model.components.map((c) => [c.id, []]));
+  for (const e of model.connections ?? []) {
+    if (!idx.has(e.from) || !idx.has(e.to)) continue;
+    next.get(e.from).push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  }
+  const ready = model.components.filter((c) => indeg.get(c.id) === 0).map((c) => c.id);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  while (ready.length) {
+    ready.sort((a, b) => idx.get(a) - idx.get(b));
+    const id = ready.shift();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(model.components[idx.get(id)]);
+    for (const n2 of next.get(id) ?? []) {
+      const d = indeg.get(n2) - 1;
+      indeg.set(n2, d);
+      if (d === 0) ready.push(n2);
+    }
+  }
+  for (const c of model.components) if (!seen.has(c.id)) out.push(c);
+  return out;
+}
+var SKIP_TYPES2 = /* @__PURE__ */ new Set(["input", "output", "stickyNote"]);
+var BLOCK_TYPES = /^(transformerBlock|transformerEncoder|transformerDecoder|transformerEncoderLayer|transformerDecoderLayer|ditBlock|llamaBlock|decoderBlock|encoderBlock)$/;
+function blocksOf(model) {
+  const order = topoOrder2(model).filter((c) => !SKIP_TYPES2.has(c.type));
+  const numOf = (c) => {
+    const m = /_(\d+)(?=_|$)/.exec(c.name ?? "");
+    return m ? Number(m[1]) : null;
+  };
+  const numbered = order.map(numOf);
+  const firstIdx = numbered.findIndex((n2) => n2 != null);
+  let lastIdx = -1;
+  for (let i = numbered.length - 1; i >= 0; i--) if (numbered[i] != null) {
+    lastIdx = i;
+    break;
+  }
+  if (firstIdx >= 0) {
+    const blocks = [];
+    let cur = null;
+    let monotone = true;
+    for (let i = firstIdx; i <= lastIdx; i++) {
+      const n2 = numbered[i];
+      if (n2 != null && n2 !== cur) {
+        if (cur != null && n2 < cur) monotone = false;
+        cur = n2;
+        blocks.push([]);
+      }
+      blocks[blocks.length - 1].push(order[i]);
+    }
+    if (monotone && blocks.length >= 2) {
+      return { pre: order.slice(0, firstIdx), blocks, post: order.slice(lastIdx + 1), method: "numbered-names" };
+    }
+  }
+  const bIdx = order.map((c, i) => BLOCK_TYPES.test(c.type) ? i : -1).filter((i) => i >= 0);
+  if (bIdx.length >= 2) {
+    const blocks = [];
+    for (let k = 0; k < bIdx.length; k++) {
+      const end = k + 1 < bIdx.length ? bIdx[k + 1] : bIdx[k] + 1;
+      blocks.push(order.slice(bIdx[k], end));
+    }
+    return { pre: order.slice(0, bIdx[0]), blocks, post: order.slice(bIdx[bIdx.length - 1] + 1), method: "block-components" };
+  }
+  return null;
+}
+var ATTN = /attention|^mla$/i;
+function geometryOf(model) {
+  const g = { numHeads: null, numKVHeads: null, hidden: null, ffn: null, numExperts: null, vocab: null };
+  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  for (const c of model.components) {
+    const p = c.params ?? {};
+    if (g.numHeads == null && ATTN.test(c.type)) {
+      g.numHeads = num5(p.numHeads);
+      g.numKVHeads = num5(p.numKVHeads) ?? g.numHeads;
+      g.hidden = g.hidden ?? num5(p.embedDim);
+    }
+    if (g.ffn == null && /^(swiglu|feedForward|geglu|mlp)$/i.test(c.type)) g.ffn = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+    if (/moe/i.test(c.type)) {
+      g.numExperts = g.numExperts ?? num5(p.numExperts);
+      g.ffn = g.ffn ?? num5(p.expertDim) ?? num5(p.ffDim);
+    }
+    if (c.type === "embedding" && g.vocab == null) {
+      g.vocab = num5(p.vocabSize);
+      g.hidden = g.hidden ?? num5(p.embeddingDim);
+    }
+  }
+  return g;
+}
+function weightedNoTransient(l) {
+  return l.outputs * OUTPUT_K + l.scores * ATTENTION_K + l.internal * INTERNAL_K + l.recurrent * RECURRENT_K;
+}
+function memBoundBytes(c, shapes, hasRope) {
+  const sh = shapes.get(c.id);
+  const outS = sh?.out ?? [];
+  if (!outS.length) return 0;
+  const elems = outS.reduce((a, b) => a * b, 1);
+  const width = outS[outS.length - 1] || 1;
+  const tokens = elems / width;
+  const p = c.params ?? {};
+  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const B = MEM_BYTES_PER_ELEM;
+  switch (c.type) {
+    case "rmsNorm":
+      return elems * B.rmsNorm;
+    case "layerNorm":
+      return elems * B.layerNorm;
+    case "add":
+      return elems * B.add;
+    case "swiglu":
+    case "geglu": {
+      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      return I ? tokens * I * B.swiglu : 0;
+    }
+    case "feedForward": {
+      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      return I ? tokens * I * B.gelu : 0;
+    }
+    case "embedding": {
+      const V = num5(p.vocabSize), D = num5(p.embeddingDim) ?? width;
+      return (V ? V * D * ACT_BYTES : 0) + tokens * D * 10;
+    }
+    default:
+      if (hasRope && ATTN.test(c.type)) {
+        const H = num5(p.numHeads), E = num5(p.embedDim) ?? width;
+        if (!H) return 0;
+        const hd = num5(p.headDim) ?? E / H;
+        const kv = num5(p.numKVHeads) ?? H;
+        return tokens * (H + kv) * hd * B.rope;
+      }
+      return 0;
+  }
+}
+function unitCost(comps, shapes, isPost, hasRope) {
+  const stores = storesScoresUnder("sdpa");
+  const u = { params: 0, expertParams: 0, macs: 0, actElems: 0, largest: 0, boundaryElems: 0, logits: 0, memBytes: 0 };
+  for (const c of comps) {
+    const sh = shapes.get(c.id);
+    const inS = sh?.in ?? [];
+    const outS = sh?.out ?? [];
+    const p = estimateLayerParams(c.type, c.params, inS.length ? inS : void 0) ?? 0;
+    u.params += p;
+    if (/moe/i.test(c.type)) u.expertParams += p;
+    u.macs += estimateLayerFlops(c.type, c.params ?? {}, inS, outS) || 0;
+    u.memBytes += memBoundBytes(c, shapes, hasRope);
+    const l = layerMemoryTerms(c, shapes, stores);
+    if (l) {
+      u.actElems += weightedNoTransient(l);
+      u.largest = Math.max(u.largest, l.outputs, l.scores);
+    }
+    if (outS.length) u.boundaryElems = outS.reduce((a, b) => a * b, 1);
+  }
+  if (isPost) {
+    const head = [...comps].reverse().find((c) => c.type === "linear");
+    const o = head ? shapes.get(head.id)?.out ?? [] : [];
+    if (o.length) u.logits = o.reduce((a, b) => a * b, 1);
+  }
+  return u;
+}
+function optimalPartition(w, k, head0 = 0, tailK = 0) {
+  const n2 = w.length;
+  if (k < 1 || k > n2) return null;
+  const pre = [0];
+  for (const x of w) pre.push(pre[pre.length - 1] + x);
+  const sum = (i, j2) => pre[j2] - pre[i];
+  const f = Array.from({ length: k + 1 }, () => new Array(n2 + 1).fill(Infinity));
+  f[0][0] = 0;
+  for (let s = 1; s <= k; s++) {
+    for (let j2 = s; j2 <= n2 - (k - s); j2++) {
+      for (let i = s - 1; i < j2; i++) {
+        if (f[s - 1][i] === Infinity) continue;
+        const part = sum(i, j2) + (s === 1 ? head0 : 0) + (s === k ? tailK : 0);
+        const v = Math.max(f[s - 1][i], part);
+        if (v < f[s][j2]) f[s][j2] = v;
+      }
+    }
+  }
+  if (f[k][n2] === Infinity) return null;
+  const cap = f[k][n2] * (1 + 1e-9);
+  const g = Array.from({ length: k + 1 }, () => new Array(n2 + 1).fill(Infinity));
+  const arg2 = Array.from({ length: k + 1 }, () => new Array(n2 + 1).fill(-1));
+  g[0][0] = 0;
+  for (let s = 1; s <= k; s++) {
+    for (let j2 = s; j2 <= n2 - (k - s); j2++) {
+      for (let i = s - 1; i < j2; i++) {
+        if (g[s - 1][i] === Infinity) continue;
+        const part = sum(i, j2) + (s === 1 ? head0 : 0) + (s === k ? tailK : 0);
+        if (part > cap) continue;
+        const val = g[s - 1][i] + part * part;
+        if (val < g[s][j2]) {
+          g[s][j2] = val;
+          arg2[s][j2] = i;
+        }
+      }
+    }
+  }
+  const sizes = [];
+  let j = n2;
+  for (let s = k; s >= 1; s--) {
+    const i = arg2[s][j];
+    sizes.unshift(j - i);
+    j = i;
+  }
+  return sizes;
+}
+function evenSplit(blocks, pp) {
+  const base = Math.floor(blocks / pp), rem = blocks % pp;
+  return Array.from({ length: pp }, (_, i) => base + (i < rem ? 1 : 0));
+}
+function bubbleFraction(pp, microbatches, virtualStages = 1) {
+  if (pp <= 1 || microbatches <= 0) return 0;
+  const x = (pp - 1) / Math.max(1, virtualStages);
+  return x / (microbatches + x);
+}
+function pipelineStepTime(stageTimes, microbatches, virtualStages = 1) {
+  if (!stageTimes.length) return 0;
+  const max = Math.max(...stageTimes);
+  const sum = stageTimes.reduce((a, b) => a + b, 0);
+  return Math.max(1, microbatches) * max + (sum - max) / Math.max(1, virtualStages);
+}
+function microbatchesForBubble(pp, target, virtualStages = 1) {
+  const x = (pp - 1) / Math.max(1, virtualStages);
+  return Math.max(1, Math.ceil(x * (1 - target) / target - 1e-9));
+}
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = a + 1831565813 >>> 0;
+    let t = a;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function invNorm(p) {
+  const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+  const pl = 0.02425;
+  if (p < pl) {
+    const q2 = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q2 + c[1]) * q2 + c[2]) * q2 + c[3]) * q2 + c[4]) * q2 + c[5]) / ((((d[0] * q2 + d[1]) * q2 + d[2]) * q2 + d[3]) * q2 + 1);
+  }
+  if (p > 1 - pl) {
+    const q2 = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q2 + c[1]) * q2 + c[2]) * q2 + c[3]) * q2 + c[4]) * q2 + c[5]) / ((((d[0] * q2 + d[1]) * q2 + d[2]) * q2 + d[3]) * q2 + 1);
+  }
+  const q = p - 0.5, r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q / (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+function seqImbalance(hist, ranks, perRank, a, b, seed = 7) {
+  const total = hist.reduce((s, h) => s + h.count, 0);
+  const lens = hist.map((h) => h.len);
+  const cdf = [];
+  let acc = 0;
+  for (const h of hist) {
+    acc += h.count / total;
+    cdf.push(acc);
+  }
+  const work = (L) => a * L + b * L * L;
+  const meanLen = hist.reduce((s, h) => s + h.len * h.count, 0) / total;
+  const meanW = hist.reduce((s, h) => s + work(h.len) * h.count, 0) / total;
+  const varW = hist.reduce((s, h) => s + (work(h.len) - meanW) ** 2 * h.count, 0) / total;
+  const budget = perRank * meanLen;
+  if (ranks <= 1) return { expectedMaxOverMean: 1, packedEstimate: 1, method: "monte-carlo" };
+  const draws = ranks * perRank;
+  if (draws <= 4e4) {
+    const rnd = mulberry32(seed);
+    const sample = () => {
+      const u = rnd();
+      let i = 0;
+      while (i < cdf.length - 1 && u > cdf[i]) i++;
+      return lens[i];
+    };
+    const trials = Math.max(50, Math.min(2e3, Math.floor(2e6 / draws)));
+    let sumRatio = 0, sumPacked = 0;
+    for (let t = 0; t < trials; t++) {
+      let mx = 0, sm = 0, pmx = 0, psm = 0;
+      for (let r = 0; r < ranks; r++) {
+        let w = 0;
+        for (let k = 0; k < perRank; k++) w += work(sample());
+        mx = Math.max(mx, w);
+        sm += w;
+        let left = budget, q = 0;
+        while (left > 0) {
+          const L = Math.min(sample(), left);
+          q += L * L;
+          left -= L;
+        }
+        const pw = a * budget + b * q;
+        pmx = Math.max(pmx, pw);
+        psm += pw;
+      }
+      sumRatio += mx / (sm / ranks);
+      sumPacked += pmx / (psm / ranks);
+    }
+    return { expectedMaxOverMean: sumRatio / trials, packedEstimate: sumPacked / trials, method: "monte-carlo" };
+  }
+  const z = invNorm((ranks - 0.375) / (ranks + 0.25));
+  const mean = perRank * meanW;
+  const ratio = 1 + z * Math.sqrt(perRank * varW) / mean;
+  const meanL2 = hist.reduce((s, h) => s + h.len * h.len * h.count, 0) / total;
+  const varL2 = hist.reduce((s, h) => s + (h.len * h.len - meanL2) ** 2 * h.count, 0) / total;
+  const docs = budget / meanLen;
+  const pMean = a * budget + b * docs * meanL2;
+  const packed = 1 + z * b * Math.sqrt(docs * varL2) / pMean;
+  return { expectedMaxOverMean: ratio, packedEstimate: packed, method: "normal-approximation" };
+}
+var pct = (x) => `${(x * 100).toFixed(1)}%`;
+var gb = (x) => `${x.toFixed(1)} GB`;
+function checkParallelLayout(model, layout) {
+  const checked = [];
+  const skipped = [];
+  const findings = [];
+  const recommendations = [];
+  const add = (f) => findings.push(f);
+  const tp = Math.max(1, Math.floor(layout.tp || 1));
+  const pp = Math.max(1, Math.floor(layout.pp || 1));
+  const dp = Math.max(1, Math.floor(layout.dp || 1));
+  const cp = Math.max(1, Math.floor(layout.cp ?? 1));
+  const ep = Math.max(1, Math.floor(layout.ep ?? 1));
+  const micro = Math.max(1, Math.floor(layout.microBatch || 1));
+  const seqLen = Math.max(1, Math.floor(layout.seqLen || 1));
+  const schedule = layout.schedule ?? "1f1b";
+  const v = schedule === "interleaved" ? Math.max(1, Math.floor(layout.virtualStages ?? 2)) : 1;
+  const zero = layout.fsdp ? 3 : layout.zeroStage ?? 0;
+  const embFirst = layout.embeddingOnFirst !== false;
+  const headLast = layout.headOnLast !== false;
+  const world = tp * pp * dp * cp;
+  const gpu = resolveLayoutGpu(layout.gpu);
+  const geo = geometryOf(model);
+  if (layout.numGpus != null) {
+    checked.push("world-size");
+    if (world !== layout.numGpus) {
+      add({
+        rule: "world-size",
+        severity: "block",
+        title: `tp x pp x dp x cp = ${world}, but the job has ${layout.numGpus} GPUs`,
+        detail: `${tp} x ${pp} x ${dp} x ${cp} = ${world}. The launcher refuses a world size that does not match the process count${world < layout.numGpus ? `, or ${layout.numGpus - world} GPUs sit idle` : ""}.`,
+        fix: layout.numGpus % (tp * pp * cp) === 0 ? `Set dp = ${layout.numGpus / (tp * pp * cp)}.` : `Choose tp x pp x cp dividing ${layout.numGpus}.`
+      });
+    }
+  } else skipped.push({ check: "world-size", reason: "numGpus not given; the product tp x pp x dp x cp is taken as the world size." });
+  if (geo.numHeads != null) {
+    checked.push("tp-heads");
+    if (geo.numHeads % tp !== 0) {
+      add({
+        rule: "tp-heads",
+        severity: "block",
+        title: `TP ${tp} does not divide ${geo.numHeads} attention heads`,
+        detail: "Megatron-style TP gives each rank whole heads; a remainder fails at model construction.",
+        fix: `Use a TP degree dividing ${geo.numHeads}: ${divisors(geo.numHeads).filter((d) => d <= NODE_SIZE).join(", ")}.`
+      });
+    }
+    if (geo.numKVHeads != null && geo.numKVHeads !== geo.numHeads) {
+      checked.push("tp-kv-heads");
+      if (geo.numKVHeads % tp !== 0) {
+        if (tp % geo.numKVHeads === 0) {
+          add({
+            rule: "tp-kv-replicated",
+            severity: "warn",
+            title: `TP ${tp} exceeds ${geo.numKVHeads} KV heads: each KV head is replicated ${tp / geo.numKVHeads}x`,
+            detail: "It runs, but every replica stores and computes the same K and V projections, so the KV weights and KV activations do not shrink past TP = KV heads.",
+            fix: `Keep TP at or under ${geo.numKVHeads}, or accept the replication knowingly.`
+          });
+        } else {
+          add({
+            rule: "tp-kv-heads",
+            severity: "block",
+            title: `TP ${tp} neither divides nor is a multiple of ${geo.numKVHeads} KV heads`,
+            detail: "Grouped-query attention needs whole KV heads per rank or an exact replication factor.",
+            fix: `Use a TP degree that divides ${geo.numKVHeads} or is a multiple of it.`
+          });
+        }
+      }
+    }
+  } else skipped.push({ check: "tp-heads", reason: "no attention layer with a head count in the graph." });
+  if (geo.hidden != null) {
+    checked.push("tp-hidden");
+    if (geo.hidden % tp !== 0) add({ rule: "tp-hidden", severity: "block", title: `TP ${tp} does not divide hidden size ${geo.hidden}`, detail: "Column- and row-parallel linears split the hidden dimension evenly across ranks.", fix: `Use a TP degree dividing ${geo.hidden}.` });
+  }
+  if (geo.ffn != null) {
+    checked.push("tp-ffn");
+    if (geo.ffn % tp !== 0) add({ rule: "tp-ffn", severity: "block", title: `TP ${tp} does not divide FFN width ${geo.ffn}`, detail: "The MLP up and down projections are split along the intermediate dimension.", fix: `Use a TP degree dividing ${geo.ffn}.` });
+  }
+  checked.push("tp-node");
+  if (tp > NODE_SIZE) {
+    add({
+      rule: "tp-crosses-node",
+      severity: "warn",
+      title: `TP ${tp} spans more than one ${NODE_SIZE}-GPU node`,
+      detail: "Every layer does TP all-reduces; past the NVLink domain they run on the node fabric, an order of magnitude slower (the planner caps TP at one node for this reason).",
+      fix: `Keep TP at ${NODE_SIZE} or under and move the rest of the split to PP or DP.`
+    });
+  } else if (gpu && tp > 1 && geo.ffn != null) {
+    const ceiling = tpCeilingFor(gpu, geo.ffn);
+    if (tp > ceiling) {
+      add({
+        rule: "tp-past-link-ceiling",
+        severity: "info",
+        title: `TP ${tp} is past the ~${ceiling}-way ceiling for FFN width ${geo.ffn} on ${gpu.label}`,
+        detail: "Roofline estimate (scaling-book): past about ffDim x link bandwidth / peak FLOPs ways, the TP collectives cost more than the matmuls they split.",
+        fix: `Consider TP ${ceiling} with more PP or DP.`
+      });
+    }
+  }
+  if (geo.numExperts != null) {
+    checked.push("ep-experts");
+    if (geo.numExperts % ep !== 0) add({ rule: "ep-experts", severity: "block", title: `EP ${ep} does not divide ${geo.numExperts} experts`, detail: "Expert parallelism places whole experts on each rank.", fix: `Use an EP degree dividing ${geo.numExperts}.` });
+    if (dp * cp % ep !== 0) add({ rule: "ep-ranks", severity: "block", title: `EP ${ep} does not divide dp x cp = ${dp * cp}`, detail: "Expert-parallel groups are carved out of the data- and context-parallel ranks (Megatron-Core).", fix: `Use an EP degree dividing ${dp * cp}.` });
+  } else if (ep > 1) {
+    add({ rule: "ep-experts", severity: "block", title: `EP ${ep} on a graph with no MoE layer`, detail: "There are no experts to distribute.", fix: "Set ep = 1." });
+  }
+  checked.push("cp-seq");
+  if (cp > 1) {
+    if (seqLen % cp !== 0) add({ rule: "cp-seq", severity: "block", title: `CP ${cp} does not divide sequence length ${seqLen}`, detail: "Context parallelism gives each rank an equal slice of every sequence.", fix: `Use a sequence length divisible by ${2 * cp}, or a CP degree dividing ${seqLen}.` });
+    else if (seqLen % (2 * cp) !== 0) add({ rule: "cp-causal-balance", severity: "warn", title: `Sequence length ${seqLen} is not divisible by 2 x CP = ${2 * cp}`, detail: "Load-balanced causal CP splits each sequence into 2 x CP chunks so every rank gets an early and a late chunk; without it the last rank does most of the attention.", fix: `Pad or choose a sequence length divisible by ${2 * cp}.` });
+  }
+  let m = null;
+  let globalBatch = null;
+  checked.push("batch-arithmetic");
+  if (layout.gradAccum != null) {
+    m = layout.gradAccum;
+    globalBatch = micro * m * dp;
+    if (layout.globalBatch != null && layout.globalBatch !== globalBatch) {
+      add({
+        rule: "batch-arithmetic",
+        severity: "block",
+        title: `global batch ${layout.globalBatch} != micro ${micro} x grad-accum ${m} x dp ${dp} = ${globalBatch}`,
+        detail: "Megatron and DeepSpeed both assert this identity at startup.",
+        fix: `Set grad-accum to ${layout.globalBatch / (micro * dp)} if that is an integer, or change the global batch to ${globalBatch}.`
+      });
+    }
+  } else if (layout.globalBatch != null) {
+    globalBatch = layout.globalBatch;
+    const q = layout.globalBatch / (micro * dp);
+    if (!Number.isInteger(q)) {
+      add({
+        rule: "batch-arithmetic",
+        severity: "block",
+        title: `global batch ${layout.globalBatch} is not a multiple of micro ${micro} x dp ${dp} = ${micro * dp}`,
+        detail: "The microbatches per step must be a whole number on every DP rank.",
+        fix: `Use a global batch that is a multiple of ${micro * dp} (e.g. ${Math.max(1, Math.round(q)) * micro * dp}).`
+      });
+    } else m = q;
+  } else skipped.push({ check: "batch-arithmetic", reason: "neither globalBatch nor gradAccum given." });
+  const split = blocksOf(model);
+  const resolvedBase = {
+    gpu: gpu?.id ?? null,
+    gpuMemoryGb: gpu?.memoryGB ?? null,
+    worldSize: world,
+    microbatchesPerStep: m,
+    globalBatch,
+    blocks: split?.blocks.length ?? 0,
+    layersPerStage: null,
+    schedule,
+    virtualStages: v,
+    zeroStage: zero
+  };
+  if (!gpu) skipped.push({ check: "stage-memory", reason: `unknown or ambiguous GPU "${layout.gpu}"; one of ${GPU_HARDWARE.map((g) => g.id).join(", ")}.` });
+  if (!split) {
+    skipped.push({ check: "stage-balance", reason: "no repeated blocks found in the graph (numbered layer names or block components), so there is nothing to cut into stages." });
+    if (gpu) skipped.push({ check: "stage-memory", reason: "needs the stage split." });
+    return finish(null, [], null);
+  }
+  const nBlocks = split.blocks.length;
+  const units = nBlocks + (embFirst ? 0 : 1) + (headLast ? 0 : 1);
+  checked.push("pp-over-blocks");
+  if (pp > units) {
+    add({ rule: "pp-over-blocks", severity: "block", title: `PP ${pp} is more than the ${nBlocks} blocks`, detail: "Every stage needs at least one block.", fix: `Use PP ${Math.min(units, 8)} or fewer.` });
+  }
+  let lps;
+  if (layout.layersPerStage) {
+    checked.push("layers-per-stage");
+    lps = layout.layersPerStage;
+    const sum = lps.reduce((a, b) => a + b, 0);
+    if (lps.length !== pp || sum !== units) {
+      add({
+        rule: "layers-per-stage",
+        severity: "block",
+        title: `layersPerStage [${lps.join(", ")}] does not describe ${pp} stages of ${units} layers`,
+        detail: `It has ${lps.length} entries summing to ${sum}; the graph has ${nBlocks} blocks${units !== nBlocks ? ` plus ${units - nBlocks} counted end layer${units - nBlocks > 1 ? "s" : ""}` : ""}, cut into PP ${pp}.`,
+        fix: `Give ${pp} positive counts summing to ${units}.`
+      });
+    }
+  } else {
+    lps = evenSplit(units, Math.min(pp, units));
+    if (units % pp !== 0 && pp <= units) {
+      add({
+        rule: "uneven-default-split",
+        severity: "warn",
+        title: `${units} layers do not divide evenly into PP ${pp}`,
+        detail: `Megatron-LM's default split asserts num_layers % pp == 0. The report assumes [${lps.join(", ")}].`,
+        fix: "Set the first and last stage layer counts explicitly (decoder_first/last_pipeline_num_layers) or choose a PP degree dividing the layer count."
+      });
+    }
+  }
+  if (schedule === "interleaved") {
+    checked.push("interleaved-chunks");
+    if (nBlocks % (pp * v) !== 0) {
+      add({ rule: "interleaved-chunks", severity: "block", title: `${nBlocks} blocks do not split into PP ${pp} x ${v} virtual stages`, detail: "The interleaved schedule gives each rank v equal model chunks.", fix: `Choose v with ${nBlocks} divisible by ${pp} x v.` });
+    }
+    if (m != null && pp > 1 && m % pp !== 0) {
+      add({ rule: "interleaved-microbatches", severity: "warn", title: `${m} microbatches per step is not a multiple of PP ${pp}`, detail: "Megatron-LM's interleaved schedule has required the microbatch count to be divisible by the pipeline size; check your version.", fix: `Use a microbatch count that is a multiple of ${pp}.` });
+    }
+  }
+  if (findings.some((f) => f.severity === "block" && (f.rule === "pp-over-blocks" || f.rule === "layers-per-stage"))) {
+    return finish(null, [], null);
+  }
+  const sized = withSeqLen(model, seqLen).model;
+  const shapes = propagateShapes(sized).shapes;
+  const hasRope = model.components.some((c) => c.type === "rope");
+  const preC = unitCost(split.pre, shapes, false, hasRope);
+  const postC = unitCost(split.post, shapes, true, hasRope);
+  if (postC.logits === 0 && geo.vocab != null && geo.hidden != null) {
+    postC.macs += seqLen * geo.hidden * geo.vocab;
+    postC.logits = seqLen * geo.vocab;
+    postC.params += geo.hidden * geo.vocab;
+    postC.boundaryElems = Math.max(postC.boundaryElems, seqLen * geo.vocab);
+    postC.largest = Math.max(postC.largest, seqLen * geo.vocab);
+    if (!split.post.some((c) => /norm/i.test(c.type))) {
+      const normType = split.blocks[0].find((c) => /norm/i.test(c.type))?.type;
+      postC.memBytes += seqLen * geo.hidden * (normType === "layerNorm" ? MEM_BYTES_PER_ELEM.layerNorm : normType ? MEM_BYTES_PER_ELEM.rmsNorm : 0);
+    }
+    if (headLast && pp > 1) add({
+      rule: "tied-head",
+      severity: "info",
+      title: "Tied LM head costed on the last stage",
+      detail: `The checkpoint ties the output head to the embedding (${geo.vocab} x ${geo.hidden}). The weight is shared; the matmul and the loss are not, and under PP the last stage keeps its own copy of the matrix.`,
+      fix: "Nothing to change; this says why the last stage is heavier than its block count suggests."
+    });
+  }
+  const fusedCe = layout.fusedCrossEntropy === true;
+  postC.memBytes += postC.logits * (fusedCe ? MEM_BYTES_PER_ELEM.crossEntropyFused : MEM_BYTES_PER_ELEM.crossEntropy);
+  const blockC = split.blocks.map((b) => unitCost(b, shapes, false, hasRope));
+  const recompute = layout.activationCheckpointing ? 4 / 3 : 1;
+  const flopsPerTok = (u, isBlock) => 6 * u.macs / seqLen * (isBlock ? recompute : 1);
+  const lossPerTok = postC.logits / seqLen * LOSS_FLOPS_PER_LOGIT;
+  const perGpu = micro / (tp * cp);
+  const mmMs = (u, isBlock) => gpu ? flopsPerTok(u, isBlock) * seqLen * perGpu / (gpu.bf16TFLOPS * 1e12 * COMPUTE_BOUND_MFU) * 1e3 : 0;
+  const memMs = (u, isBlock) => gpu ? u.memBytes * (isBlock ? recompute : 1) * perGpu / (gpu.memBandwidthGBs * 1e9 * MEM_BW_EFFICIENCY) * 1e3 : 0;
+  const costBasis = gpu ? "time" : "flops";
+  const unitCostOf = (u, kind) => {
+    const isBlock = kind === "block";
+    if (costBasis === "time") return mmMs(u, isBlock) + memMs(u, isBlock);
+    return flopsPerTok(u, isBlock) + (kind === "post" ? lossPerTok : 0);
+  };
+  const preF = flopsPerTok(preC, false);
+  const postF = flopsPerTok(postC, false) + lossPerTok;
+  const unitF = [];
+  const unitW = [];
+  const unitList = [];
+  if (!embFirst) {
+    unitF.push(preF);
+    unitW.push(unitCostOf(preC, "pre"));
+    unitList.push({ kind: "pre", c: preC });
+  }
+  blockC.forEach((c, i) => {
+    unitF.push(flopsPerTok(c, true));
+    unitW.push(unitCostOf(c, "block"));
+    unitList.push({ kind: "block", c, i });
+  });
+  if (!headLast) {
+    unitF.push(postF);
+    unitW.push(unitCostOf(postC, "post"));
+    unitList.push({ kind: "post", c: postC });
+  }
+  const head0F = embFirst ? preF : 0, tailF = headLast ? postF : 0;
+  const head0W = embFirst ? unitCostOf(preC, "pre") : 0, tailW = headLast ? unitCostOf(postC, "post") : 0;
+  const stageRanges = [];
+  {
+    let s = 0;
+    for (const n2 of lps) {
+      stageRanges.push([s, s + n2]);
+      s += n2;
+    }
+  }
+  const stageSum = (sizes, per, h0, tk) => {
+    const out = [];
+    let s = 0;
+    sizes.forEach((n2, k) => {
+      let f = 0;
+      for (let j = s; j < s + n2; j++) f += per[j];
+      if (k === 0) f += h0;
+      if (k === sizes.length - 1) f += tk;
+      out.push(f);
+      s += n2;
+    });
+    return out;
+  };
+  const sf = stageSum(lps, unitF, head0F, tailF);
+  const sw = stageSum(lps, unitW, head0W, tailW);
+  const mean = sw.reduce((a, b) => a + b, 0) / sw.length;
+  const maxW = Math.max(...sw);
+  const slowest = sw.indexOf(maxW);
+  const best = pp > 1 ? optimalPartition(unitW, pp, head0W, tailW) : null;
+  const bestW = best ? stageSum(best, unitW, head0W, tailW) : sw;
+  const bestMax = Math.max(...bestW);
+  const stepOf = (stages2) => m != null ? pipelineStepTime(stages2, m, v) : null;
+  const balanced = sw.map(() => mean);
+  const curStep = stepOf(sw), balStep = stepOf(balanced), bestStep = stepOf(bestW);
+  const asymptoticSlowdown = maxW / mean - 1;
+  const imbalance = {
+    costBasis,
+    maxOverMean: maxW / mean,
+    slowestStage: slowest,
+    estStepSlowdown: curStep != null && balStep != null ? curStep / balStep - 1 : asymptoticSlowdown,
+    asymptoticSlowdown,
+    step: {
+      microbatches: m,
+      formula: m != null ? v > 1 ? `t = m x max + (sum - max) / v, m = ${m}, v = ${v} (interleaved)` : `t = m x max + (sum - max), m = ${m} (1F1B)` : "max / mean (microbatches per step unknown, so fill and drain are left out and this overstates the gap)",
+      currentMs: costBasis === "time" ? curStep : null,
+      balancedMs: costBasis === "time" ? balStep : null
+    },
+    rebalanced: best && bestMax < maxW * (1 - 1e-9) ? {
+      layersPerStage: best,
+      maxOverMean: bestMax / mean,
+      estStepSpeedup: curStep != null && bestStep != null ? curStep / bestStep - 1 : maxW / bestMax - 1,
+      asymptoticSpeedup: maxW / bestMax - 1,
+      stepMs: costBasis === "time" ? bestStep : null
+    } : null
+  };
+  const costWord = costBasis === "time" ? "predicted time" : "FLOPs";
+  if (pp > 1) {
+    checked.push("stage-balance");
+    const what = slowest === pp - 1 && headLast ? " (it also carries the LM head and the loss)" : slowest === 0 && embFirst ? " (it also carries the embedding)" : "";
+    if (imbalance.estStepSlowdown > 0.03) {
+      const reb = imbalance.rebalanced;
+      const per = costBasis === "time" ? `Per-stage predicted ms per microbatch: ${sw.map((x) => x.toFixed(1)).join(" | ")}.` : `Per-stage FLOPs/token: ${sf.map((x) => fmtFlops2(x)).join(" | ")} (unknown card, so FLOPs stand in for time and the memory-bound loss is understated).`;
+      add({
+        rule: "stage-imbalance",
+        severity: imbalance.estStepSlowdown >= STRAGGLE_THRESHOLD && reb && reb.estStepSpeedup > 0.03 ? "warn" : "info",
+        title: `Stage ${slowest} has ${pct(asymptoticSlowdown)} more ${costWord} than the mean stage${what}`,
+        detail: `${per} Every microbatch waits on the slowest stage, so ${m != null ? `at ${m} microbatches per step the predicted step is ${pct(imbalance.estStepSlowdown)} longer than a perfectly balanced split (${imbalance.step.formula})` : `the step is up to ${pct(imbalance.estStepSlowdown)} longer than a perfectly balanced split (microbatches per step unknown; the fill and drain that shrink this are left out)`}. Predicted from the graph, not measured.`,
+        fix: reb ? `layersPerStage ${reb.layersPerStage.join(",")}: predicted ${pct(reb.estStepSpeedup)} faster steps${m != null ? ` at ${m} microbatches` : ""} (${pct(reb.asymptoticSpeedup)} as microbatches grow).` : "No contiguous split of whole blocks does better; consider moving the loss onto its own layer (account_for_loss_in_pipeline_split)."
+      });
+    }
+    if (imbalance.rebalanced) {
+      recommendations.push(`Rebalance: layersPerStage ${imbalance.rebalanced.layersPerStage.join(",")} (now ${lps.join(",")}); slowest stage drops from ${imbalance.maxOverMean.toFixed(2)}x to ${imbalance.rebalanced.maxOverMean.toFixed(2)}x the mean, predicted ${pct(imbalance.rebalanced.estStepSpeedup)} faster per step${m != null ? ` at ${m} microbatches` : ""}.`);
+    }
+  } else skipped.push({ check: "stage-balance", reason: "PP 1: one stage, nothing to balance." });
+  let bubble = null;
+  if (pp > 1 && m == null) {
+    skipped.push({ check: "pipeline-bubble", reason: "the microbatches per step are unknown (no readable globalBatch or gradAccum); per-stage memory assumes at least PP microbatches in flight." });
+  } else if (pp > 1 && m != null) {
+    const mb = m;
+    const frac = bubbleFraction(pp, mb, v);
+    const need = microbatchesForBubble(pp, BUBBLE_WARN, v);
+    bubble = { fraction: frac, microbatches: mb, microbatchesForTarget: frac > BUBBLE_WARN ? need : null };
+    checked.push("pipeline-bubble");
+    if (frac > BUBBLE_WARN) {
+      add({
+        rule: "pipeline-bubble",
+        severity: "warn",
+        title: `Pipeline bubble is ${pct(frac)} of each step`,
+        detail: `${schedule === "interleaved" ? `Interleaved (v=${v})` : "1F1B"} with PP ${pp} and ${mb} microbatch${mb === 1 ? "" : "es"} per step: (p-1)${v > 1 ? "/v" : ""} / (m + (p-1)${v > 1 ? "/v" : ""}). Every GPU idles this share of the step.`,
+        fix: `Use at least ${need} microbatches per step (raise grad-accum, lower micro-batch, or lower DP) to bring it under ${pct(BUBBLE_WARN)}${schedule === "1f1b" && pp > 2 ? "; the interleaved schedule also divides it by its virtual stages" : ""}.`
+      });
+      recommendations.push(`Bubble: ${need}+ microbatches per step brings it from ${pct(frac)} to under ${pct(BUBBLE_WARN)}.`);
+    }
+  }
+  const shardDp = dp * cp;
+  const stateBytesPerParam = W_BYTES / (zero >= 3 ? shardDp : 1) + G_BYTES / (zero >= 2 ? shardDp : 1) + O_BYTES / (zero >= 1 ? shardDp : 1);
+  const actFactor = micro * ACT_BYTES / (tp * cp) / 1e9;
+  const stages = [];
+  for (let k = 0; k < lps.length; k++) {
+    const [s, e] = stageRanges[k];
+    const parts = unitList.slice(s, e);
+    if (k === 0 && embFirst) parts.unshift({ kind: "pre", c: preC });
+    if (k === lps.length - 1 && headLast) parts.push({ kind: "post", c: postC });
+    const blocksHere = parts.filter((p) => p.kind === "block").map((p) => p.i + 1);
+    const extras = parts.filter((p) => p.kind !== "block").map((p) => p.kind === "pre" ? "embedding" : "head+loss");
+    const params = parts.reduce((a, p) => a + p.c.params, 0);
+    const expert = parts.reduce((a, p) => a + p.c.expertParams, 0);
+    const paramsPerGpu = (params - expert) / tp + expert / (tp * ep);
+    const stateGb = paramsPerGpu * stateBytesPerParam * OPTIMIZER_K / 1e9;
+    let actElems = 0, largest = 0, maxBlock = 0;
+    for (const p of parts) {
+      largest = Math.max(largest, p.c.largest);
+      if (layout.activationCheckpointing && p.kind === "block") {
+        actElems += p.c.boundaryElems * OUTPUT_K;
+        maxBlock = Math.max(maxBlock, p.c.actElems);
+      } else actElems += p.c.actElems;
+    }
+    actElems += maxBlock;
+    const actPerMb = actElems * actFactor;
+    const transientGb = largest * TRANSIENT_K * actFactor;
+    const mb = m ?? pp;
+    const inflightBase = schedule === "interleaved" ? (pp - k) * (1 + (pp - 1) / (pp * v)) : pp - k;
+    const inflight = Math.min(mb * v, Math.max(1, inflightBase));
+    const hasLoss = parts.some((p) => p.kind === "post");
+    const lossLogitsGb = hasLoss && !fusedCe ? 2 * postC.logits * 4 * micro / (tp * cp) / 1e9 : 0;
+    const peak = stateGb + actPerMb * inflight + transientGb + lossLogitsGb;
+    const flopsHere = sf[k];
+    const mm = gpu ? parts.reduce((a, p) => a + mmMs(p.c, p.kind === "block"), 0) : null;
+    const mem = gpu ? parts.reduce((a, p) => a + memMs(p.c, p.kind === "block"), 0) : null;
+    const memBytes = parts.reduce((a, p) => a + p.c.memBytes * (p.kind === "block" ? recompute : 1), 0) * perGpu;
+    stages.push({
+      index: k,
+      layers: { first: blocksHere.length ? blocksHere[0] : null, last: blocksHere.length ? blocksHere[blocksHere.length - 1] : null, count: blocksHere.length, extras },
+      params,
+      flopsPerToken: flopsHere,
+      estMsPerMicrobatch: mm != null && mem != null ? mm + mem : null,
+      msBreakdown: mm != null && mem != null ? { matmul: mm, memoryBound: mem } : null,
+      memBoundGbPerMicrobatch: memBytes / 1e9,
+      activationGbPerMicrobatch: actPerMb,
+      lossLogitsGb,
+      inFlightMicrobatches: Math.round(inflight * 100) / 100,
+      stateGbPerGpu: stateGb,
+      peakGbPerGpu: peak,
+      peakGbUpperPerGpu: upperPeakGb(peak),
+      fitsGpu: gpu ? fitVerdict(peak, params, gpu.memoryGB) : null
+    });
+  }
+  if (gpu) {
+    checked.push("stage-memory");
+    const over = stages.filter((s) => s.fitsGpu === "does_not_fit");
+    const border = stages.filter((s) => s.fitsGpu === "borderline");
+    if (over.length) {
+      const w = over.reduce((a, b) => b.peakGbPerGpu > a.peakGbPerGpu ? b : a);
+      add({
+        rule: "stage-memory",
+        severity: "block",
+        title: `Stage ${over.map((s) => s.index).join(", ")} does not fit ${gpu.label}: ${gb(w.peakGbPerGpu)} per GPU on stage ${w.index}`,
+        detail: `Weights, gradients and Adam state ${gb(w.stateGbPerGpu)} (ZeRO ${zero}, TP ${tp}${ep > 1 ? `, EP ${ep}` : ""}) plus activations for ${w.inFlightMicrobatches} in-flight microbatch${w.inFlightMicrobatches === 1 ? "" : "es"} at ${gb(w.activationGbPerMicrobatch)} each. Derived, with the same per-layer terms as the training-peak estimate.`,
+        fix: memoryFix(zero, layout.activationCheckpointing, micro, tp, pp)
+      });
+    } else if (border.length) {
+      add({
+        rule: "stage-memory-borderline",
+        severity: "warn",
+        title: `Stage ${border.map((s) => s.index).join(", ")} is borderline on ${gpu.label}`,
+        detail: "The point estimate fits, the calibrated upper bound (x1.43, 95% of held-out runs) with 1.15x headroom does not. Measure once before reserving the full job.",
+        fix: memoryFix(zero, layout.activationCheckpointing, micro, tp, pp)
+      });
+    }
+  }
+  let dpSeq;
+  if (!layout.seqLenHistogram?.length) {
+    skipped.push({ check: "dp-seq-imbalance", reason: "no sequence-length histogram given (seqLenHistogram / --seq-hist); padded or packed fixed-length batches are assumed." });
+  } else if (dp <= 1) {
+    skipped.push({ check: "dp-seq-imbalance", reason: "DP 1: no ranks to wait on each other." });
+  } else {
+    checked.push("dp-seq-imbalance");
+    const fAt = (L) => {
+      const sh = propagateShapes(withSeqLen(model, L).model).shapes;
+      let s = 0;
+      for (const c of model.components) {
+        const x = sh.get(c.id);
+        s += estimateLayerFlops(c.type, c.params ?? {}, x?.in ?? [], x?.out ?? []) || 0;
+      }
+      return s;
+    };
+    const T = Math.max(2, seqLen - seqLen % 2);
+    const f1 = fAt(T), f22 = fAt(T / 2);
+    const b = Math.max(0, 2 * (f1 - 2 * f22) / (T * T));
+    const a = Math.max(0, (f1 - b * T * T) / T);
+    const r = seqImbalance(layout.seqLenHistogram, dp, micro * (m ?? 1), a, b);
+    dpSeq = { expectedMaxOverMean: r.expectedMaxOverMean, estSlowdown: r.expectedMaxOverMean - 1, packedEstimate: r.packedEstimate, method: r.method };
+    if (dpSeq.estSlowdown > SEQ_IMBALANCE_WARN) {
+      add({
+        rule: "dp-seq-imbalance",
+        severity: "warn",
+        title: `Uneven sequence lengths make the slowest of ${dp} DP ranks ~${pct(dpSeq.estSlowdown)} slower than the mean`,
+        detail: `Each rank draws ${micro * (m ?? 1)} sequences per step from your histogram; work per sequence is modelled as a*len + b*len^2 from this graph's FLOPs (attention is the len^2 term). Every rank waits for the slowest at the gradient all-reduce. ${r.method === "monte-carlo" ? "Monte Carlo, fixed seed" : "Normal approximation"}; derived, not measured.`,
+        fix: `Pack sequences to a fixed token budget per rank (with per-document attention masking), predicted ${pct(dpSeq.packedEstimate - 1)}; or bucket by length so ranks in a step draw similar lengths.`
+      });
+      recommendations.push(`Sequence packing: slowest-rank overhead ${pct(dpSeq.estSlowdown)} -> ${pct(dpSeq.packedEstimate - 1)} (predicted).`);
+    }
+  }
+  return finish(imbalance, stages, bubble, dpSeq);
+  function finish(imb, st, bub, seq) {
+    const order = { block: 0, warn: 1, info: 2 };
+    findings.sort((x, y) => order[x.severity] - order[y.severity]);
+    return {
+      checked,
+      skipped,
+      findings,
+      resolved: { ...resolvedBase, layersPerStage: st.length ? lps : null },
+      stages: st,
+      imbalance: imb,
+      bubble: bub,
+      ...seq ? { dpSeqImbalance: seq } : {},
+      recommendations,
+      basis: LAYOUT_BASIS
+    };
+  }
+}
+function memoryFix(zero, ac, micro, tp, pp) {
+  const opts = [];
+  if (zero < 1) opts.push("ZeRO-1 / distributed optimizer (shards the 8 bytes/param of Adam state across DP)");
+  if (!ac) opts.push("activation checkpointing");
+  if (micro > 1) opts.push("a smaller micro-batch");
+  if (tp < NODE_SIZE) opts.push(`TP ${tp * 2}`);
+  opts.push(`PP ${pp * 2}`);
+  return `Options, cheapest first: ${opts.join("; ")}.`;
+}
+function divisors(n2) {
+  const out = [];
+  for (let d = 1; d <= n2; d++) if (n2 % d === 0) out.push(d);
+  return out;
+}
+function fmtFlops2(f) {
+  if (f >= 1e12) return `${(f / 1e12).toFixed(2)} TFLOP`;
+  if (f >= 1e9) return `${(f / 1e9).toFixed(2)} GFLOP`;
+  if (f >= 1e6) return `${(f / 1e6).toFixed(1)} MFLOP`;
+  return `${Math.round(f)} FLOP`;
+}
+function renderLayoutText(r, name = "model") {
+  const L = [];
+  const res = r.resolved;
+  L.push(`Parallel layout check: ${name}`);
+  L.push(`  ${res.worldSize} GPUs${res.gpu ? ` (${res.gpu}, ${res.gpuMemoryGb} GB)` : ""}, ${res.blocks} blocks, schedule ${res.schedule}${res.virtualStages > 1 ? ` v=${res.virtualStages}` : ""}, ZeRO ${res.zeroStage}${res.microbatchesPerStep != null ? `, ${res.microbatchesPerStep} microbatches/step` : ""}${res.globalBatch != null ? `, global batch ${res.globalBatch}` : ""}`);
+  if (r.stages.length) {
+    L.push("");
+    const head = ["stage", "blocks", "extra", "params", "FLOPs/tok", "ms/mb*", "mem-bound", "vs mean", "act/mb", "in-flight", "peak/GPU", "upper", "fits"];
+    const byTime = r.stages.every((s) => s.estMsPerMicrobatch != null);
+    const cost = (s) => byTime ? s.estMsPerMicrobatch : s.flopsPerToken;
+    const mean = r.stages.reduce((a, s) => a + cost(s), 0) / r.stages.length;
+    const rows = r.stages.map((s) => [
+      String(s.index),
+      s.layers.count ? `${s.layers.first}-${s.layers.last} (${s.layers.count})` : "-",
+      s.layers.extras.join("+") || "-",
+      s.params >= 1e9 ? `${(s.params / 1e9).toFixed(2)}B` : `${(s.params / 1e6).toFixed(0)}M`,
+      fmtFlops2(s.flopsPerToken),
+      s.estMsPerMicrobatch != null ? s.estMsPerMicrobatch.toFixed(0) : "-",
+      s.msBreakdown && s.estMsPerMicrobatch ? `${Math.round(s.msBreakdown.memoryBound / s.estMsPerMicrobatch * 100)}%` : "-",
+      `${(cost(s) / mean).toFixed(2)}x`,
+      gb(s.activationGbPerMicrobatch),
+      String(s.inFlightMicrobatches),
+      gb(s.peakGbPerGpu),
+      gb(s.peakGbUpperPerGpu),
+      s.fitsGpu == null ? "n/a" : s.fitsGpu === "does_not_fit" ? "NO" : s.fitsGpu
+    ]);
+    const w = head.map((h, i) => Math.max(h.length, ...rows.map((row) => row[i].length)));
+    const line = (cells) => "  " + cells.map((c, i) => i <= 2 ? c.padEnd(w[i]) : c.padStart(w[i])).join("  ");
+    L.push(line(head));
+    for (const row of rows) L.push(line(row));
+    L.push(`  * predicted fwd+bwd ms per microbatch per GPU: matmuls at ${Math.round(COMPUTE_BOUND_MFU * 100)}% of peak FLOPs plus memory-bound bytes (the mem-bound share) at ${Math.round(MEM_BW_EFFICIENCY * 100)}% of memory bandwidth. Not measured.`);
+    const loss = r.stages.find((s) => s.lossLogitsGb > 0);
+    if (loss) L.push(`  Stage ${loss.index}'s peak includes ${gb(loss.lossLogitsGb)} of fp32 logits and their gradient for the loss (--fused-ce if the loss is fused or chunked).`);
+  }
+  if (r.imbalance) {
+    const im = r.imbalance;
+    const unit = im.costBasis === "time" ? "predicted time" : "FLOPs (unknown card)";
+    L.push("");
+    L.push(`  Balance: slowest stage ${im.slowestStage} at ${im.maxOverMean.toFixed(2)}x the mean stage's ${unit}.`);
+    if (im.step.microbatches != null) {
+      const ms = im.step.currentMs != null && im.step.balancedMs != null ? `: ${im.step.currentMs.toFixed(0)} ms vs ${im.step.balancedMs.toFixed(0)} ms balanced` : "";
+      L.push(`  Predicted step at ${im.step.microbatches} microbatches (${im.step.formula.replace(/, m = \d+.*$/, "")})${ms}, ${pct(im.estStepSlowdown)} slower than a perfect split (${pct(im.asymptoticSlowdown)} as microbatches grow).`);
+    } else {
+      L.push(`  Microbatches per step unknown: up to ${pct(im.estStepSlowdown)} slower than a perfect split, the asymptotic ratio, which overstates the gap at small microbatch counts.`);
+    }
+    if (im.rebalanced) {
+      const rb = im.rebalanced;
+      L.push(`  Rebalanced split ${rb.layersPerStage.join(",")}: ${rb.maxOverMean.toFixed(2)}x, predicted ${pct(rb.estStepSpeedup)} faster per step${im.step.microbatches != null ? ` at ${im.step.microbatches} microbatches${rb.stepMs != null ? ` (${rb.stepMs.toFixed(0)} ms)` : ""}; ${pct(rb.asymptoticSpeedup)} as microbatches grow` : ""}.`);
+    }
+  }
+  if (r.bubble) L.push(`  Bubble: ${pct(r.bubble.fraction)} at ${r.bubble.microbatches} microbatch${r.bubble.microbatches === 1 ? "" : "es"}/step${r.bubble.microbatchesForTarget ? ` (${r.bubble.microbatchesForTarget}+ for under ${pct(BUBBLE_WARN)})` : ""}.`);
+  if (r.dpSeqImbalance) L.push(`  DP sequence imbalance: slowest rank ${r.dpSeqImbalance.expectedMaxOverMean.toFixed(3)}x the mean; packed ${r.dpSeqImbalance.packedEstimate.toFixed(3)}x (${r.dpSeqImbalance.method}).`);
+  L.push("");
+  if (!r.findings.length) L.push("  No findings on the checks that ran.");
+  for (const f of r.findings) {
+    L.push(`  ${f.severity.padEnd(5)} ${f.title}`);
+    L.push(`        ${f.detail}`);
+    L.push(`        fix: ${f.fix}`);
+  }
+  L.push("");
+  L.push(`  checked: ${r.checked.join(", ") || "none"}`);
+  for (const s of r.skipped) L.push(`  skipped ${s.check}: ${s.reason}`);
+  L.push("");
+  L.push(`  ${r.basis}`);
+  return L.join("\n") + "\n";
+}
+
+// src/utils/serveConfigCheck.ts
+var SERVE_BASIS = "Derived from config.json, the engine flags and the card, not measured. Card memory is the nominal GB; the engine's own reserve (activation profiling, CUDA graphs, communication buffers) is not counted, so every KV capacity and concurrency here is an upper bound. Template checks read files and do not render a conversation, so they cannot prove two stacks produce the same prompt.";
+var CARD_SM = {
+  "b200": 100,
+  "h200": 90,
+  "h100-sxm": 90,
+  "a100-80g": 80,
+  "a100-40g": 80,
+  "l40s": 89,
+  "l4": 89,
+  "a10g": 86,
+  "t4": 75,
+  "v100": 70,
+  "rtx-4090": 89,
+  "rtx-3090": 86
+};
+var VLLM_QUANT_TABLE = 'vLLM docs, "Supported Hardware" quantization table (docs.vllm.ai/en/latest/features/quantization/)';
+var QUANT_SUPPORT = [
+  {
+    method: "fp8",
+    nativeSm: 89,
+    fallbackSm: 75,
+    fallbackNote: "runs as weight-only W8A16 through the FP8 Marlin kernel: weights are stored in fp8, the matmuls run in 16 bits, so the memory saving is there and the FP8 compute speedup is not",
+    source: 'vLLM docs, FP8 W8A8: "FP8 computation is supported on NVIDIA GPUs with compute capability >= 8.9"; "FP8 models will run on compute capability >= 7.5 (Turing) as weight-only W8A16, utilizing FP8 Marlin" (docs.vllm.ai/en/latest/features/quantization/llm_compressor/fp8/)'
+  },
+  {
+    method: "mxfp4",
+    nativeSm: 90,
+    fallbackSm: 80,
+    fallbackNote: "runs on Ampere and Ada through the Marlin MXFP4 MoE kernel (weight-only), not the Hopper / Blackwell MXFP4 path",
+    source: 'vLLM gpt-oss recipe: "GPT-OSS works on Ampere devices by default, using the TRITON_ATTN attention backend and Marlin MXFP4 MoE"; the quantization table footnote: "Turing does not support Marlin MXFP4" (docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html)'
+  },
+  {
+    method: "nvfp4",
+    nativeSm: 100,
+    fallbackSm: 75,
+    fallbackNote: "FP4 tensor cores are Blackwell (sm100) only; elsewhere the weights run weight-only through the Marlin FP4 kernel",
+    source: `${VLLM_QUANT_TABLE}: Marlin (GPTQ/AWQ/FP8/FP4) supported from Turing`
+  },
+  { method: "awq", nativeSm: 75, fallbackSm: 75, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: AWQ not on Volta (sm70)` },
+  { method: "gptq", nativeSm: 70, fallbackSm: 70, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: GPTQ Volta and later` },
+  { method: "marlin", nativeSm: 75, fallbackSm: 75, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: Marlin (GPTQ/AWQ/FP8/FP4) not on Volta` },
+  { method: "int8", nativeSm: 75, fallbackSm: 75, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: llm-compressor INT8 (W8A8) not on Volta` },
+  { method: "bitsandbytes", nativeSm: 70, fallbackSm: 70, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: bitsandbytes Volta and later` },
+  { method: "gguf", nativeSm: 70, fallbackSm: 70, fallbackNote: null, source: `${VLLM_QUANT_TABLE}: GGUF Volta and later` }
+];
+var BF16_MIN_SM = 80;
+var BF16_SOURCE = 'bf16 tensor cores start at Ampere (sm80); vLLM refuses an explicit --dtype bfloat16 below it ("Bfloat16 is only supported on GPUs with compute capability of at least 8.0")';
+var GGUF_BPW = {
+  IQ1_S: 2.0042,
+  IQ1_M: 2.146,
+  IQ2_XXS: 2.3824,
+  IQ2_XS: 2.5882,
+  IQ2_S: 2.7403,
+  IQ2_M: 2.9294,
+  IQ3_XXS: 3.2548,
+  IQ3_XS: 3.4977,
+  IQ3_S: 3.6606,
+  IQ3_M: 3.7628,
+  IQ4_XS: 4.4597,
+  IQ4_NL: 4.6818,
+  Q2_K_S: 2.9697,
+  Q2_K: 3.1593,
+  Q3_K_S: 3.6429,
+  Q3_K_M: 3.996,
+  Q3_K_L: 4.2979,
+  Q4_K_S: 4.6672,
+  Q4_K_M: 4.8944,
+  Q5_K_S: 5.5704,
+  Q5_K_M: 5.7036,
+  Q6_K: 6.5633,
+  Q8_0: 8.5008,
+  F16: 16.0005,
+  BF16: 16,
+  F32: 32,
+  MXFP4: 4.25
+};
+var GGUF_BPW_SOURCE = "llama.cpp tools/quantize/README.md, bits/weight measured on meta-llama/Llama-3.1-8B";
+var GGUF_KV_BYTES = {
+  f32: 4,
+  f16: 2,
+  bf16: 2,
+  q8_0: 34 / 32,
+  q4_0: 18 / 32,
+  q4_1: 20 / 32,
+  iq4_nl: 18 / 32,
+  q5_0: 22 / 32,
+  q5_1: 24 / 32
+};
+var ENGINE_SAMPLER_DEFAULTS = {
+  // OpenAI-compatible defaults used when --generation-config vllm turns the model's file off.
+  vllm: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, source: "vLLM SamplingParams defaults (temperature 1.0, top_p 1.0, top_k off, repetition_penalty 1.0)" },
+  sglang: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, source: "SGLang sampling defaults when not taken from the model (temperature 1.0, top_p 1.0, top_k off)" },
+  llamacpp: { temperature: 0.8, top_p: 0.95, top_k: 40, repetition_penalty: 1, source: "llama.cpp tools/server/README.md: --temp 0.80, --top-k 40, --top-p 0.95, --repeat-penalty 1.00 (and --min-p 0.05)" }
+};
+var KNOWN_SERVE_ISSUES = [
+  {
+    id: "gpt-oss-jinja-vs-harmony",
+    match: /gpt[_-]?oss/i,
+    engines: ["sglang", "llamacpp"],
+    severity: "warn",
+    title: "gpt-oss: the Jinja chat template in the repo was reported to diverge from the harmony training format",
+    detail: "Same weights, same payload, same harness: 0.400 on vllm-mlx against 0.650 on Ollama on a 20-task agentic benchmark. The bundled template differs from harmony in developer-block order, tool-call header placement and tool-result wrapping. An engine that renders the Jinja template inherits that; vLLM renders gpt-oss through openai-harmony instead.",
+    fix: "Render through openai-harmony, or diff a rendered 5-message conversation with tool calls against harmony's output before serving.",
+    source: "github.com/waybarrios/vllm-mlx/issues/568; vLLM gpt-oss recipe (openai-harmony rendering)"
+  },
+  {
+    id: "kimi-k2-tool-calls",
+    match: /kimi[_-]?k2/i,
+    engines: ["vllm", "sglang", "llamacpp"],
+    severity: "warn",
+    title: "Kimi K2: tool-call accuracy and decoding parameters vary by host",
+    detail: "Moonshot's K2 Vendor Verifier measured tool-call schema accuracy from 100% (Moonshot) down to 87.22% (a vLLM deployment) for kimi-k2-thinking, and says a significant share of discrepancies came from decoding-parameter misuse.",
+    fix: "Set the K2 tool-call parser (--tool-call-parser kimi_k2), keep the model card's temperature, and run the vendor verifier before taking traffic.",
+    source: "github.com/MoonshotAI/K2-Vendor-Verifier; kimi.com/blog/kimi-vendor-verifier"
+  },
+  {
+    id: "qwen3-greedy",
+    match: /^qwen3/i,
+    engines: ["vllm", "sglang", "llamacpp"],
+    severity: "warn",
+    title: "Qwen3 is served with temperature 0 (greedy)",
+    detail: "The Qwen3 model card says not to use greedy decoding in thinking mode: it can cause performance degradation and endless repetition.",
+    fix: "Use the model card's values (thinking: temperature 0.6, top_p 0.95, top_k 20).",
+    source: 'Qwen3 model card, "Best Practices" (huggingface.co/Qwen/Qwen3-8B)',
+    when: ({ sampler }) => sampler.temperature === 0
+  }
+];
+function tokenizeCommand(cmd) {
+  const out = [];
+  let cur = "";
+  let has = false;
+  let q = null;
+  const s = cmd.replace(/\\\r?\n/g, " ");
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (q) {
+      if (ch === q) {
+        q = null;
+        continue;
+      }
+      if (ch === "\\" && q === '"' && i + 1 < s.length && /["\\$`]/.test(s[i + 1])) {
+        cur += s[++i];
+        continue;
+      }
+      cur += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      q = ch;
+      has = true;
+      continue;
+    }
+    if (ch === "\\" && i + 1 < s.length) {
+      cur += s[++i];
+      has = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (has || cur) {
+        out.push(cur);
+        cur = "";
+        has = false;
+      }
+      continue;
+    }
+    cur += ch;
+    has = true;
+  }
+  if (has || cur) out.push(cur);
+  return out;
+}
+function detectEngine(tokens) {
+  const joined = tokens.join(" ");
+  if (/\bsglang(\.launch_server|\s+serve)\b|sglang\.launch_server/.test(joined)) return "sglang";
+  if (/(^|\s|\/)vllm\s+serve\b|vllm\.entrypoints/.test(joined)) return "vllm";
+  if (/(^|\s|\/)(llama-server|llama-cli|llama-run|server)(\s|$)/.test(joined) && /(^|\s)(-m|--model|-hf|-hfr|--hf-repo)(\s|=)/.test(joined)) return "llamacpp";
+  if (/(^|\s|\/)llama-(server|cli)(\s|$)/.test(joined)) return "llamacpp";
+  return null;
+}
+function readTokenCount(v) {
+  if (typeof v === "number") return Number.isInteger(v) && v > 0 ? v : null;
+  const m = /^\s*(\d+(?:\.\d+)?)\s*([kKmM]?)\s*$/.exec(String(v ?? ""));
+  if (!m) return null;
+  const mult = m[2] === "" ? 1 : /k/i.test(m[2]) ? 1024 : 1024 * 1024;
+  const n2 = Math.round(Number(m[1]) * mult);
+  return n2 > 0 ? n2 : null;
+}
+var num4 = (v) => {
+  const n2 = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
+  return Number.isFinite(n2) ? n2 : null;
+};
+var posInt3 = (v) => {
+  const n2 = num4(v);
+  return n2 != null && Number.isInteger(n2) && n2 > 0 ? n2 : null;
+};
+function parseJsonObject(v) {
+  if (v == null) return null;
+  try {
+    const o = JSON.parse(v);
+    return o && typeof o === "object" && !Array.isArray(o) ? o : null;
+  } catch {
+    return null;
+  }
+}
+var BOOL_FLAGS = /* @__PURE__ */ new Set([
+  "--enable-expert-parallel",
+  "--enable-auto-tool-choice",
+  "--trust-remote-code",
+  "--enforce-eager",
+  "--enable-prefix-caching",
+  "--no-enable-prefix-caching",
+  "--enable-chunked-prefill",
+  "--disable-log-requests",
+  "--disable-log-stats",
+  "--enable-reasoning",
+  "--enable-ep-moe",
+  "--enable-dp-attention",
+  "--disable-radix-cache",
+  "--disable-cuda-graph",
+  "--enable-torch-compile",
+  "--enable-lora",
+  "--jinja",
+  "--no-jinja",
+  "-cb",
+  "--cont-batching",
+  "-nocb",
+  "--no-cont-batching",
+  "-kvu",
+  "--kv-unified",
+  "-no-kvu",
+  "--no-kv-unified",
+  "--mlock",
+  "--no-mmap",
+  "--verbose",
+  "-v",
+  "--metrics",
+  "--embedding",
+  "--embeddings",
+  "--async-scheduling"
+]);
+function parseServeCommand(cmd, engineHint) {
+  const tokens = Array.isArray(cmd) ? cmd : tokenizeCommand(cmd);
+  const engine = engineHint ?? detectEngine(tokens);
+  const flags = /* @__PURE__ */ new Map();
+  const positional = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === "-m" && i > 0 && /(^|\/)python[\d.]*$/.test(tokens[i - 1])) {
+      positional.push(tokens[++i] ?? "");
+      continue;
+    }
+    if (/^--?[A-Za-z]/.test(t)) {
+      const eq = t.indexOf("=");
+      if (eq > 0) {
+        flags.set(t.slice(0, eq), t.slice(eq + 1));
+        continue;
+      }
+      const next = tokens[i + 1];
+      if (BOOL_FLAGS.has(t) || next == null || /^--?[A-Za-z]/.test(next)) {
+        flags.set(t, true);
+        continue;
+      }
+      flags.set(t, next);
+      i++;
+      continue;
+    }
+    positional.push(t);
+  }
+  const used = /* @__PURE__ */ new Set();
+  const get = (...names) => {
+    for (const n2 of names) {
+      if (flags.has(n2)) {
+        used.add(n2);
+        const v = flags.get(n2);
+        return v === true ? "true" : v;
+      }
+    }
+    return void 0;
+  };
+  const has = (...names) => names.some((n2) => {
+    if (flags.has(n2)) {
+      used.add(n2);
+      return true;
+    }
+    return false;
+  });
+  const args = {};
+  const setNum = (k, v, reader = posInt3) => {
+    if (v == null) return;
+    const n2 = reader(v);
+    if (n2 != null) args[k] = n2;
+  };
+  if (engine === "vllm" || engine === "sglang") {
+    if (engine === "vllm") {
+      const si = positional.findIndex((p) => p === "serve");
+      const pm = si >= 0 ? positional[si + 1] : void 0;
+      args.model = get("--model") ?? pm;
+      setNum("tp", get("--tensor-parallel-size", "-tp"));
+      setNum("pp", get("--pipeline-parallel-size", "-pp"));
+      setNum("dp", get("--data-parallel-size", "-dp"));
+      if (has("--enable-expert-parallel")) args.expertParallel = true;
+      setNum("maxModelLen", get("--max-model-len"), readTokenCount);
+      setNum("maxNumSeqs", get("--max-num-seqs"));
+      setNum("gpuMemoryUtilization", get("--gpu-memory-utilization"), num4);
+      const rope = parseJsonObject(get("--rope-scaling"));
+      const hfo = parseJsonObject(get("--hf-overrides"));
+      if (rope) args.ropeScaling = rope;
+      if (hfo?.rope_scaling && typeof hfo.rope_scaling === "object") args.ropeScaling = hfo.rope_scaling;
+      if (hfo && posInt3(hfo.max_position_embeddings) != null) args.maxPositionOverride = posInt3(hfo.max_position_embeddings);
+      args.generationConfigMode = get("--generation-config");
+      const ogc = parseJsonObject(get("--override-generation-config"));
+      if (ogc) args.samplerFlags = readSampler(ogc);
+      if (has("--enable-auto-tool-choice")) args.enableAutoToolChoice = true;
+    } else {
+      args.model = get("--model-path", "--model");
+      setNum("tp", get("--tp-size", "--tp", "--tensor-parallel-size"));
+      setNum("pp", get("--pp-size", "--pipeline-parallel-size"));
+      setNum("dp", get("--dp-size", "--dp", "--data-parallel-size"));
+      setNum("epSize", get("--ep-size", "--ep", "--expert-parallel-size"));
+      if (has("--enable-ep-moe") || args.epSize != null && args.epSize > 1) args.expertParallel = true;
+      setNum("maxModelLen", get("--context-length"), readTokenCount);
+      setNum("maxNumSeqs", get("--max-running-requests"));
+      setNum("memFractionStatic", get("--mem-fraction-static"), num4);
+      const over = parseJsonObject(get("--json-model-override-args"));
+      if (over?.rope_scaling && typeof over.rope_scaling === "object") args.ropeScaling = over.rope_scaling;
+      if (over && posInt3(over.max_position_embeddings) != null) args.maxPositionOverride = posInt3(over.max_position_embeddings);
+      args.generationConfigMode = get("--sampling-defaults");
+    }
+    args.dtype = get("--dtype");
+    args.quantization = get("--quantization", "-q");
+    args.kvCacheDtype = get("--kv-cache-dtype");
+    args.chatTemplate = get("--chat-template");
+    args.toolCallParser = get("--tool-call-parser");
+    args.reasoningParser = get("--reasoning-parser");
+  } else if (engine === "llamacpp") {
+    const m = get("-m", "--model");
+    const hf = get("-hf", "-hfr", "--hf-repo");
+    const hff = get("-hff", "--hf-file");
+    args.model = m ?? hf;
+    args.ggufFile = hff ?? m ?? (hf ? hf.includes(":") ? hf : `${hf}:Q4_K_M` : void 0);
+    const c = get("-c", "--ctx-size");
+    if (c != null) {
+      const n2 = num4(c);
+      if (n2 != null && n2 >= 0) args.ctxSize = n2;
+    }
+    const ngl = get("-ngl", "--gpu-layers", "--n-gpu-layers");
+    if (ngl != null) args.nGpuLayers = ngl === "all" || ngl === "auto" ? ngl : posInt3(ngl) ?? (num4(ngl) === 0 ? 0 : "auto");
+    const np = get("-np", "--parallel", "--n-parallel");
+    if (np != null) {
+      const n2 = num4(np);
+      if (n2 != null && n2 > 0) args.nParallel = n2;
+    }
+    if (has("-kvu", "--kv-unified")) args.kvUnified = true;
+    if (has("-no-kvu", "--no-kv-unified")) args.kvUnified = false;
+    args.cacheTypeK = get("-ctk", "--cache-type-k");
+    args.cacheTypeV = get("-ctv", "--cache-type-v");
+    args.ropeScalingType = get("--rope-scaling");
+    setNum("ropeScale", get("--rope-scale"), num4);
+    setNum("yarnOrigCtx", get("--yarn-orig-ctx"));
+    args.chatTemplate = get("--chat-template", "--chat-template-file");
+    const s = {};
+    const t = num4(get("--temp", "--temperature"));
+    if (t != null) s.temperature = t;
+    const tp = num4(get("--top-p"));
+    if (tp != null) s.top_p = tp;
+    const tk = num4(get("--top-k"));
+    if (tk != null) s.top_k = tk;
+    const rp = num4(get("--repeat-penalty"));
+    if (rp != null) s.repetition_penalty = rp;
+    if (Object.keys(s).length) args.samplerFlags = s;
+  }
+  for (const k of Object.keys(args)) if (args[k] == null) delete args[k];
+  const ignored = [...flags.keys()].filter((f) => !used.has(f));
+  return { engine, args, ignored };
+}
+function readSampler(raw) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const out = {};
+  const pick = (k, ...names) => {
+    for (const n2 of names) {
+      const v = num4(r[n2]);
+      if (v != null) {
+        out[k] = v;
+        return;
+      }
+    }
+  };
+  pick("temperature", "temperature", "temp");
+  pick("top_p", "top_p", "topP");
+  pick("top_k", "top_k", "topK");
+  pick("repetition_penalty", "repetition_penalty", "repetitionPenalty", "repeat_penalty");
+  return out;
+}
+function readServeSpec(raw) {
+  if (raw == null || typeof raw !== "object") return { error: "`serve` must be an object." };
+  const r = raw;
+  const hint = r.engine == null ? void 0 : String(r.engine).toLowerCase().replace(/[^a-z]/g, "");
+  const engineHint = hint === "llamacpp" || hint === "llama" ? "llamacpp" : hint === "vllm" || hint === "sglang" ? hint : hint == null ? void 0 : null;
+  if (engineHint === null) return { error: "`serve.engine` must be one of vllm, sglang, llamacpp." };
+  const parsed = typeof r.command === "string" ? parseServeCommand(r.command, engineHint) : { engine: engineHint ?? null, args: {}, ignored: [] };
+  const engine = parsed.engine;
+  if (!engine) return { error: "Could not tell the engine from `serve.command`; pass `serve.engine` (vllm, sglang or llamacpp)." };
+  const args = { ...parsed.args, ...r.args && typeof r.args === "object" ? r.args : {} };
+  const gpus = r.gpus == null ? void 0 : posInt3(r.gpus);
+  if (r.gpus != null && gpus == null) return { error: "`serve.gpus` must be a positive integer." };
+  const gpu = r.gpu == null ? void 0 : String(r.gpu);
+  if (gpu != null && !resolveLayoutGpu(gpu)) return { error: `\`serve.gpu\` "${gpu}" is not a card id or an unambiguous prefix (h100, h200, b200, a100-80g, a100-40g, l40s, l4, a10g, t4, v100, ...).` };
+  const obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  return {
+    engine,
+    args,
+    ignored: parsed.ignored,
+    gpu,
+    gpus: gpus ?? void 0,
+    sampler: r.sampler != null ? readSampler(r.sampler) : void 0,
+    tokenizerConfig: obj(r.tokenizer_config ?? r.tokenizerConfig),
+    chatTemplateFile: typeof (r.chat_template ?? r.chatTemplate) === "string" ? String(r.chat_template ?? r.chatTemplate) : null,
+    generationConfig: obj(r.generation_config ?? r.generationConfig),
+    modelId: typeof (r.model_id ?? r.modelId) === "string" ? String(r.model_id ?? r.modelId) : void 0
+  };
+}
+function normalizeQuant(q) {
+  if (q == null) return null;
+  const s = String(q).toLowerCase().replace(/-/g, "_");
+  if (!s || s === "none" || s === "null") return null;
+  if (/^fp8|fbgemm_fp8|^ptpc_fp8|^modelopt$/.test(s)) return "fp8";
+  if (/mxfp4/.test(s)) return "mxfp4";
+  if (/nvfp4|modelopt_fp4|fp4/.test(s)) return "nvfp4";
+  if (/^awq_marlin|^gptq_marlin|^marlin|machete/.test(s)) return "marlin";
+  if (/^awq/.test(s)) return "awq";
+  if (/^gptq/.test(s)) return "gptq";
+  if (/bitsandbytes|bnb/.test(s)) return "bitsandbytes";
+  if (/gguf/.test(s)) return "gguf";
+  if (/int8|w8a8|smoothquant/.test(s)) return "int8";
+  return s;
+}
+function checkpointQuant(config) {
+  const qc = config?.quantization_config ?? null;
+  if (!qc || typeof qc !== "object") return { method: null, raw: null, bits: null, blockN: null };
+  let raw = qc.quant_method != null ? String(qc.quant_method) : null;
+  let bits = posInt3(qc.bits) ?? posInt3(qc.w_bit);
+  if (raw === "compressed-tensors") {
+    const groups = qc.config_groups ?? {};
+    const w = Object.values(groups)[0]?.weights;
+    if (w?.num_bits === 8 && w.type === "float") raw = "fp8";
+    else if (w?.num_bits === 4 && w.type === "float") raw = "nvfp4";
+    else if (w?.num_bits === 8) raw = "int8";
+    else if (w?.num_bits === 4) {
+      raw = "gptq";
+      bits = 4;
+    }
+  }
+  if (raw === "bitsandbytes") bits = qc.load_in_8bit === true ? 8 : 4;
+  const wbs = Array.isArray(qc.weight_block_size) ? qc.weight_block_size.map(posInt3) : null;
+  return { method: normalizeQuant(raw), raw, bits, blockN: wbs?.[0] ?? null };
+}
+var isMoe = (c) => /moe/i.test(c.type);
+var isLmHead = (c, comps) => c.type === "linear" && comps.filter((x) => x.type === "linear").pop() === c;
+function paramSplit(model) {
+  let total = 0, expert = 0, edge = 0;
+  const comps = model.components ?? [];
+  for (const c of comps) {
+    const p = estimateLayerParams(c.type, c.params, c.inputShape);
+    total += p;
+    if (isMoe(c)) expert += p;
+    if (c.type === "embedding" || isLmHead(c, comps)) edge += p;
+  }
+  return { total, expert, edge };
+}
+var DTYPE_BYTES = { bf16: 2, fp16: 2, fp32: 4 };
+function normDtype(d) {
+  if (d == null) return null;
+  const s = String(d).toLowerCase();
+  if (s === "auto") return "auto";
+  if (/bfloat16|bf16/.test(s)) return "bf16";
+  if (/float16|half|fp16/.test(s)) return "fp16";
+  if (/float32|fp32|float$/.test(s)) return "fp32";
+  return null;
+}
+function ggufQuantOf(file) {
+  if (!file) return null;
+  const s = file.toUpperCase();
+  const keys = Object.keys(GGUF_BPW).sort((a, b) => b.length - a.length);
+  for (const k of keys) {
+    const re = new RegExp(`(^|[^A-Z0-9])${k.replace(/_/g, "[_-]")}([^A-Z0-9]|$)`);
+    if (re.test(s)) return k;
+  }
+  return null;
+}
+function derivedMaxLen(config, ropeOverride, maxPosOverride, graphMax) {
+  const c = config ?? {};
+  const native = maxPosOverride ?? posInt3(c.max_position_embeddings) ?? posInt3(c.n_positions) ?? posInt3(c.max_seq_len) ?? posInt3(c.seq_length) ?? graphMax ?? null;
+  const rope = ropeOverride ?? (c.rope_scaling && typeof c.rope_scaling === "object" ? c.rope_scaling : null);
+  if (native == null) return { len: null, native: null, rope };
+  if (!rope) return { len: native, native, rope: null };
+  const type = String(rope.rope_type ?? rope.type ?? "").toLowerCase();
+  const factor = num4(rope.factor);
+  if (!factor || ["llama3", "longrope", "su", "mrope", "default"].includes(type)) return { len: native, native, rope };
+  const base = type === "yarn" ? posInt3(rope.original_max_position_embeddings) ?? native : native;
+  return { len: Math.floor(base * factor), native, rope };
+}
+function chatTemplateOf(side) {
+  if (typeof side.chatTemplateFile === "string" && side.chatTemplateFile.trim()) return side.chatTemplateFile;
+  const t = side.tokenizerConfig?.chat_template;
+  if (typeof t === "string") return t;
+  if (Array.isArray(t)) {
+    const d = t.find((x) => x.name === "default") ?? t[0];
+    return typeof d?.template === "string" ? d.template : null;
+  }
+  return null;
+}
+function templateHash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+var gbs = (x) => `${x.toFixed(x < 10 ? 2 : 1)} GB`;
+var divisors2 = (n2) => {
+  const d = [];
+  for (let i = 1; i <= n2; i++) if (n2 % i === 0) d.push(i);
+  return d;
+};
+function weightBytes(split, dtypeBytes, quant, bits, engine, ggufType) {
+  const { total, expert, edge } = split;
+  if (engine === "llamacpp") {
+    if (!ggufType) return null;
+    const bpw = GGUF_BPW[ggufType];
+    return { bytes: total * bpw / 8, basis: `${ggufType} at ${bpw} bits per weight (${GGUF_BPW_SOURCE}); mixed per-tensor types make this approximate` };
+  }
+  const body = total - edge;
+  switch (quant) {
+    case null:
+      return { bytes: total * dtypeBytes, basis: `${dtypeBytes} bytes per parameter (${dtypeBytes === 4 ? "fp32" : "16-bit"})` };
+    case "fp8":
+      return { bytes: body * 1 + edge * 2, basis: "fp8 weights (1 byte) with the embedding and LM head kept 16-bit" };
+    case "int8":
+      return { bytes: body * 1 + edge * 2, basis: "int8 weights (1 byte) with the embedding and LM head kept 16-bit" };
+    case "mxfp4": {
+      const ex = expert > 0 ? expert : body;
+      return { bytes: ex * 4.25 / 8 + (total - ex) * dtypeBytes, basis: "MXFP4 experts at 4.25 bits (4-bit values plus a shared 8-bit scale per 32) and everything else 16-bit, as gpt-oss's modules_to_not_convert lists" };
+    }
+    case "nvfp4":
+      return { bytes: body * 4.5 / 8 + edge * 2, basis: "NVFP4 weights at 4.5 bits (4-bit values plus an fp8 scale per 16), embedding and LM head 16-bit" };
+    case "bitsandbytes": {
+      const b = bits === 8 ? 8 : 4.5;
+      return { bytes: body * b / 8 + edge * 2, basis: `bitsandbytes ${bits === 8 ? "int8" : "nf4"} at ${b} bits, embedding and LM head 16-bit` };
+    }
+    case "awq":
+    case "gptq":
+    case "marlin":
+    default: {
+      const b = (bits ?? 4) + 0.25;
+      return { bytes: body * b / 8 + edge * 2, basis: `${bits ?? 4}-bit weights plus group scales (~${b} bits at group size 128), embedding and LM head 16-bit` };
+    }
+  }
+}
+function checkServeConfig(input) {
+  const { engine, args, model } = input;
+  const config = input.config ?? null;
+  const checked = [];
+  const skipped = [];
+  const findings = [];
+  const add = (f) => findings.push(f);
+  const geo = geometryOf(model);
+  const comps = model.components ?? [];
+  const hasMla = comps.some((c) => c.type === "mla");
+  const learned = comps.some((c) => c.type === "learnedPositionalEmbedding" || c.type === "positionalEncoding");
+  const card = input.gpu ? resolveLayoutGpu(input.gpu) : null;
+  const sm = card ? CARD_SM[card.id] ?? null : null;
+  const lc = engine === "llamacpp";
+  const tp = lc ? 1 : Math.max(1, args.tp ?? 1);
+  const pp = lc ? 1 : Math.max(1, args.pp ?? 1);
+  const dp = lc ? 1 : Math.max(1, args.dp ?? 1);
+  const ep = !lc && args.expertParallel === true;
+  const world = tp * pp * dp;
+  const gpus = input.gpus ?? (lc ? 1 : world);
+  const modelType = String(config?.model_type ?? "");
+  const ident = `${modelType} ${input.modelId ?? ""} ${model.name ?? ""}`;
+  const ckpt = checkpointQuant(config);
+  if (lc) {
+    skipped.push({ check: "parallel", reason: "llama.cpp splits whole layers (and their KV) across GPUs by default (--split-mode layer), so no head or width divisibility applies." });
+  } else {
+    checked.push("gpu-count");
+    if (input.gpus != null && world > input.gpus) {
+      add({
+        rule: "world-over-gpus",
+        area: "parallel",
+        severity: "block",
+        title: `TP ${tp} x PP ${pp} x DP ${dp} = ${world} GPUs, but ${input.gpus} are available`,
+        detail: `The engine needs one GPU per rank; with ${input.gpus} it fails to place the workers (or waits for them).`,
+        fix: `Make TP x PP x DP at most ${input.gpus}${input.gpus % (tp * pp) === 0 ? ` (e.g. DP ${input.gpus / (tp * pp)})` : ""}.`
+      });
+    } else if (input.gpus != null && world < input.gpus) {
+      add({
+        rule: "gpus-idle",
+        area: "parallel",
+        severity: "info",
+        title: `${input.gpus - world} of ${input.gpus} GPUs are not used by TP x PP x DP = ${world}`,
+        detail: "The engine only starts as many ranks as the product of the parallel sizes.",
+        fix: input.gpus % (tp * pp) === 0 ? `Add DP ${input.gpus / (tp * pp)} to use them as replicas.` : "Change the parallel sizes to use every GPU, or launch on fewer."
+      });
+    }
+    if (geo.numHeads != null) {
+      checked.push("tp-heads");
+      if (geo.numHeads % tp !== 0) {
+        add({
+          rule: "tp-heads",
+          area: "parallel",
+          severity: "block",
+          title: `TP ${tp} does not divide ${geo.numHeads} attention heads`,
+          detail: `${engine === "vllm" ? "vLLM" : "SGLang"} gives each TP rank whole heads and asserts the division at load ("Total number of attention heads (${geo.numHeads}) must be divisible by tensor parallel size (${tp})").`,
+          fix: `Use a TP size dividing ${geo.numHeads}: ${divisors2(geo.numHeads).filter((d) => d <= 8).join(", ")}.`
+        });
+      }
+      if (!hasMla && geo.numKVHeads != null) {
+        checked.push("tp-kv-heads");
+        if (geo.numKVHeads % tp !== 0) {
+          if (tp % geo.numKVHeads === 0) {
+            add({
+              rule: "tp-kv-replicated",
+              area: "parallel",
+              severity: "warn",
+              title: `TP ${tp} is past ${geo.numKVHeads} KV heads: each KV head is replicated ${tp / geo.numKVHeads}x`,
+              detail: `It starts, but every GPU stores a full KV head, so the KV cache per GPU stops shrinking at TP ${geo.numKVHeads}: the extra ranks hold copies, not more sequences.`,
+              fix: `TP ${geo.numKVHeads} with DP ${tp / geo.numKVHeads} serves more sequences on the same GPUs, if the weights fit at TP ${geo.numKVHeads}.`
+            });
+          } else {
+            add({
+              rule: "tp-kv-heads",
+              area: "parallel",
+              severity: "block",
+              title: `TP ${tp} neither divides nor is a multiple of ${geo.numKVHeads} KV heads`,
+              detail: "Grouped-query attention needs whole KV heads per rank or an exact replication factor; the engine asserts this at load.",
+              fix: `Use a TP size dividing ${geo.numKVHeads} or a multiple of it.`
+            });
+          }
+        }
+      }
+    } else skipped.push({ check: "tp-heads", reason: "no attention layer with a head count in the graph." });
+    if (geo.ffn != null && tp > 1) {
+      checked.push("tp-ffn");
+      const moeNoEp = geo.numExperts != null && !ep;
+      const what = geo.numExperts != null ? "expert FFN width" : "FFN width";
+      const splitFfn = geo.numExperts == null || moeNoEp;
+      if (splitFfn && geo.ffn % tp !== 0) {
+        add({
+          rule: "tp-ffn",
+          area: "parallel",
+          severity: "block",
+          title: `TP ${tp} does not divide the ${what} ${geo.ffn}`,
+          detail: "Column-parallel linears split the intermediate dimension evenly across ranks and assert the division.",
+          fix: `Use a TP size dividing ${geo.ffn}${geo.numExperts != null ? ", or enable expert parallelism so experts stay whole" : ""}.`
+        });
+      } else if (splitFfn && ckpt.blockN != null && geo.ffn / tp % ckpt.blockN !== 0) {
+        add({
+          rule: "tp-quant-block",
+          area: "parallel",
+          severity: "block",
+          title: `TP ${tp} leaves ${geo.ffn / tp} columns of the ${what} per rank, not a multiple of the checkpoint's ${ckpt.blockN}-wide quant block`,
+          detail: `The checkpoint is block-quantized (weight_block_size [${ckpt.blockN}, ...]); each rank's slice must hold whole blocks, and vLLM refuses at load ("... is not divisible by weight quantization block_n = ${ckpt.blockN}").`,
+          fix: `Use a TP size where ${geo.ffn} / TP is a multiple of ${ckpt.blockN} (${divisors2(geo.ffn).filter((d) => d <= 8 && geo.ffn / d % ckpt.blockN === 0 && (geo.numHeads == null || geo.numHeads % d === 0)).join(", ") || "none up to 8"})${geo.numExperts != null ? ", or enable expert parallelism so experts stay whole" : ""}.`,
+          source: "Qwen deployment docs, vLLM FP8 troubleshooting: the same block_n = 128 error, fixed by lower TP or expert parallelism (qwen.readthedocs.io/en/latest/deployment/vllm.html)"
+        });
+      }
+    }
+    if (geo.numExperts != null) {
+      checked.push("expert-parallel");
+      if (ep) {
+        const epSize = engine === "vllm" ? tp * dp : args.epSize ?? tp;
+        if (geo.numExperts % epSize !== 0) {
+          add({
+            rule: "ep-uneven",
+            area: "parallel",
+            severity: "warn",
+            title: `${geo.numExperts} experts over EP ${epSize} is not even`,
+            detail: `${engine === "vllm" ? "vLLM sets EP = TP x DP and" : "The engine"} gives some ranks one more expert than others, so the busiest rank sets the pace and holds the most weights.`,
+            fix: `Choose TP x DP dividing ${geo.numExperts}.`
+          });
+        }
+        if (engine === "sglang" && args.epSize != null && tp % args.epSize !== 0) {
+          add({
+            rule: "ep-tp",
+            area: "parallel",
+            severity: "block",
+            title: `SGLang EP ${args.epSize} does not divide TP ${tp}`,
+            detail: "SGLang carves the expert-parallel group out of the tensor-parallel ranks.",
+            fix: `Use an EP size dividing ${tp}.`
+          });
+        }
+      } else if (tp >= 4) {
+        add({
+          rule: "moe-no-ep",
+          area: "parallel",
+          severity: "info",
+          title: `MoE with ${geo.numExperts} experts at TP ${tp} without expert parallelism`,
+          detail: `Every expert is split ${tp} ways, so each rank multiplies ${geo.ffn != null ? `${geo.ffn / tp}-wide` : "thin"} expert slices and all-reduces after every MoE layer. Expert parallelism keeps experts whole and sends tokens to them instead.`,
+          fix: engine === "vllm" ? "Try --enable-expert-parallel (EP = TP x DP) and compare throughput." : "Try --ep-size equal to TP and compare throughput."
+        });
+      }
+    } else if (ep) {
+      add({
+        rule: "ep-dense",
+        area: "parallel",
+        severity: "warn",
+        title: "Expert parallelism on a model with no MoE layer",
+        detail: "There are no experts to distribute; the flag does nothing here.",
+        fix: "Drop the expert-parallel flag."
+      });
+    }
+  }
+  const graphMax = (() => {
+    const lp = comps.find((c) => c.type === "learnedPositionalEmbedding" || c.type === "positionalEncoding");
+    const e = comps.find((c) => c.type === "embedding");
+    return posInt3(lp?.params?.maxLen) ?? posInt3(e?.params?.maxSeqLen);
+  })();
+  let ropeOverride = args.ropeScaling;
+  if (lc && (args.ropeScale != null || args.ropeScalingType != null) && String(args.ropeScalingType ?? "linear") !== "none") {
+    ropeOverride = { rope_type: args.ropeScalingType ?? "linear", factor: args.ropeScale ?? 1, ...args.yarnOrigCtx ? { original_max_position_embeddings: args.yarnOrigCtx } : {} };
+  }
+  const derived = derivedMaxLen(config, ropeOverride, args.maxPositionOverride, graphMax);
+  let servedLen = null;
+  let servedLenSource = "";
+  let kvTokensAllocated = null;
+  if (lc) {
+    const total = args.ctxSize && args.ctxSize > 0 ? args.ctxSize : derived.native;
+    const slots = args.nParallel ?? 1;
+    const unified = args.kvUnified ?? args.nParallel == null;
+    kvTokensAllocated = total;
+    servedLen = total == null ? null : unified ? total : Math.floor(total / slots);
+    servedLenSource = args.ctxSize && args.ctxSize > 0 ? unified ? `-c ${args.ctxSize} (one unified KV buffer, so one sequence may use all of it)` : `-c ${args.ctxSize} split over --parallel ${slots} slots = ${servedLen} per sequence` : `-c 0: the model's training context${unified ? "" : `, split over ${slots} slots`}`;
+  } else if (args.maxModelLen != null) {
+    servedLen = args.maxModelLen;
+    servedLenSource = engine === "vllm" ? `--max-model-len ${args.maxModelLen}` : `--context-length ${args.maxModelLen}`;
+  } else {
+    servedLen = derived.len;
+    servedLenSource = "not set: the engine derives it from the config";
+  }
+  if (servedLen != null && derived.native != null) {
+    checked.push("context");
+    const limitName = engine === "vllm" ? "VLLM_ALLOW_LONG_MAX_MODEL_LEN=1" : "SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1";
+    if (learned && servedLen > derived.native) {
+      add({
+        rule: "context-over-learned",
+        area: "context",
+        severity: "block",
+        title: `Serving ${servedLen} tokens on a ${derived.native}-row learned position table`,
+        detail: `Positions past ${derived.native - 1} index outside the table: the first long request crashes (or, if the engine clamps, attends with wrong positions). Rope scaling does not apply to learned positions.`,
+        fix: `Serve at most ${derived.native} tokens.`
+      });
+    } else if (derived.len != null && servedLen > derived.len) {
+      const ropeSet = derived.rope != null;
+      add({
+        rule: "context-over-derived",
+        area: "context",
+        severity: lc ? "warn" : "block",
+        title: `Served length ${servedLen} is past the model's ${ropeSet ? `rope-scaled ${derived.len}` : `${derived.len}-token`} context`,
+        detail: lc ? `llama.cpp runs past n_ctx_train with a warning; rotary positions keep computing, and quality past the trained length is not something the config vouches for.` : `The engine refuses to start ("User-specified ${engine === "vllm" ? "max_model_len" : "context_length"} (${servedLen}) is greater than the derived ${engine === "vllm" ? "max_model_len" : "context_length"} (${derived.len})") unless ${limitName} is set, and with it set, positions past the trained length are extrapolated.`,
+        fix: ropeSet ? `Raise the rope factor to at least ${Math.ceil(servedLen / (posInt3(derived.rope?.original_max_position_embeddings) ?? derived.native))}, or serve at most ${derived.len}.` : `Serve at most ${derived.len}, or add rope scaling where the model card supports it, with the card's own original length (e.g. ${engine === "vllm" ? `--hf-overrides '{"rope_scaling":{"rope_type":"yarn","factor":F,"original_max_position_embeddings":N}}'` : engine === "sglang" ? `--json-model-override-args '{"rope_scaling":{"rope_type":"yarn","factor":F,"original_max_position_embeddings":N}}'` : "--rope-scaling yarn --rope-scale F --yarn-orig-ctx N"}, with N x F >= ${servedLen}; N is the native length the card states, which can be below max_position_embeddings).`
+      });
+    }
+    if (ropeOverride && !config?.rope_scaling) {
+      const type = String(ropeOverride.rope_type ?? ropeOverride.type ?? "");
+      if (/yarn|linear|dynamic/.test(type)) {
+        add({
+          rule: "rope-static",
+          area: "context",
+          severity: servedLen <= derived.native ? "warn" : "info",
+          title: servedLen <= derived.native ? `Rope scaling (${type}) is set but the served length ${servedLen} is within the native ${derived.native}` : `Rope scaling (${type}, factor ${ropeOverride.factor}) applies to every request, short ones included`,
+          detail: "The scaling is static in these engines: the factor applies regardless of input length, which the Qwen model cards say can hurt quality on shorter texts.",
+          fix: servedLen <= derived.native ? "Drop the rope scaling; it buys nothing at this length." : "Keep it only on the deployment that needs the long context.",
+          source: 'Qwen3 model card, "Processing Long Texts" (static YaRN note)'
+        });
+      }
+    }
+  } else skipped.push({ check: "context", reason: derived.native == null ? "the config states no maximum length (max_position_embeddings)." : "no served length." });
+  const cfgDtype = normDtype(String(config?.torch_dtype ?? config?.dtype ?? "")) ?? null;
+  const flagDtype = normDtype(args.dtype);
+  let dtype = flagDtype && flagDtype !== "auto" ? flagDtype : cfgDtype && cfgDtype !== "auto" ? cfgDtype : "bf16";
+  if (flagDtype === "fp32" && cfgDtype && cfgDtype !== "fp32") {
+  }
+  const flagQuant = normalizeQuant(args.quantization);
+  const quant = lc ? "gguf" : flagQuant ?? ckpt.method;
+  const ggufType = lc ? ggufQuantOf(args.ggufFile) : null;
+  if (!lc && flagQuant && ckpt.method && flagQuant !== ckpt.method) {
+    const compatible = flagQuant === "marlin" && (ckpt.method === "gptq" || ckpt.method === "awq");
+    if (!compatible) {
+      add({
+        rule: "quant-mismatch",
+        area: "quant",
+        severity: "block",
+        title: `--quantization ${args.quantization} does not match the checkpoint's ${ckpt.raw}`,
+        detail: `The weights are stored as ${ckpt.raw}; the engine refuses a different method ("Quantization method specified in the model config (${ckpt.raw}) does not match the quantization method specified in the \`quantization\` argument").`,
+        fix: "Drop --quantization and let the engine read quantization_config, or point at an unquantized checkpoint."
+      });
+    }
+  }
+  if (sm == null) {
+    skipped.push({ check: "quant-support", reason: card ? `${card.label} is not a CUDA card with a compute capability in the table.` : "no --gpu given." });
+  } else if (lc) {
+    skipped.push({ check: "quant-support", reason: "llama.cpp's CUDA backend runs every GGUF type on these cards; support is not a per-architecture table." });
+  } else {
+    checked.push("quant-support");
+    if (sm < BF16_MIN_SM && (flagDtype === "bf16" || flagDtype !== "fp16" && flagDtype !== "fp32" && cfgDtype === "bf16")) {
+      if (flagDtype === "bf16") {
+        add({
+          rule: "bf16-unsupported",
+          area: "quant",
+          severity: "block",
+          title: `--dtype bfloat16 on ${card.label} (sm${sm})`,
+          detail: "The card has no bf16 tensor cores and the engine refuses the explicit dtype.",
+          fix: "Use --dtype float16 (and check the model does not overflow in fp16), or a card at sm80 or newer.",
+          source: BF16_SOURCE
+        });
+      } else {
+        add({
+          rule: "bf16-auto-cast",
+          area: "quant",
+          severity: "warn",
+          title: `The checkpoint is bf16 and ${card.label} (sm${sm}) has no bf16`,
+          detail: "With --dtype auto the engine casts to fp16 (older versions refuse). fp16 has a narrower range than bf16, and some models trained in bf16 overflow in it.",
+          fix: "Pass --dtype float16 knowingly and spot-check outputs, or use an sm80+ card.",
+          source: BF16_SOURCE
+        });
+        dtype = "fp16";
+      }
+    }
+    if (quant != null) {
+      const row = QUANT_SUPPORT.find((r) => r.method === quant);
+      if (!row) skipped.push({ check: "quant-support", reason: `no support row for quant method "${quant}".` });
+      else if (sm < row.fallbackSm) {
+        add({
+          rule: "quant-unsupported",
+          area: "quant",
+          severity: "block",
+          title: `${quant} weights on ${card.label} (sm${sm}): not supported`,
+          detail: `${quant} needs sm${row.fallbackSm} or newer${row.nativeSm !== row.fallbackSm ? ` (sm${row.nativeSm} for the native kernels)` : ""}; the engine refuses at load.`,
+          fix: `Use a ${quant === "mxfp4" ? "bf16 build of the model" : "different quantization"} on this card, or an sm${row.fallbackSm}+ card.`,
+          source: row.source
+        });
+      } else if (sm < row.nativeSm) {
+        add({
+          rule: "quant-fallback",
+          area: "quant",
+          severity: "warn",
+          title: `${quant} on ${card.label} (sm${sm}) is not native: it runs on a fallback kernel`,
+          detail: `Native ${quant} kernels need sm${row.nativeSm}+. On this card it ${row.fallbackNote ?? "runs on a slower path"}.`,
+          fix: `Expect the memory saving and not the speedup; for native ${quant} use an sm${row.nativeSm}+ card.`,
+          source: row.source
+        });
+      }
+    }
+  }
+  let memory = null;
+  if (!card) skipped.push({ check: "memory", reason: "no --gpu given." });
+  else if (servedLen == null) skipped.push({ check: "memory", reason: "no served length (set the max length, or give a config with max_position_embeddings)." });
+  else {
+    const peak = inferencePeakFor(model, { promptTokens: servedLen, genTokens: 0, batch: 1, precision: "bf16" });
+    const split = paramSplit(model);
+    const w = weightBytes(split, DTYPE_BYTES[dtype], quant, ckpt.bits, engine, ggufType);
+    if (!peak || !w || !(split.total > 0)) {
+      skipped.push({ check: "memory", reason: !w && lc ? `the GGUF quant type is not readable from "${args.ggufFile ?? "(no -m)"}"; name the file with its type (e.g. model-Q4_K_M.gguf).` : "the graph has no parameter count to size." });
+    } else {
+      checked.push("memory");
+      let kvBytes = dtype === "fp32" ? 4 : 2;
+      let kvName = dtype === "fp32" ? "fp32" : "16-bit";
+      if (lc) {
+        const k = GGUF_KV_BYTES[String(args.cacheTypeK ?? "f16").toLowerCase()] ?? 2;
+        const v = GGUF_KV_BYTES[String(args.cacheTypeV ?? "f16").toLowerCase()] ?? 2;
+        kvBytes = (k + v) / 2;
+        kvName = `K ${args.cacheTypeK ?? "f16"} / V ${args.cacheTypeV ?? "f16"}`;
+      } else if (args.kvCacheDtype && /fp8/i.test(args.kvCacheDtype)) {
+        kvBytes = 1;
+        kvName = args.kvCacheDtype;
+      }
+      let weightsPerGpu;
+      let kvShare;
+      let budgetGb;
+      let fraction = null;
+      if (lc) {
+        const layers = posInt3(config?.num_hidden_layers) ?? Math.max(1, comps.filter((c) => /attention|mla/i.test(c.type)).length);
+        const ngl = args.nGpuLayers;
+        const onGpu = ngl === "all" || ngl === "auto" || ngl == null ? 1 : Math.min(1, ngl / (layers + 1));
+        weightsPerGpu = w.bytes * onGpu / gpus;
+        kvShare = onGpu / gpus;
+        budgetGb = card.memoryGB;
+      } else {
+        const expertBytesShare = split.expert > 0 ? w.bytes * split.expert / split.total : 0;
+        const denseBytes = w.bytes - expertBytesShare;
+        const expertWays = ep && engine === "vllm" ? tp * dp * pp : tp * pp;
+        weightsPerGpu = denseBytes / (tp * pp) + expertBytesShare / expertWays;
+        kvShare = (hasMla ? 1 : geo.numKVHeads ? Math.max(1 / tp, 1 / geo.numKVHeads) : 1 / tp) / pp;
+        fraction = engine === "vllm" ? args.gpuMemoryUtilization ?? 0.9 : args.memFractionStatic ?? 0.88;
+        budgetGb = card.memoryGB * fraction;
+      }
+      const kvPerTokGpu = peak.kvBytesPerToken * kvBytes / 2 * kvShare;
+      const statePerSeqGpu = peak.stateBytesPerSequence * kvShare;
+      const weightsGb = weightsPerGpu / 1e9;
+      const kvSeqGb = (kvPerTokGpu * servedLen + statePerSeqGpu) / 1e9;
+      const lcTokens = kvTokensAllocated ?? servedLen;
+      const capGb = lc ? kvPerTokGpu * lcTokens / 1e9 : budgetGb - weightsGb;
+      const tokenCapacity = lc ? lcTokens : capGb > 0 && kvPerTokGpu > 0 ? Math.floor(capGb * 1e9 / kvPerTokGpu) : 0;
+      const conc = lc ? args.kvUnified ?? args.nParallel == null ? Math.max(1, Math.floor(lcTokens / servedLen)) : args.nParallel ?? 1 : capGb > 0 && kvSeqGb > 0 ? capGb / kvSeqGb : 0;
+      memory = {
+        weightsBasis: w.basis,
+        weightsGbTotal: w.bytes / 1e9,
+        weightsGbPerGpu: weightsGb,
+        budgetGbPerGpu: budgetGb,
+        kvBytesPerTokenPerGpu: kvPerTokGpu,
+        stateBytesPerSequencePerGpu: statePerSeqGpu,
+        kvGbPerSequencePerGpu: kvSeqGb,
+        kvCapacityGbPerGpu: Math.max(0, capGb),
+        tokenCapacity,
+        maxConcurrentFullLength: Math.floor(conc * 100) / 100,
+        notCounted: [
+          "the engine's activation reserve from its profiling run, CUDA graphs and communication buffers (they come out of the same budget, so capacity here is an upper bound)",
+          "the card's real usable memory, which is below the nominal figure",
+          ...lc ? ["host RAM for layers left on the CPU"] : []
+        ]
+      };
+      const budgetWord = lc ? `${card.memoryGB} GB on the card` : `${card.memoryGB} GB x ${fraction} = ${gbs(budgetGb)}`;
+      const shareWord = lc ? gpus > 1 ? ` (layers split over ${gpus} GPUs)` : "" : ` after TP ${tp}${pp > 1 ? ` x PP ${pp}` : ""}${ep && split.expert > 0 ? " with experts spread by EP" : ""}`;
+      if (lc) {
+        const need = weightsGb + kvPerTokGpu * (kvTokensAllocated ?? servedLen) / 1e9;
+        const ngl = args.nGpuLayers;
+        if (need > budgetGb) {
+          const explicitAll = ngl === "all" || typeof ngl === "number" && ngl > 0;
+          add({
+            rule: "memory-over-card",
+            area: "memory",
+            severity: explicitAll ? "block" : "warn",
+            title: `Weights ${gbs(weightsGb)} + KV for ${kvTokensAllocated ?? servedLen} tokens ${gbs(need - weightsGb)} = ${gbs(need)} per GPU, over the ${card.label}`,
+            detail: explicitAll ? "llama.cpp allocates the whole -c context up front; with these layers forced onto the GPU the allocation fails at load." : "With -ngl auto llama.cpp keeps the layers that do not fit on the CPU, which runs, at CPU memory bandwidth for those layers.",
+            fix: `Lower -c, quantize the cache (-ctk q8_0 -ctv q8_0 halves it), pick a smaller quant, or offload fewer layers.`
+          });
+        } else {
+          checked.push("memory-fit");
+        }
+      } else if (weightsGb >= budgetGb) {
+        add({
+          rule: "weights-over-budget",
+          area: "memory",
+          severity: "block",
+          title: `Weights alone are ${gbs(weightsGb)} per GPU${shareWord}, over the ${gbs(budgetGb)} budget`,
+          detail: `Budget = ${budgetWord}. Weights: ${w.basis}. Nothing is left for the KV cache, so the engine fails at load.`,
+          fix: `Raise TP (or PP), quantize the weights, or use a larger card.`
+        });
+      } else if (conc < 1) {
+        add({
+          rule: "kv-under-one-sequence",
+          area: "memory",
+          severity: engine === "vllm" ? "block" : "warn",
+          title: `One ${servedLen}-token sequence needs ${gbs(kvSeqGb)} of KV per GPU; at most ${gbs(capGb)} is left`,
+          detail: `Budget = ${budgetWord}; weights ${gbs(weightsGb)} per GPU${shareWord}. ${engine === "vllm" ? 'vLLM checks at startup that one request at the full length fits the KV cache and refuses otherwise ("larger than the maximum number of tokens that can be stored in KV cache").' : "The KV pool cannot hold one request at the full length, so the server starts and the longest requests it advertises cannot be scheduled."} Capacity here is an upper bound: the engine's reserve comes out of it too.`,
+          fix: `Serve at most ~${Math.floor(tokenCapacity / 1024) * 1024} tokens, raise ${engine === "vllm" ? "--gpu-memory-utilization" : "--mem-fraction-static"}, use an fp8 KV cache (--kv-cache-dtype fp8), or raise TP.`
+        });
+      } else {
+        checked.push("memory-fit");
+        if (conc < 1.5) {
+          add({
+            rule: "kv-borderline",
+            area: "memory",
+            severity: "warn",
+            title: `Only ~${conc.toFixed(1)} full-length sequences fit, before the engine's own reserve`,
+            detail: `${gbs(capGb)} per GPU for KV against ${gbs(kvSeqGb)} per ${servedLen}-token sequence. The activation profile and CUDA graphs come out of the same budget, so this can fail the startup check that one full sequence fits.`,
+            fix: `Leave more room: lower the max length, use an fp8 KV cache, or raise TP.`
+          });
+        }
+        if (args.maxNumSeqs != null && args.maxNumSeqs > Math.floor(conc)) {
+          add({
+            rule: "seqs-over-capacity",
+            area: "memory",
+            severity: "warn",
+            title: `${engine === "vllm" ? "--max-num-seqs" : "--max-running-requests"} ${args.maxNumSeqs}, but at most ${Math.floor(conc)} sequences fit at the full ${servedLen} tokens`,
+            detail: `KV capacity is at most ${tokenCapacity.toLocaleString("en-US")} tokens per replica (each GPU holds its share of every token; ${gbs(capGb)} at ${Math.round(kvPerTokGpu).toLocaleString("en-US")} bytes per token, ${kvName}). Shorter requests pack more, but once long ones arrive the engine preempts or queues past ~${Math.floor(conc)}; the batch size the flag promises is not there.`,
+            fix: `Set the flag to what fits (${Math.max(1, Math.floor(conc))}), shorten the max length, use an fp8 KV cache, or add GPUs as DP replicas.`
+          });
+        }
+        if (!findings.some((f) => f.rule === "seqs-over-capacity")) add({
+          rule: "kv-capacity",
+          area: "memory",
+          severity: "info",
+          title: `At most ${Math.floor(conc)} concurrent ${servedLen}-token sequences per replica (${tokenCapacity.toLocaleString("en-US")} KV tokens)`,
+          detail: `Per GPU: budget ${budgetWord}; weights ${gbs(weightsGb)}${shareWord} (${w.basis}); KV ${Math.round(kvPerTokGpu).toLocaleString("en-US")} bytes per token (${kvName}${!hasMla && geo.numKVHeads && tp > geo.numKVHeads ? `, KV heads replicated past TP ${geo.numKVHeads}` : ""}${hasMla ? ", MLA latent cache is not split by TP" : ""}). Upper bound: the engine's reserve is not counted.`,
+          fix: ""
+        });
+      }
+    }
+  }
+  const template = chatTemplateOf(input);
+  const haveTokenizerSide = input.tokenizerConfig != null || input.chatTemplateFile != null;
+  if (!haveTokenizerSide && !args.chatTemplate) {
+    skipped.push({ check: "chat-template", reason: "no tokenizer_config.json or chat_template.jinja was given (they are fetched for a Hugging Face id)." });
+  } else {
+    checked.push("chat-template");
+    if (args.chatTemplate) {
+      add({
+        rule: "template-overridden",
+        area: "template",
+        severity: "info",
+        title: `The chat template is replaced by ${args.chatTemplate}`,
+        detail: `${template ? `The model ships its own template (hash ${templateHash(template)}); ` : ""}the override wins for every chat request. Nothing here renders the two, so whether they produce the same prompt is not checked.`,
+        fix: "Render one multi-turn conversation with tool calls through both and diff the prompts before serving."
+      });
+    } else if (!template) {
+      add({
+        rule: "template-missing",
+        area: "template",
+        severity: "warn",
+        title: "The model ships no chat template",
+        detail: "Chat completions have nothing to render with: transformers 4.44+ no longer supplies a default, so vLLM and SGLang refuse /v1/chat/completions, and llama.cpp falls back to a generic format. Fine for a base model served on /v1/completions only.",
+        fix: `Pass ${lc ? "--chat-template-file" : "--chat-template"} with the template the model was trained on, or serve completions only.`
+      });
+    }
+    const effTemplate = args.chatTemplate ? null : template;
+    if (effTemplate) {
+      const addBos = input.tokenizerConfig?.add_bos_token === true;
+      if (addBos && /bos_token/.test(effTemplate)) {
+        add({
+          rule: "bos-duplication",
+          area: "template",
+          severity: "info",
+          title: "The template inserts the BOS token and the tokenizer also adds one (add_bos_token: true)",
+          detail: lc ? "llama.cpp prints a warning and keeps both when a rendered prompt already starts with BOS; two BOS tokens shift every position the model saw in training." : "The chat path tokenizes the rendered template without special tokens, so chat is safe; a client that renders the template itself and posts to /v1/completions gets two BOS tokens.",
+          fix: "Render with the engine's chat endpoint, or tokenize client-rendered prompts with add_special_tokens=False."
+        });
+      }
+      const thinking = /<think>|enable_thinking|reasoning_content/.test(effTemplate);
+      if (thinking && !lc && !args.reasoningParser) {
+        add({
+          rule: "reasoning-parser-missing",
+          area: "template",
+          severity: "info",
+          title: "The template has a thinking block and no --reasoning-parser is set",
+          detail: "The reasoning text comes back inside message.content instead of reasoning_content, which breaks clients that hide or strip it.",
+          fix: `Add --reasoning-parser ${/qwen3/i.test(ident) ? "qwen3" : /deepseek/i.test(ident) ? "deepseek_r1" : "<family>"}.`
+        });
+      }
+    }
+  }
+  if (!lc && args.enableAutoToolChoice && !args.toolCallParser) {
+    checked.push("tool-parser");
+    add({
+      rule: "tool-parser-missing",
+      area: "template",
+      severity: "block",
+      title: "--enable-auto-tool-choice without --tool-call-parser",
+      detail: "vLLM refuses to start: automatic tool choice needs a parser to turn the model's tool-call text into tool_calls.",
+      fix: "Add --tool-call-parser for this family (e.g. hermes for Qwen, llama3_json for Llama 3, kimi_k2, openai for gpt-oss)."
+    });
+  }
+  const effSampler = effectiveSampler(input);
+  for (const k of KNOWN_SERVE_ISSUES) {
+    if (!k.match.test(modelType) && !k.match.test(input.modelId ?? "") && !k.match.test(model.name ?? "")) continue;
+    if (k.when && !k.when({ args, sampler: effSampler.values })) continue;
+    checked.push(`known:${k.id}`);
+    if (k.engines.includes(engine)) add({ rule: k.id, area: k.id === "qwen3-greedy" ? "sampler" : "template", severity: k.severity, title: k.title, detail: k.detail, fix: k.fix, source: k.source });
+    else add({ rule: k.id, area: "template", severity: "info", title: `${k.title} (not ${engine === "vllm" ? "vLLM" : engine})`, detail: k.detail, fix: "No change needed on this engine; keep it in mind if the deployment moves.", source: k.source });
+  }
+  const gen = input.generationConfig ?? null;
+  if (!gen) skipped.push({ check: "sampler", reason: "no generation_config.json (fetched for a Hugging Face id)." });
+  else {
+    checked.push("sampler");
+    const rec = readSampler(gen);
+    const diffs = [];
+    for (const k of ["temperature", "top_p", "top_k", "repetition_penalty"]) {
+      const want = rec[k];
+      const got = effSampler.values[k];
+      if (want == null || got == null) continue;
+      const norm = (x) => k === "top_k" && x < 0 ? 0 : x;
+      if (Math.abs(norm(want) - norm(got)) > 1e-9) diffs.push(`${k} ${got} (recommended ${want}, from ${effSampler.origin[k]})`);
+    }
+    if (diffs.length) {
+      add({
+        rule: "sampler-differs",
+        area: "sampler",
+        severity: "warn",
+        title: `Sampling defaults differ from the model's generation_config.json: ${diffs.map((d) => d.split(" (")[0]).join(", ")}`,
+        detail: `${diffs.join("; ")}. Applies to every request that does not send its own value. Model makers have traced host-to-host quality gaps to exactly this (Moonshot: "a significant portion" of discrepancies came from decoding-parameter misuse).`,
+        fix: lc ? `Pass ${Object.entries(rec).map(([k, v]) => `--${k === "temperature" ? "temp" : k === "repetition_penalty" ? "repeat-penalty" : k.replace("_", "-")} ${v}`).join(" ")} (llama.cpp does not read generation_config.json).` : engine === "vllm" ? "Leave --generation-config at auto (the default reads generation_config.json), and do not override it in the gateway." : "Let the engine read the model's sampling defaults, and do not override them in the gateway.",
+        source: "kimi.com/blog/kimi-vendor-verifier"
+      });
+    }
+    const eos = gen.eos_token_id ?? config?.eos_token_id;
+    const pad = gen.pad_token_id ?? config?.pad_token_id;
+    const eosList = Array.isArray(eos) ? eos : eos != null ? [eos] : [];
+    if (pad != null && eosList.some((e) => e === pad)) {
+      add({
+        rule: "pad-is-eos",
+        area: "template",
+        severity: "info",
+        title: `pad_token_id ${pad} is also an EOS id`,
+        detail: "Serving engines do not pad, so generation is unaffected; a fine-tune on this tokenizer that masks pad tokens out of the loss also masks every EOS, and the tuned model stops learning to stop.",
+        fix: "For fine-tuning, set a distinct pad token."
+      });
+    }
+  }
+  let change = null;
+  if (input.against) {
+    checked.push("change");
+    change = diffAgainst(input, memory, derived.len, template);
+    for (const c of change.changed) {
+      add({ rule: "changed", area: "change", severity: "info", title: `${c.key}: ${fmt(c.from)} -> ${fmt(c.to)}`, detail: c.effect, fix: "" });
+    }
+    for (const n2 of change.numbers) {
+      add({ rule: "changed-number", area: "change", severity: "info", title: `${n2.what}: ${n2.from} -> ${n2.to}`, detail: "Same engine flags and card, computed for both models.", fix: "" });
+    }
+  }
+  return {
+    engine,
+    resolved: {
+      gpu: card?.id ?? null,
+      gpuMemoryGb: card?.memoryGB ?? null,
+      sm,
+      gpus,
+      tp,
+      pp,
+      dp,
+      expertParallel: ep,
+      dtype,
+      quant: lc ? ggufType ?? "gguf" : quant,
+      kvCacheDtype: lc ? `${args.cacheTypeK ?? "f16"}/${args.cacheTypeV ?? "f16"}` : args.kvCacheDtype ?? "auto",
+      servedLen,
+      servedLenSource,
+      derivedMaxLen: derived.len,
+      memFraction: lc ? null : engine === "vllm" ? args.gpuMemoryUtilization ?? 0.9 : args.memFractionStatic ?? 0.88,
+      maxNumSeqs: args.maxNumSeqs ?? null
+    },
+    checked,
+    skipped,
+    findings,
+    memory,
+    change,
+    basis: SERVE_BASIS
+  };
+}
+function effectiveSampler(input) {
+  const { engine, args } = input;
+  const def = ENGINE_SAMPLER_DEFAULTS[engine];
+  const values = { temperature: def.temperature, top_p: def.top_p, top_k: def.top_k, repetition_penalty: def.repetition_penalty };
+  const origin = { temperature: "engine default", top_p: "engine default", top_k: "engine default", repetition_penalty: "engine default" };
+  const readsModel = engine === "vllm" ? !/^vllm$/i.test(args.generationConfigMode ?? "auto") : engine === "sglang" ? !/^openai$/i.test(args.generationConfigMode ?? "model") : false;
+  if (readsModel && input.generationConfig) {
+    const m = readSampler(input.generationConfig);
+    for (const k of Object.keys(m)) {
+      values[k] = m[k];
+      origin[k] = "generation_config.json";
+    }
+  }
+  if (engine !== "vllm" && engine !== "sglang" && !input.generationConfig) {
+  }
+  if (!readsModel && engine !== "llamacpp") {
+    for (const k of Object.keys(origin)) origin[k] = engine === "vllm" ? "vLLM default (--generation-config vllm)" : "SGLang default (--sampling-defaults openai)";
+  }
+  if (engine === "llamacpp") for (const k of Object.keys(origin)) origin[k] = "llama.cpp default";
+  for (const [src, s] of [[engine === "llamacpp" ? "llama.cpp flag" : "--override-generation-config", args.samplerFlags], ["request / gateway override", input.sampler]]) {
+    if (!s) continue;
+    for (const k of Object.keys(s)) {
+      values[k] = s[k];
+      origin[k] = src;
+    }
+  }
+  return { values, origin };
+}
+var fmt = (v) => v === void 0 ? "(absent)" : typeof v === "object" ? JSON.stringify(v) : String(v);
+var DIFF_KEYS = [
+  ["model_type", "A different architecture family: the engine loads a different model class, and every family-specific flag (tool-call parser, reasoning parser, chat template) must be re-chosen."],
+  ["num_hidden_layers", "Layer count changes weights and KV per token; PP stage splits must be redone."],
+  ["hidden_size", "Width changes weights, the TP divisibility of every linear, and activation memory."],
+  ["num_attention_heads", "Head count changes which TP sizes are legal."],
+  ["num_key_value_heads", "KV heads change KV bytes per token and where TP starts replicating KV."],
+  ["head_dim", "Head dimension changes KV bytes per token and the attention kernels that apply."],
+  ["intermediate_size", "FFN width changes weights and which TP sizes divide it."],
+  ["moe_intermediate_size", "Expert width changes which TP sizes divide it (and block-quant alignment)."],
+  ["num_experts", "Expert count changes legal EP sizes and expert weight memory."],
+  ["num_local_experts", "Expert count changes legal EP sizes and expert weight memory."],
+  ["vocab_size", "Vocabulary changes the embedding and LM head; the tokenizer changes with it, so token budgets and stop ids measured on the old model no longer apply."],
+  ["max_position_embeddings", "The longest servable length changes; --max-model-len / --context-length may now be past it or leave length unused."],
+  ["rope_scaling", "Rope scaling changes the derived maximum length and short-context quality."],
+  ["rope_theta", "Rope base changes how positions are encoded; any rope override written for the old model is wrong for this one."],
+  ["sliding_window", "Sliding window changes KV per token at long lengths and which attention backends apply."],
+  ["torch_dtype", "Stored dtype changes weight memory and which cards run it natively."],
+  ["quantization_config", "Quantization changes weight memory, which cards run it, and --quantization must match it."],
+  ["tie_word_embeddings", "Tied embeddings change weight memory by one vocab x hidden matrix."],
+  ["bos_token_id", "BOS id changes: prompt templates and BOS handling must follow."],
+  ["eos_token_id", "Stop ids change: a gateway or client that hard-codes stop token ids stops at the wrong place or never stops."],
+  ["pad_token_id", "Pad id changes (matters for batched fine-tuning, not for serving engines)."]
+];
+function diffAgainst(input, mem, derivedLen, template) {
+  const old = input.against;
+  const a = old.config ?? {};
+  const b = input.config ?? {};
+  const changed = [];
+  const same = (x, y) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+  for (const [k, effect] of DIFF_KEYS) {
+    const ka = k === "torch_dtype" ? a.torch_dtype ?? a.dtype : a[k];
+    const kb = k === "torch_dtype" ? b.torch_dtype ?? b.dtype : b[k];
+    if (ka === void 0 && kb === void 0) continue;
+    if (!same(ka, kb)) changed.push({ key: k, from: ka, to: kb, effect });
+  }
+  const tOld = chatTemplateOf(old);
+  if ((tOld ?? "") !== (template ?? "")) {
+    changed.push({
+      key: "chat_template",
+      from: tOld ? `hash ${templateHash(tOld)}` : void 0,
+      to: template ? `hash ${templateHash(template)}` : void 0,
+      effect: input.args.chatTemplate ? "The model's own template changed, but --chat-template overrides both: the override was written for one of them at most." : "Every chat request renders differently: re-render a reference conversation (with tool calls) and re-run the evals that depend on format."
+    });
+  }
+  const ga = readSampler(old.generationConfig ?? {});
+  const gb2 = readSampler(input.generationConfig ?? {});
+  for (const k of ["temperature", "top_p", "top_k", "repetition_penalty"]) {
+    if (ga[k] != null || gb2[k] != null) {
+      if (ga[k] !== gb2[k]) changed.push({ key: `generation_config.${k}`, from: ga[k], to: gb2[k], effect: "The recommended sampling changes; a gateway that pins the old value now overrides the new model's recommendation." });
+    }
+  }
+  const numbers = [];
+  const oldReport = checkServeConfig({
+    engine: input.engine,
+    args: input.args,
+    gpu: input.gpu,
+    gpus: input.gpus,
+    sampler: input.sampler,
+    model: old.model,
+    config: old.config ?? null,
+    tokenizerConfig: old.tokenizerConfig ?? null,
+    chatTemplateFile: old.chatTemplateFile ?? null,
+    generationConfig: old.generationConfig ?? null,
+    modelId: old.modelId
+  });
+  const om = oldReport.memory;
+  if (om && mem) {
+    numbers.push({ what: "weights per GPU", from: gbs(om.weightsGbPerGpu), to: gbs(mem.weightsGbPerGpu) });
+    numbers.push({ what: "KV bytes per token per GPU", from: Math.round(om.kvBytesPerTokenPerGpu).toLocaleString("en-US"), to: Math.round(mem.kvBytesPerTokenPerGpu).toLocaleString("en-US") });
+    numbers.push({ what: "concurrent full-length sequences (upper bound)", from: String(Math.floor(om.maxConcurrentFullLength)), to: String(Math.floor(mem.maxConcurrentFullLength)) });
+  }
+  if (oldReport.resolved.derivedMaxLen !== derivedLen) {
+    numbers.push({ what: "derived maximum length", from: String(oldReport.resolved.derivedMaxLen ?? "n/a"), to: String(derivedLen ?? "n/a") });
+  }
+  return { against: old.modelId ?? old.model.name ?? "previous model", changed, numbers };
+}
+var ENGINE_NAME = { vllm: "vLLM", sglang: "SGLang", llamacpp: "llama.cpp" };
+function renderServeText(r, name = "model") {
+  const L = [];
+  const R = r.resolved;
+  L.push("");
+  L.push(`  ${name} on ${ENGINE_NAME[r.engine]}`);
+  const par = r.engine === "llamacpp" ? "" : `TP ${R.tp} x PP ${R.pp} x DP ${R.dp}${R.expertParallel ? " + EP" : ""}, `;
+  L.push(`  ${par}${R.gpus} x ${R.gpu ?? "(no card given)"}${R.sm ? ` (sm${R.sm})` : ""}${r.engine === "llamacpp" ? "" : `, dtype ${R.dtype}`}, weights ${R.quant ?? "unquantized"}, KV cache ${R.kvCacheDtype}`);
+  L.push(`  served length ${R.servedLen ?? "n/a"} (${R.servedLenSource}); the model's derived maximum ${R.derivedMaxLen ?? "n/a"}`);
+  if (r.memory) {
+    const m = r.memory;
+    L.push("");
+    if (r.engine === "llamacpp") {
+      L.push(`  memory per GPU   card ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV for ${m.tokenCapacity.toLocaleString("en-US")} tokens ${m.kvCapacityGbPerGpu.toFixed(2)} GB (allocated up front), total ${(m.weightsGbPerGpu + m.kvCapacityGbPerGpu).toFixed(2)} GB`);
+      L.push(`                   ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} KV bytes per token; one full-length sequence ${m.kvGbPerSequencePerGpu.toFixed(2)} GB`);
+    } else {
+      L.push(`  memory per GPU   budget ${m.budgetGbPerGpu.toFixed(1)} GB, weights ${m.weightsGbPerGpu.toFixed(2)} GB, KV room ${m.kvCapacityGbPerGpu.toFixed(2)} GB`);
+      L.push(`                   ${Math.round(m.kvBytesPerTokenPerGpu).toLocaleString("en-US")} KV bytes per token; one full-length sequence ${m.kvGbPerSequencePerGpu.toFixed(2)} GB`);
+      L.push(`                   at most ${Math.floor(m.maxConcurrentFullLength)} concurrent full-length sequences (${m.tokenCapacity.toLocaleString("en-US")} tokens)`);
+    }
+    L.push(`                   weights: ${m.weightsBasis}`);
+  }
+  const order = { block: 0, warn: 1, info: 2 };
+  const fs = [...r.findings].sort((a, b) => order[a.severity] - order[b.severity]);
+  L.push("");
+  if (!fs.length) L.push("  no findings in the checks that ran");
+  for (const f of fs) {
+    const tag = f.severity === "block" ? "block" : f.severity === "warn" ? "warn " : "info ";
+    L.push(`  ${tag} ${f.title}`);
+    if (f.detail) L.push(`        ${f.detail}`);
+    if (f.fix) L.push(`        fix: ${f.fix}`);
+    if (f.source) L.push(`        source: ${f.source}`);
+  }
+  L.push("");
+  L.push(`  checked: ${r.checked.join(", ") || "nothing"}`);
+  for (const s of r.skipped) L.push(`  not checked: ${s.check}: ${s.reason}`);
+  L.push("");
+  L.push(`  ${r.basis}`);
+  L.push("");
+  return L.join("\n");
+}
 export {
   ACTIVATION_K,
   ATTENTION_K,
@@ -8829,12 +11150,15 @@ export {
   FIT_HEADROOM,
   INFERENCE_NOT_COUNTED,
   INTERNAL_K,
+  LAYOUT_BASIS,
   MEMORY_CALIBRATION,
   MIG_PROFILES,
   MIG_SOURCE,
   OPTIMIZER_K,
   OUTPUT_K,
+  QUANT_SUPPORT,
   RECURRENT_K,
+  SERVE_BASIS,
   SHAREABLE_NOTE,
   TRANSIENT_K,
   UPPER_COVERAGE,
@@ -8853,6 +11177,8 @@ export {
   checkDataFit,
   checkGraphEdit,
   checkLoraTargets,
+  checkParallelLayout,
+  checkServeConfig,
   deviceMapFor,
   diagnoseOom,
   factsFor2 as factsFor,
@@ -8870,17 +11196,23 @@ export {
   oomFactsForModel,
   parseHumanSize,
   parseOomMessage,
+  parseServeCommand,
   peakInputsOf,
   readAttention,
   readDataSpec,
   readGraph,
+  readHistogram,
+  readLayout,
   readPolicy,
   readSeqLen,
+  readServeSpec,
   renderEditFindingsMarkdown,
+  renderLayoutText,
   renderLoraText,
   renderOomText,
   renderPlanMarkdown,
   renderPlanText,
+  renderServeText,
   shareLine,
   shareableFor,
   smallestCardFor,

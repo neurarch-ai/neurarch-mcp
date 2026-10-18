@@ -6,7 +6,7 @@
     {
       "name": "neurarch",
       "source": "./",
-      "description": "Size a training job before it takes a GPU: the neurarch-mcp server, a PreToolUse hook that blocks a launch that will not fit its card, and the neurarch skill.",
+      "description": "Size a training job before it takes a GPU and pre-check a serving launch: the neurarch-mcp server, a PreToolUse hook that blocks a training launch that will not fit its card or a vLLM / SGLang launch its config refuses, and the neurarch skill.",
       "category": "development",
       "tags": ["gpu", "training", "mcp", "hook"]
     }
