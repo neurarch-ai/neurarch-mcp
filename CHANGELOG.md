@@ -6,6 +6,25 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-10-18
+
+### Changed
+- **`check_parallel_layout` now times each stage per card and simulates the
+  pipeline schedule.** Matmul efficiency comes from a per-card table fitted on
+  public GEMM measurements instead of a flat 40% of peak, and the 1F1B step is
+  simulated op by op (a port of Primus's simulator) instead of the closed-form
+  formula, so `predicted.formula` now reads `1F1B schedule simulated op by op`.
+  On the 2 x H100 Qwen3-4B pipeline A/B the predicted gain is within 1.5 points
+  of the measured one, and against vTrain's published step times the error
+  fell from 33.2% to 9.0% (neurarch-ai/neurarch #335). Recommended splits move
+  accordingly: Qwen3-8B at TP4 PP4 on H100 now recommends `10,10,9,7`.
+- **`check_serving_config` sizes memory with each engine's own arithmetic**:
+  vLLM's KV cache groups and blocks, SGLang's `mem_fraction_static` formula,
+  llama.cpp's sliding-window cells, plus per-engine quantisation support
+  tables. On 21 public vLLM startup logs (out of sample) the KV token count is
+  within 1.07% (neurarch-ai/neurarch #337). `basis` now starts "Predicted from
+  config.json" rather than "Derived from config.json".
+
 ## [0.18.0] - 2026-10-18
 
 ### Added
