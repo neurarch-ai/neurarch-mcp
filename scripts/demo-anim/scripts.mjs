@@ -176,60 +176,71 @@ export const SCRIPTS = {
     ],
   },
 
-  // The sibling CLI `npx neurarch`, data-fit check from neurarch-ai/neurarch branch
-  // feat/config-data-fit (not yet in the published CLI). Output trimmed to the data-fit
-  // block; the sentences are the CLI's, wrapped, with "(a device-side assert on GPU)" and
-  // the "Any of the 2 ids past 30521 ..." sentence left out. Exit code 1.
+  // The sibling CLI `npx neurarch`, data-fit check from neurarch-ai/neurarch #314 (CLI 0.1.2,
+  // merged, not yet on npm). Output cut to the header line, the checks line and the data-fit
+  // block; every string is the CLI's own, wrapped at word boundaries and never reworded. The
+  // exit code is printed by `echo $?`, not by the CLI.
   //   node packages/neurarch-cli/bin/neurarch.mjs bert-base-uncased --seq-len 1024 --tokenizer-size 30524
   'data-fit': {
     title: 'npx neurarch · does the data fit the config · bert-base-uncased',
-    rows: 15,
+    rows: 20,
     steps: [
       { pause: 400 },
       sh('npx neurarch bert-base-uncased --seq-len 1024 --tokenizer-size 30524'),
       { pause: 500 },
-      o(['bert-base-uncased  ', C.white], ['bert · fill-mask · 110.1M published, 108.9M derived', C.dim]),
-      o(['checks  ', C.dim], ['clean', C.green]),
+      o(['bert-base-uncased  ', C.white], ['bert · fill-mask', C.dim]),
+      o(['  checks  ', C.dim], ['clean', C.green]),
       { pause: 600 }, blank,
-      o(['data fit checked: sequence length, tokenizer size', C.text]),
+      o(['  data fit checked: sequence length, tokenizer size', C.text]),
       { pause: 400 },
-      o(['  block ', C.red], ['Sequences of 1024 tokens are longer than the 512-row position table', C.white]),
-      o(['        Position ids past 511 index outside a learned table, so the first batch', C.dim]),
-      o(['        that long raises an IndexError after the reservation is taken.', C.dim]),
-      o(['        fix: ', C.dim], ['Truncate or chunk to 512 tokens', C.green], [', or pick a model whose context covers 1024.', C.dim]),
+      o(['    block ', C.red], ['Sequences of 1024 tokens are longer than the 512-row position table', C.white]),
+      o(['          Position ids past 511 index outside a learned table, so the first batch', C.dim]),
+      o(['          that long raises an IndexError (a device-side assert on GPU) after the', C.dim]),
+      o(['          reservation is taken.', C.dim]),
+      o(['          fix: ', C.dim], ['Truncate or chunk to 512 tokens, or pick a model whose context', C.green]),
+      o(['          ', C.dim], ['covers 1024.', C.green]),
       { pause: 700 },
-      o(['  block ', C.red], ['The tokenizer has 30524 ids and the embedding has 30522 rows', C.white]),
-      o(['        The usual cause is special tokens added to the tokenizer without resizing the model.', C.dim]),
-      o(['        fix: ', C.dim], ['model.resize_token_embeddings(len(tokenizer))', C.green], [' before training.', C.dim]),
+      o(['    block ', C.red], ['The tokenizer has 30524 ids and the embedding has 30522 rows', C.white]),
+      o(['          Any of the 2 ids past 30521 indexes outside the embedding. The usual cause', C.dim]),
+      o(['          is special tokens added to the tokenizer without resizing the model.', C.dim]),
+      o(['          fix: ', C.dim], ['Call model.resize_token_embeddings(len(tokenizer)) before training,', C.green]),
+      o(['          ', C.dim], ['and budget for the new rows.', C.green]),
       { pause: 400 }, blank,
-      o(['exit 1', C.red]),
+      sh('echo $?'),
+      o(['1', C.red]),
       { pause: 2800 },
     ],
   },
 
   // The sibling CLI `npx neurarch` 0.1.1 from npm, on the jobs.sample.csv it ships in examples/.
-  // The headline and the six rows are its markdown report, columns cut to job, requested,
-  // needed, verdict and right-sized request. Model configs are read from huggingface.co.
+  // Every string is verbatim from its markdown report: the heading, the headline sentence
+  // (wrapped, not reworded), the counts line, the table with columns cut to job, requested,
+  // needed (GB), verdict and right-sized request, and the note column for the one `under`
+  // row. A cell the CLI leaves empty stays empty. Model configs are read from huggingface.co.
   //   npx neurarch rightsize examples/jobs.sample.csv
   'rightsize': {
     title: 'npx neurarch rightsize · requested vs needed over past jobs',
-    rows: 15,
+    rows: 19,
     steps: [
       { pause: 400 },
       sh('npx neurarch rightsize jobs.sample.csv'),
       { pause: 600 },
+      o(['# GPU right-sizing: requested vs needed', C.white]),
       o(['6 jobs, 174 GPU-hours, ', C.text], ['$507.85', C.white], [' spent; ', C.text], ['$328.53', C.yellow], [' of that was reserved', C.text]),
       o(['capacity no job needed, claiming nothing on 1 row marked under or unknown.', C.text]),
+      o(['4 over, 1 right-sized, 1 under, 0 unknown.', C.dim]),
       { pause: 600 }, blank,
-      o(['job              requested  needed   verdict                   right-sized request', C.dim]),
-      o(['ft-qwen-small    8xH100     211 GB   ', C.text], ['over (borderline)         ', C.yellow], ['2xH200', C.green]),
-      o(['lora-qwen-8b     A100-80     78 GB   ', C.text], ['right-sized (borderline)  ', C.green], ['as requested', C.dim]),
-      o(['bert-classifier  A100-80    8.4 GB   ', C.text], ['over                      ', C.yellow], ['T4', C.green]),
-      o(['tinyllama-lora   H100        35 GB   ', C.text], ['over (borderline)         ', C.yellow], ['L40S', C.green]),
-      o(['phi3-sft         A100-40    230 GB   ', C.text], ['under                     ', C.red], ['-  (needs 230 GB, has 40)', C.dim]),
-      o(['gpt2-pretrain    4xA100-80   29 GB   ', C.text], ['over                      ', C.yellow], ['L40S', C.green]),
+      o(['job              requested  needed (GB)  verdict                   right-sized request', C.dim]),
+      o(['ft-qwen-small    8xH100     211          ', C.text], ['over (borderline)         ', C.yellow], ['2xH200', C.green]),
+      o(['lora-qwen-8b     A100-80     78          ', C.text], ['right-sized (borderline)  ', C.green], ['as requested', C.dim]),
+      o(['bert-classifier  A100-80    8.4          ', C.text], ['over                      ', C.yellow], ['T4', C.green]),
+      o(['tinyllama-lora   H100        35          ', C.text], ['over (borderline)         ', C.yellow], ['L40S', C.green]),
+      o(['phi3-sft         A100-40    230          ', C.text], ['under', C.red]),
+      o(['gpt2-pretrain    4xA100-80   29          ', C.text], ['over                      ', C.yellow], ['L40S', C.green]),
       { pause: 500 }, blank,
-      o(['borderline: the upper bound does not fit; measure once', C.dim]),
+      o(['job              note', C.dim]),
+      o(['phi3-sft         ', C.text], ['predicted peak 200.3 GB x 1.15 does not fit 40 GB: the job OOMed or', C.dim]),
+      o(['                 ', C.text], ['relied on something the graph does not declare', C.dim]),
       { pause: 2800 },
     ],
   },
