@@ -94,8 +94,7 @@ export const checkParallelLayoutTool: ToolDef = {
     + 'usual straggler (ByteDance, OSDI 2025: the last stage causes most of the slowdown in 39.3% of straggling jobs). '
     + 'Every time is PREDICTED, not measured: matmul time from a per-card efficiency table fitted on public GEMM '
     + 'measurements plus memory-bound bytes against bandwidth; on 2 x H100 the predicted gain of a split landed within 1.5 '
-    + 'points of measured and against vTrain\'s published step times the error is 9.0%, while absolute step time is less '
-    + 'reliable than the gain. The result labels them under `predicted` and in `basis`. Required: micro_batch and seq_len; '
+    + 'points of measured, while absolute step time is less reliable than the gain. The result labels them under `predicted` and in `basis`. Required: micro_batch and seq_len; '
     + 'tp, pp, dp default to 1; gpu takes an id or prefix (h100, h200, b200, a100-80g, l40s, l4; default h100-sxm); '
     + 'zero_stage 0-3; schedule 1f1b (default) or interleaved with virtual_stages. The model is the server\'s, or '
     + 'model_path (a .py, a .neurarch.json, zoo:<id>, hf:<org/name>), or hf_id. Offline; an hf: model needs --hf the first time.',
