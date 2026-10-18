@@ -13,13 +13,29 @@
 
 Call `size_training_job` before a job launches and the agent learns, for the model, batch and card in front of it: **the peak memory** (weights and optimizer state, activations, stored attention scores, each shown), **the smallest card that holds it**, **the largest batch each card holds**, a two-card split when one card does not, **what one run costs**, and a one-line verdict such as `will not fit a T4: needs ~30 GB with headroom (peak 26 GB) at batch 32, seq 2048, use L40S or batch <= 12`. `history` adds **what that structure measured the last time it ran** in your organisation. After a CUDA out-of-memory error, `diagnose_oom` reads the message against the same estimate and names the cause (too big for the card, fragmentation, another process, logits over a large vocabulary, growth during the run) with the least invasive fix first. Then whether it forward-passes: the structural checks the CI bot runs (`lint_model`, `check_design`), offline too. It answers the same whether a person or an agent wrote the job, which is the question the person who owns the GPU bill is asking.
 
+## See it
+
+**Before launch.** The job does not fit the card it was about to take, so the agent sizes it again at the batch the tool named:
+
+![size_training_job refusing batch 32 on a T4, then confirming batch 12 fits](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/size-training-job.gif)
+
+**After a CUDA out-of-memory error.** The message is read against the same estimate, and the cause comes back with the fix that leaves training unchanged listed first:
+
+![diagnose_oom naming too-big-for-card and batch 8 with 4 accumulation steps](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/diagnose-oom.gif)
+
+**Whether it forward-passes.** The shipped [`examples/tiny-vit.py`](./examples/tiny-vit.py) builds an attention layer its head count does not divide:
+
+![lint_model blocking embed dim 258 with 8 heads in examples/tiny-vit.py](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/lint-model.gif)
+
+**Without the agent asking.** [`neurarch-mcp hook`](#a-claude-code-hook-refuse-the-launch-that-will-not-fit) sizes a `python train.py` launch before the Bash call runs and blocks the one that will not fit:
+
+![the PreToolUse hook blocking batch 32 on a T4 and letting batch 12 through](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/hook.gif)
+
+<sub>Every number in these recordings is copied from the 0.17.1 tools' output on [`phi3-mini`](./src/test/templates/phi3-mini.neurarch.json) and [`tiny-vit.py`](./examples/tiny-vit.py); the model's closing sentences are scripted.</sub>
+
 The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.2 x 16 bytes per parameter, plus, per sample in bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager attention only; SDPA and flash keep none), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate states and 2.02 x the largest single tensor. Fitted on 178 measured runs across 41 architectures, out-of-memory runs included. Held out one architecture at a time, the median error is 7% above 1 GB and it flagged 113 of the 131 times a run did not fit a 16, 24, 40 or 80 GB card, where `accelerate estimate-memory` flagged at most 8. On 25 runs measured after the fit, at the edge of a 24 GB card, the median miss is 14%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html).
 
 Get the graph by tracing the model for real shapes, or point the server at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account. The two that do not, `plan` and `history`, read what a frontier model structurally cannot know: what happened the last time this exact structure trained here. That is not in the weights and not in the repository. They are the only tools in this package that open a socket.
-
-[![neurarch-mcp answering a model-structure question, every number from a tool call](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/demo.gif)](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm)
-
-<sub>Every number above is produced by the tools, not guessed by the model. [13s webm](https://github.com/neurarch-ai/neurarch-mcp/raw/main/docs/demo.webm).</sub>
 
 ## Install
 
@@ -39,19 +55,20 @@ An agent about to launch a fine-tune on a T4, against [`src/test/templates/phi3-
 
 ```
 Agent ▸ (calls size_training_job { batch_size: 32, gpu: "T4" })
-  verdict        will not fit a T4: needs ~21 GB with headroom (peak 18 GB) at batch 32,
-                 seq 2048, use L4 or batch <= 21
-  memory         peak 17.91 GB = 6.26 weights + optimizer state, 11.66 activations
-                 (SDPA: the 29.81 GB of attention scores eager would keep are not counted)
-  maxBatch       T4 21, L4 40, A10G 40, A100-40 78, L40S 97, A100-80 173, H100-80 173
+  verdict        will not fit a T4: needs ~30 GB with headroom (peak 26 GB) at batch 32,
+                 seq 2048, use L40S or batch <= 12
+  memory         peak 26.38 GB = 5.96 weights + optimizer state, 20.42 activations
+                 (SDPA: the 40.13 GB of attention scores eager would keep are not counted)
+  maxBatch       T4 12, L4 23, A10G 23, A100-40 45, L40S 56, A100-80 99, H100-80 99
   cost           $9.68 on a T4, 10 epochs over 50,000 samples (assumed; pass samples)
   forwardPasses  legal, no blockers
   lastRun        fingerprint 4e0b97b4: call history for what it measured last time
 
   (same job, attention: "eager", gpu: "A100-40")
-  verdict        will not fit an A100-40: needs ~55 GB with headroom (peak 48 GB) at batch 32,
-                 seq 2048, use A100-80 or batch <= 22
-  twoCardSplit   2 x A100-40: embed..attn 34.45 GB | residual_1..lm_head 13.27 GB
+  verdict        will not fit an A100-40: needs ~76 GB with headroom (peak 67 GB) at batch 32,
+                 seq 2048, use A100-80 or batch <= 15
+  memory         peak 66.51 GB = 5.96 weights + optimizer state, 60.55 activations
+                 (40.13 GB of them the attention scores eager keeps)
 ```
 
 A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json), about where the budget lives:
