@@ -55,19 +55,20 @@ An agent about to launch a fine-tune on a T4, against [`src/test/templates/phi3-
 
 ```
 Agent ▸ (calls size_training_job { batch_size: 32, gpu: "T4" })
-  verdict        will not fit a T4: needs ~21 GB with headroom (peak 18 GB) at batch 32,
-                 seq 2048, use L4 or batch <= 21
-  memory         peak 17.91 GB = 6.26 weights + optimizer state, 11.66 activations
-                 (SDPA: the 29.81 GB of attention scores eager would keep are not counted)
-  maxBatch       T4 21, L4 40, A10G 40, A100-40 78, L40S 97, A100-80 173, H100-80 173
+  verdict        will not fit a T4: needs ~30 GB with headroom (peak 26 GB) at batch 32,
+                 seq 2048, use L40S or batch <= 12
+  memory         peak 26.38 GB = 5.96 weights + optimizer state, 20.42 activations
+                 (SDPA: the 40.13 GB of attention scores eager would keep are not counted)
+  maxBatch       T4 12, L4 23, A10G 23, A100-40 45, L40S 56, A100-80 99, H100-80 99
   cost           $9.68 on a T4, 10 epochs over 50,000 samples (assumed; pass samples)
   forwardPasses  legal, no blockers
   lastRun        fingerprint 4e0b97b4: call history for what it measured last time
 
   (same job, attention: "eager", gpu: "A100-40")
-  verdict        will not fit an A100-40: needs ~55 GB with headroom (peak 48 GB) at batch 32,
-                 seq 2048, use A100-80 or batch <= 22
-  twoCardSplit   2 x A100-40: embed..attn 34.45 GB | residual_1..lm_head 13.27 GB
+  verdict        will not fit an A100-40: needs ~76 GB with headroom (peak 67 GB) at batch 32,
+                 seq 2048, use A100-80 or batch <= 15
+  memory         peak 66.51 GB = 5.96 weights + optimizer state, 60.55 activations
+                 (40.13 GB of them the attention scores eager keeps)
 ```
 
 A real exchange against [`examples/tiny-gpt.neurarch.json`](./examples/tiny-gpt.neurarch.json), about where the budget lives:
