@@ -1,0 +1,7 @@
+{
+  "session_id": "fixture",
+  "cwd": "__CWD__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": { "command": "ls -la && python -c 'print(1)'" }
+}

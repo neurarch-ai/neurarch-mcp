@@ -25,7 +25,7 @@ export interface ParsedFlags {
   toolSet: ToolSetName;
   /** Serve with no model on stdio too (a container with nothing mounted); every call names its model. */
   hostedRequested: boolean;
-  /** A subcommand (`lint`, `check`) instead of serving, when the first token is one. */
+  /** A subcommand (`lint`, `check`, `hook`) instead of serving, when the first token is one. */
   command?: Command;
   /** Emit JSON from a subcommand instead of a human report. */
   json: boolean;
@@ -40,8 +40,8 @@ export interface ParsedFlags {
 const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--json', '--hosted']);
 
 export type ToolSetName = 'core' | 'full';
-export type Command = 'lint' | 'check';
-const COMMANDS = new Set<Command>(['lint', 'check']);
+export type Command = 'lint' | 'check' | 'hook';
+const COMMANDS = new Set<Command>(['lint', 'check', 'hook']);
 
 /**
  * The tools that answer the questions an agent actually asks, without the
@@ -64,6 +64,7 @@ export const CORE_TOOLS: readonly string[] = [
   'plan',
   'history',
   'diagnose_oom',
+  'check_edit',
   'check_design',
   'lint_model',
   'describe_architecture',
@@ -141,7 +142,9 @@ export const MODEL_PATH_PARAM = 'model_path';
 
 const MODEL_PATH_PROPERTY = {
   type: 'string',
-  description: 'Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>.',
+  // Short on purpose: it rides on every read tool's schema in every ListTools,
+  // so each character here is paid ~30 times a turn (check_edit paid for itself here).
+  description: 'Path, zoo:<id> or hf:<org/name>.',
 };
 
 /**

@@ -2683,10 +2683,39 @@ var matryoshkaDimsExceedWidth = (model) => {
   }
   return issues;
 };
+var POSITION_TABLE_NAME = /(^|[._\s-])(wpe|pos|position|positions|positional)([._\s-]|_?emb|_?embed|_?embedding|_?embeddings|$)/i;
+var MIN_POSITION_ROWS = 16;
+var hasLearnedPositionTable = (model) => {
+  const embeddings = model.components.filter((c) => c.type === "embedding");
+  if (embeddings.length < 2) return false;
+  const embById = new Map(embeddings.map((c) => [c.id, c]));
+  const typeById = new Map(model.components.map((c) => [c.id, c.type]));
+  const embInputsByAdd = /* @__PURE__ */ new Map();
+  for (const cn of model.connections ?? []) {
+    if (!embById.has(cn.from) || typeById.get(cn.to) !== "add") continue;
+    const list2 = embInputsByAdd.get(cn.to) ?? [];
+    if (!list2.includes(cn.from)) list2.push(cn.from);
+    embInputsByAdd.set(cn.to, list2);
+  }
+  for (const ids of embInputsByAdd.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      const e = embById.get(id);
+      if (POSITION_TABLE_NAME.test(e.name ?? "") || POSITION_TABLE_NAME.test(e.id)) return true;
+      const rows = Number(e.params?.vocabSize ?? e.params?.numEmbeddings);
+      if (Number.isFinite(rows) && rows >= MIN_POSITION_ROWS) {
+        const others = ids.filter((o) => o !== id).map((o) => Number(embById.get(o).params?.vocabSize ?? embById.get(o).params?.numEmbeddings));
+        if (others.some((n2) => Number.isFinite(n2) && n2 > rows)) return true;
+      }
+    }
+  }
+  return false;
+};
 var attentionNoPE = (model) => {
   const attnNodes = model.components.filter((c) => ATTENTION_TYPES.has(c.type));
   if (attnNodes.length === 0) return [];
   if (model.components.some((c) => PE_TYPES.has(c.type))) return [];
+  if (hasLearnedPositionTable(model)) return [];
   return [{
     id: "attention-no-pe",
     ruleId: "attention-no-pe",
@@ -3075,8 +3104,8 @@ var duplicatePositionalEncoding = (model) => {
   if (pes.length < 2) return [];
   const outgoing = /* @__PURE__ */ new Map();
   for (const conn of observedEdges(model)) {
-    const list = outgoing.get(conn.from);
-    if (list) list.push(conn.to);
+    const list2 = outgoing.get(conn.from);
+    if (list2) list2.push(conn.to);
     else outgoing.set(conn.from, [conn.to]);
   }
   const peById = new Map(pes.map((c) => [c.id, c]));
@@ -4068,6 +4097,15 @@ function num(v, fallback = 0) {
   const n2 = typeof v === "number" ? v : Number(v);
   return isFinite(n2) && n2 >= 0 ? n2 : fallback;
 }
+function gqaParams(p) {
+  const D = num(p.embedDim, 4096);
+  const H = num(p.numHeads, 32);
+  const Hkv = num(p.numKVHeads, H);
+  const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
+  const qDim = H * headDim;
+  const kvDim = Hkv * headDim;
+  return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
+}
 function estimateLayerParams(type, params, inputShape) {
   const p = params ?? {};
   if (p.tied === true) return 0;
@@ -4201,6 +4239,9 @@ function estimateLayerParams(type, params, inputShape) {
     case "coAttention":
     case "linearAttention":
     case "localAttention": {
+      if (type === "localAttention" && (p.numKVHeads != null || p.headDim != null)) {
+        return gqaParams(p);
+      }
       const d = num(p.embedDim ?? p.hiddenDim);
       return d > 0 ? 4 * d * d + 4 * d : 0;
     }
@@ -4208,7 +4249,8 @@ function estimateLayerParams(type, params, inputShape) {
     case "feedForward": {
       const d = num(p.hiddenDim ?? p.embedDim);
       const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
-      return d > 0 && ff > 0 ? d * ff + ff + ff * d + d : 0;
+      const b = p.bias === false ? 0 : ff + d;
+      return d > 0 && ff > 0 ? d * ff + ff * d + b : 0;
     }
     case "transformerBlock": {
       const d = num(p.embedDim ?? p.hiddenDim ?? p.dModel);
@@ -4310,15 +4352,8 @@ function estimateLayerParams(type, params, inputShape) {
       const D = num(p.embedDim, 96);
       return D > 0 ? 4 * D * D : 0;
     }
-    case "groupedQueryAttention": {
-      const D = num(p.embedDim, 4096);
-      const H = num(p.numHeads, 32);
-      const Hkv = num(p.numKVHeads, H);
-      const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
-      const qDim = H * headDim;
-      const kvDim = Hkv * headDim;
-      return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
-    }
+    case "groupedQueryAttention":
+      return gqaParams(p);
     case "causalAttention": {
       const D = num(p.embedDim, 512);
       return D > 0 ? 4 * D * D : 0;
@@ -4344,7 +4379,8 @@ function estimateLayerParams(type, params, inputShape) {
       const D = num(p.embedDim, 512);
       const E = num(p.numExperts, 8);
       const I = num(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
-      return D > 0 && I > 0 ? D * E + E * 3 * D * I : 0;
+      const m = p.gatedExperts === false ? 2 : 3;
+      return D > 0 && I > 0 ? D * E + E * m * D * I : 0;
     }
     case "patchEmbed": {
       const inC = num(p.inChans ?? p.inChannels, 3);
@@ -4368,12 +4404,32 @@ function estimateLayerParams(type, params, inputShape) {
     case "mla": {
       const D = num(p.embedDim, 512);
       const kv = num(p.kvLatentDim, 128);
+      const H = num(p.numHeads);
+      const nope = num(p.qkNopeHeadDim);
+      const vd = num(p.vHeadDim);
+      if (D > 0 && H > 0 && nope > 0 && vd > 0) {
+        const rope = num(p.ropeHeadDim);
+        const qk = nope + rope;
+        const qLora = num(p.qLoraRank);
+        const q = qLora > 0 ? D * qLora + qLora + qLora * H * qk : D * H * qk;
+        return q + D * (kv + rope) + kv + kv * H * (nope + vd) + H * vd * D;
+      }
       return D > 0 ? 2 * D * D + 2 * D * kv : 0;
     }
     case "mamba2": {
       const D = num(p.dModel, 512);
       const E = num(p.expand, 2);
       const S = num(p.dState, 128);
+      const H = num(p.numHeads);
+      if (D > 0 && H > 0) {
+        const di = H * num(p.headDim, 64);
+        const G = num(p.nGroups, 1);
+        const K = num(p.dConv, 4);
+        const convDim2 = di + 2 * G * S;
+        const inOut = 2 * di + 2 * G * S + H;
+        const pb = p.projBias === true;
+        return D * inOut + (pb ? inOut : 0) + convDim2 * K + (p.convBias === false ? 0 : convDim2) + 3 * H + di + di * D + (pb ? D : 0);
+      }
       const inner = D * E;
       return D > 0 ? 2 * D * inner + inner * D + inner * S : 0;
     }
@@ -4440,6 +4496,16 @@ function estimateLayerParams(type, params, inputShape) {
     case "gatedDeltaNet":
     case "gatedLinearAttention": {
       const d = num(p.dModel, 512);
+      const Hk = num(p.numKeyHeads);
+      if (type === "gatedDeltaNet" && d > 0 && Hk > 0) {
+        const Hv = num(p.numHeads, Hk);
+        const dv = num(p.headDim, 128);
+        const dk = num(p.keyHeadDim, dv);
+        const K = num(p.convKernel, 4);
+        const keyDim = Hk * dk;
+        const valDim = Hv * dv;
+        return d * (2 * keyDim + 2 * valDim) + d * 2 * Hv + (2 * keyDim + valDim) * K + 2 * Hv + dv + valDim * d;
+      }
       return d > 0 ? 4 * d * d : 0;
     }
     case "nativeSparseAttention": {
@@ -4451,7 +4517,11 @@ function estimateLayerParams(type, params, inputShape) {
       const e = num(p.numExperts, 64);
       const s = num(p.numSharedExperts, 2);
       const I = num(p.expertDim, 1408);
-      return d > 0 && I > 0 ? d * e + (e + s) * 3 * d * I : 0;
+      const Is = num(p.sharedExpertDim, I);
+      const m = p.gatedExperts === false ? 2 : 3;
+      const lat = num(p.latentDim);
+      if (d > 0 && I > 0 && lat > 0) return d * e + 2 * d * lat + e * m * lat * I + s * m * d * Is;
+      return d > 0 && I > 0 ? d * e + e * m * d * I + s * m * d * Is : 0;
     }
     case "ditBlock": {
       const d = num(p.hiddenDim, 1152);
@@ -4650,6 +4720,11 @@ function estimateLayerParams(type, params, inputShape) {
       const dConv = num(p.dConv, 4);
       if (d <= 0) return 0;
       const di = d * e;
+      const dtRank = num(p.dtRank);
+      if (dtRank > 0) {
+        const pb = p.projBias === true;
+        return d * 2 * di + (pb ? 2 * di : 0) + di * dConv + (p.convBias === false ? 0 : di) + di * (dtRank + 2 * dState) + dtRank * di + di + di * dState + di + di * d + (pb ? d : 0);
+      }
       return d * (2 * di) + di * dConv + di * (2 * dState) + di * dState + di * d;
     }
     case "relativePositionBias": {
@@ -4697,6 +4772,20 @@ function spatialElements(shape) {
 }
 function estimateLayerFlops(type, params, inputShape, outputShape) {
   const p = params;
+  {
+    const T = inputShape.length >= 2 ? inputShape[inputShape.length - 2] : 1;
+    const exact = type === "mla" && n(p.qkNopeHeadDim) > 0 && n(p.vHeadDim) > 0 && n(p.numHeads) > 0 || type === "mamba" && n(p.dtRank) > 0 || type === "mamba2" && n(p.numHeads) > 0 || type === "gatedDeltaNet" && n(p.numKeyHeads) > 0 || type === "localAttention" && (p.numKVHeads != null || p.headDim != null);
+    if (exact) {
+      const proj = T * estimateLayerParams(type, p, inputShape);
+      if (type === "mla") return proj + T * T * n(p.numHeads) * (n(p.qkNopeHeadDim) + n(p.ropeHeadDim));
+      if (type === "localAttention") {
+        const H = n(p.numHeads, 8);
+        const hd = n(p.headDim, H > 0 ? Math.floor(n(p.embedDim, 512) / H) : 64);
+        return proj + T * Math.min(T, n(p.windowSize, 256)) * H * hd;
+      }
+      return proj;
+    }
+  }
   switch (type) {
     // ── Linear / Dense ──────────────────────────────────────────────────────
     case "linear": {
@@ -5627,7 +5716,7 @@ function paramDiffKeys(a, b) {
 function diffArchitectures(prev, next) {
   const SEP = "\0";
   const displayName = (key) => key.split(SEP)[0];
-  const byName2 = (m) => {
+  const byName3 = (m) => {
     const map = /* @__PURE__ */ new Map();
     const seen = /* @__PURE__ */ new Map();
     for (const c of m.components) {
@@ -5637,8 +5726,8 @@ function diffArchitectures(prev, next) {
     }
     return map;
   };
-  const prevMap = byName2(prev);
-  const nextMap = byName2(next);
+  const prevMap = byName3(prev);
+  const nextMap = byName3(next);
   const layersAdded = [];
   const layersRemoved = [];
   const layersChanged = [];
@@ -5902,6 +5991,7 @@ function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
     kvHeads: heads,
     headDim: heads > 0 ? dim / heads : dim
   });
+  if (p.mtp === true) return 0;
   switch (c.type) {
     case "multiHeadAttention":
     case "selfAttention":
@@ -5920,7 +6010,13 @@ function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
       const dim = n2(p.embedDim ?? p.hiddenDim, 768);
       const heads = n2(p.numHeads, 1);
       const window = n2(p.windowSize, c.type === "localAttention" ? 256 : 7);
-      const full = fullAttention(dim, heads);
+      const gqa = c.type === "localAttention" && (p.numKVHeads != null || p.headDim != null);
+      const full = gqa ? kvCachePerTokenBytes({
+        numLayers: 1,
+        bytesPerValue,
+        kvHeads: n2(p.numKVHeads, heads),
+        headDim: n2(p.headDim, heads > 0 ? dim / heads : 64)
+      }) : fullAttention(dim, heads);
       if (seqLen && seqLen > window) return full * (window / seqLen);
       return full;
     }
@@ -5944,6 +6040,44 @@ function kvCachePerTokenFor(c, bytesPerValue, seqLen) {
 }
 function kvBytesPerTokenForModel(model, bytesPerValue = 2, seqLen) {
   return model.components.reduce((s, c) => s + kvCachePerTokenFor(c, bytesPerValue, seqLen), 0);
+}
+function recurrentStatePerSequenceFor(c, bytesPerValue) {
+  const p = c.params || {};
+  const n2 = (v, fb = 0) => {
+    const x = typeof v === "number" ? v : Number(v);
+    return isFinite(x) && x > 0 ? x : fb;
+  };
+  switch (c.type) {
+    case "mamba": {
+      const d = n2(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
+      const di = d * n2(p.expand, 2);
+      const taps = Math.max(0, n2(p.dConv, 4) - 1);
+      return (di * n2(p.dState, 16) + taps * di) * bytesPerValue;
+    }
+    case "mamba2": {
+      const H = n2(p.numHeads);
+      if (!H) return 0;
+      const di = H * n2(p.headDim, 64);
+      const S = n2(p.dState, 128);
+      const taps = Math.max(0, n2(p.dConv, 4) - 1);
+      const convDim2 = di + 2 * n2(p.nGroups, 1) * S;
+      return (di * S + taps * convDim2) * bytesPerValue;
+    }
+    case "gatedDeltaNet": {
+      const Hk = n2(p.numKeyHeads);
+      if (!Hk) return 0;
+      const Hv = n2(p.numHeads, Hk);
+      const dv = n2(p.headDim, 128);
+      const dk = n2(p.keyHeadDim, dv);
+      const taps = Math.max(0, n2(p.convKernel, 4) - 1);
+      return (Hv * dk * dv + taps * (2 * Hk * dk + Hv * dv)) * bytesPerValue;
+    }
+    default:
+      return 0;
+  }
+}
+function recurrentStateBytesForModel(model, bytesPerValue = 2) {
+  return model.components.reduce((s, c) => s + recurrentStatePerSequenceFor(c, bytesPerValue), 0);
 }
 
 // src/utils/quantizationPreview.ts
@@ -6011,7 +6145,7 @@ function computeQuantPreview(model) {
 function planServing(inp) {
   const batch = Math.max(1, inp.batchSize);
   const avgContext = Math.max(1, inp.promptTokens + inp.genTokens / 2);
-  const kvPerRequest = inp.kvBytesPerToken * avgContext;
+  const kvPerRequest = inp.kvBytesPerToken * avgContext + Math.max(0, inp.stateBytesPerRequest ?? 0);
   const prefillSec = prefillSeconds(inp.promptTokens, inp.flopsPerToken, inp.gpu);
   const est = decodeStepEstimate({
     gpu: inp.gpu,
@@ -6052,6 +6186,522 @@ function planServing(inp) {
   };
 }
 
+// src/utils/editChecks.ts
+var EDIT_RULE_IDS = [
+  "vocab-resize-incomplete",
+  "weight-tying-lost",
+  "attention-config-drift",
+  "rope-context-drift",
+  "lora-target-no-match",
+  "lora-target-partial",
+  "lora-target-wrapper"
+];
+var EDIT_RULE_SEEN_IN = {
+  "vocab-resize-incomplete": [
+    "https://github.com/huggingface/transformers/issues/45276",
+    "https://github.com/huggingface/transformers/issues/39921"
+  ],
+  "weight-tying-lost": [
+    "https://github.com/huggingface/transformers/issues/38160",
+    "https://github.com/huggingface/peft/issues/2944"
+  ],
+  "attention-config-drift": [],
+  "rope-context-drift": [
+    "https://huggingface.co/Qwen/Qwen3-30B-A3B/discussions/7"
+  ],
+  "lora-target-no-match": ["https://github.com/huggingface/peft/issues/3533"],
+  "lora-target-partial": ["https://github.com/huggingface/peft/issues/3533"],
+  "lora-target-wrapper": ["https://github.com/huggingface/peft/issues/3129"]
+};
+var num2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var plural = (n2, w) => `${n2} ${w}${n2 === 1 ? "" : "s"}`;
+var list = (xs, max = 6) => xs.slice(0, max).join(", ") + (xs.length > max ? `, and ${xs.length - max} more` : "");
+var VOCAB_ROW_TYPES = /* @__PURE__ */ new Set(["embedding", "embeddingBag", "lmHead"]);
+function vocabField(c) {
+  const p = c.params ?? {};
+  if (!VOCAB_ROW_TYPES.has(c.type)) return null;
+  for (const k of ["vocabSize", "numEmbeddings"]) {
+    const v = num2(p[k]);
+    if (v != null) return [k, v];
+  }
+  return null;
+}
+function linearOut(c) {
+  return c.type === "linear" ? num2((c.params ?? {}).outFeatures) : null;
+}
+function byName(m) {
+  const out = /* @__PURE__ */ new Map();
+  for (const c of m.components ?? []) if (c && typeof c.name === "string") out.set(c.name, c);
+  return out;
+}
+function roleOf(c) {
+  const n2 = c.name.toLowerCase();
+  if (/per_?layer/.test(n2)) return "per-layer embedding";
+  if (c.type === "lmHead" || c.type === "linear" || /head|logit/.test(n2)) return "output head";
+  return "embedding";
+}
+function inputEmbedding(m) {
+  return (m.components ?? []).find((c) => (c.type === "embedding" || c.type === "embeddingBag") && vocabField(c) != null) ?? null;
+}
+function embedDimOf(c) {
+  const p = c.params ?? {};
+  return num2(p.embeddingDim) ?? num2(p.embedDim);
+}
+function checkGraphEdit(base, head) {
+  const out = [];
+  const b = byName(base);
+  const h = byName(head);
+  const resized = [];
+  for (const [name, hc] of h) {
+    const bc = b.get(name);
+    if (!bc) continue;
+    const bf = vocabField(bc);
+    const hf = vocabField(hc);
+    if (bf && hf && bf[1] !== hf[1]) resized.push({ name, from: bf[1], to: hf[1] });
+  }
+  const baseVocabs = new Set((base.components ?? []).map(vocabField).filter((x) => !!x).map((x) => x[1]));
+  for (const [name, hc] of h) {
+    const bc = b.get(name);
+    const bo = bc ? linearOut(bc) : null;
+    const ho = linearOut(hc);
+    if (bo != null && ho != null && bo !== ho && baseVocabs.has(bo)) resized.push({ name, from: bo, to: ho });
+  }
+  const resizedNames = new Set(resized.map((r) => r.name));
+  const byFrom = /* @__PURE__ */ new Map();
+  for (const r of resized) if (!byFrom.has(r.from)) byFrom.set(r.from, r.to);
+  for (const [from, to] of byFrom) {
+    const stale = [];
+    for (const [name, hc] of h) {
+      if (resizedNames.has(name)) continue;
+      const bc = b.get(name);
+      if (!bc) continue;
+      const bv = vocabField(bc)?.[1] ?? linearOut(bc);
+      const hv = vocabField(hc)?.[1] ?? linearOut(hc);
+      if (bv === from && hv === from) stale.push(hc);
+    }
+    if (!stale.length) continue;
+    const names = stale.map((c) => `${c.name} (${roleOf(c)})`);
+    out.push({
+      rule: "vocab-resize-incomplete",
+      severity: "block",
+      title: `vocabulary resized ${from} -> ${to}, but ${plural(stale.length, "token-indexed tensor")} kept ${from} rows: ${list(names)}`,
+      detail: `${list(resized.filter((r) => r.from === from).map((r) => r.name))} moved to ${to}. Token ids ${from} to ${to - 1} index past the end of every tensor listed, so the new tokens either fault on lookup or are never produced by the head. Nothing raises at resize or save time. Resize these with the input embedding, or resize through a path that knows about them.`,
+      subjects: stale.map((c) => c.name)
+    });
+  }
+  const untied = [];
+  for (const [name, bc] of b) {
+    if ((bc.params ?? {}).tied !== true) continue;
+    const hc = h.get(name);
+    if (hc && (hc.params ?? {}).tied !== true) untied.push(name);
+  }
+  if (untied.length) {
+    out.push({
+      rule: "weight-tying-lost",
+      severity: "warn",
+      title: `weight tying removed from ${list(untied)}`,
+      detail: "The base shares the output head with the input embedding; the change gives the head its own matrix. That adds vocab x hidden trainable parameters and the two copies drift apart from the first step. If this was a save/reload round trip rather than a decision, the tie flag was lost on save.",
+      subjects: untied
+    });
+  }
+  const tiedApart = (m) => {
+    const emb = inputEmbedding(m);
+    if (!emb) return [];
+    const V = vocabField(emb)?.[1];
+    const D = embedDimOf(emb);
+    const bad = [];
+    for (const c of m.components ?? []) {
+      if ((c.params ?? {}).tied !== true || c === emb) continue;
+      const p = c.params ?? {};
+      const out2 = num2(p.outFeatures) ?? num2(p.vocabSize);
+      const inn = num2(p.inFeatures) ?? num2(p.hiddenSize) ?? num2(p.embedDim);
+      if (out2 != null && V != null && out2 !== V || inn != null && D != null && inn !== D) bad.push(c.name);
+    }
+    return bad;
+  };
+  const baseApart = new Set(tiedApart(base));
+  const apart = tiedApart(head).filter((n2) => !baseApart.has(n2));
+  if (apart.length) {
+    const emb = inputEmbedding(head);
+    out.push({
+      rule: "weight-tying-lost",
+      severity: "warn",
+      title: `${list(apart)} is declared tied to ${emb.name} but no longer has its shape`,
+      detail: `${emb.name} is ${vocabField(emb)?.[1]} x ${embedDimOf(emb) ?? "?"}. A tie between two matrices of different shapes cannot hold: depending on the loader the tie is skipped, or the head is re-pointed at the embedding and the edit to the head is discarded.`,
+      subjects: apart
+    });
+  }
+  const baseTied = (base.components ?? []).filter((c) => (c.params ?? {}).tied === true && !h.has(c.name));
+  if (baseTied.length && !untied.length) {
+    const V = inputEmbedding(head) ? vocabField(inputEmbedding(head))?.[1] : null;
+    const added = (head.components ?? []).filter((c) => !b.has(c.name) && (c.params ?? {}).tied !== true && (c.type === "linear" && num2((c.params ?? {}).outFeatures) === V || c.type === "lmHead"));
+    if (V != null && added.length) {
+      out.push({
+        rule: "weight-tying-lost",
+        severity: "warn",
+        title: `tied head ${list(baseTied.map((c) => c.name))} replaced by untied ${list(added.map((c) => c.name))}`,
+        detail: "The new head projects to the vocabulary with its own weights; the base shared them with the input embedding.",
+        subjects: added.map((c) => c.name)
+      });
+    }
+  }
+  return out;
+}
+var NESTED = ["text_config", "llm_config", "language_config", "language_model_config", "decoder_config"];
+function isObj(v) {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+var VOCAB_KEYS = ["vocab_size", "vocab_size_per_layer_input", "padded_vocab_size", "n_vocab"];
+var VOCAB_TENSOR = {
+  vocab_size: "embed_tokens / lm_head",
+  vocab_size_per_layer_input: "embed_tokens_per_layer",
+  padded_vocab_size: "embed_tokens / lm_head (padded)",
+  n_vocab: "embed_tokens / lm_head"
+};
+function vocabPaths(c) {
+  const out = /* @__PURE__ */ new Map();
+  for (const k of VOCAB_KEYS) {
+    const v = num2(c[k]);
+    if (v != null) out.set(k, v);
+  }
+  for (const s of NESTED) {
+    const sub = c[s];
+    if (!isObj(sub)) continue;
+    for (const k of VOCAB_KEYS) {
+      const v = num2(sub[k]);
+      if (v != null) out.set(`${s}.${k}`, v);
+    }
+  }
+  return out;
+}
+function textKey(c, k) {
+  for (const s of NESTED) {
+    const sub = c[s];
+    if (isObj(sub) && sub[k] !== void 0 && sub[k] !== null) return sub[k];
+  }
+  return c[k];
+}
+function ropeFactor(c) {
+  const found = [];
+  const scan = (v, depth) => {
+    if (!isObj(v) || depth > 2) return;
+    const f = num2(v.factor);
+    if (f != null) found.push(f);
+    for (const x of Object.values(v)) scan(x, depth + 1);
+  };
+  scan(textKey(c, "rope_scaling"), 0);
+  scan(textKey(c, "rope_parameters"), 0);
+  return found.length ? Math.max(...found) : null;
+}
+function checkConfigEdit(baseIn, headIn) {
+  if (!isObj(baseIn) || !isObj(headIn)) return [];
+  const base = baseIn;
+  const head = headIn;
+  const out = [];
+  const bv = vocabPaths(base);
+  const hv = vocabPaths(head);
+  const moved = [...hv].filter(([k, v]) => bv.has(k) && bv.get(k) !== v).map(([k, v]) => ({ k, from: bv.get(k), to: v }));
+  const fromTo = /* @__PURE__ */ new Map();
+  for (const m of moved) if (!fromTo.has(m.from)) fromTo.set(m.from, m.to);
+  for (const [from, to] of fromTo) {
+    const stale = [...hv].filter(([k, v]) => bv.get(k) === from && v === from).map(([k]) => k);
+    if (!stale.length) continue;
+    const leaf = (k) => k.split(".").pop();
+    out.push({
+      rule: "vocab-resize-incomplete",
+      severity: "block",
+      title: `${list(moved.filter((m) => m.from === from).map((m) => m.k))} moved ${from} -> ${to}, but ${list(stale)} stayed ${from}`,
+      detail: `${list(stale.map((k) => `${k} sizes ${VOCAB_TENSOR[leaf(k)] ?? "a token-indexed tensor"}`))}. A token id at or above ${from} indexes past the end of it. resize_token_embeddings does not touch every vocabulary-sized tensor on every architecture (Gemma 3n and Gemma 4 per-layer embeddings are the known case), and the save writes whatever it was left with, so the config disagrees with itself and nothing raises.`,
+      subjects: stale
+    });
+  }
+  const tiePaths = ["tie_word_embeddings", ...NESTED.map((s) => `${s}.tie_word_embeddings`)];
+  const at = (c, p) => {
+    const [a, k] = p.includes(".") ? p.split(".") : [null, p];
+    return a ? isObj(c[a]) ? c[a][k] : void 0 : c[k];
+  };
+  const wasTied = tiePaths.filter((p) => at(base, p) === true);
+  if (wasTied.length) {
+    const flipped = wasTied.filter((p) => at(head, p) === false);
+    const dropped = wasTied.filter((p) => at(head, p) === void 0);
+    const stillTied = tiePaths.some((p) => at(head, p) === true);
+    if (flipped.length) {
+      out.push({
+        rule: "weight-tying-lost",
+        severity: "warn",
+        title: `${list(flipped)} changed true -> false: the output head is no longer the input embedding`,
+        detail: "On reload the head gets its own vocab x hidden matrix, initialised from whatever the checkpoint stored for it (or randomly when it stored none), and training moves the two apart. If this came from save_pretrained on a model that was tied, the flag was lost on save.",
+        subjects: flipped
+      });
+    } else if (dropped.length && !stillTied) {
+      out.push({
+        rule: "weight-tying-lost",
+        severity: "warn",
+        title: `${list(dropped)} was true and is absent from the changed config`,
+        detail: "Absent means the config class default decides, and that default is not the value the base declared on every class. A save that drops the flag (transformers#38160) reloads untied with no error.",
+        subjects: dropped
+      });
+    }
+  }
+  const g = (c, k) => num2(textKey(c, k));
+  const H0 = g(base, "num_attention_heads");
+  const H1 = g(head, "num_attention_heads");
+  const K0 = g(base, "num_key_value_heads");
+  const K1 = g(head, "num_key_value_heads");
+  const D0 = g(base, "hidden_size");
+  const D1 = g(head, "hidden_size");
+  const d0 = g(base, "head_dim");
+  const d1 = g(head, "head_dim");
+  const changedAttn = H0 !== H1 || K0 !== K1 || D0 !== D1 || d0 !== d1;
+  if (changedAttn && H1 != null) {
+    const baseGqaOk = H0 == null || K0 == null || K0 > 0 && H0 % K0 === 0;
+    if (K1 != null && (K1 <= 0 || H1 % K1 !== 0) && baseGqaOk) {
+      out.push({
+        rule: "gqa-head-divisibility",
+        severity: "block",
+        title: `num_attention_heads ${H1} is not a multiple of num_key_value_heads ${K1}`,
+        detail: `Each key/value head serves num_attention_heads / num_key_value_heads query heads; ${H1} / ${K1} is not a whole number, so the attention module cannot be built. The base had ${H0} / ${K0}.`,
+        subjects: ["num_attention_heads", "num_key_value_heads"]
+      });
+    }
+    const baseDivOk = d0 != null || H0 == null || D0 == null || D0 % H0 === 0;
+    if (d1 == null && D1 != null && H1 > 0 && D1 % H1 !== 0 && baseDivOk) {
+      out.push({
+        rule: "head-dim-divisibility",
+        severity: "block",
+        title: `hidden_size ${D1} is not divisible by num_attention_heads ${H1}, and no head_dim is declared`,
+        detail: `With no head_dim the head width is hidden_size / num_attention_heads = ${(D1 / H1).toFixed(2)}, which is not an integer.`,
+        subjects: ["hidden_size", "num_attention_heads"]
+      });
+    }
+    if (d0 != null && d1 === d0 && H0 != null && D0 != null && H0 * d0 === D0 && D1 != null && H1 * d1 !== D1) {
+      const moved2 = [D0 !== D1 ? `hidden_size ${D0} -> ${D1}` : null, H0 !== H1 ? `num_attention_heads ${H0} -> ${H1}` : null].filter(Boolean);
+      out.push({
+        rule: "attention-config-drift",
+        severity: "warn",
+        title: `head_dim stayed ${d1} while ${moved2.join(" and ")}: attention is now ${H1} x ${d1} = ${H1 * d1} wide against hidden_size ${D1}`,
+        detail: `In the base, head_dim was exactly hidden_size / num_attention_heads (${D0} / ${H0}). An explicit head_dim is honoured as written, so q_proj becomes ${D1} -> ${H1 * d1} and o_proj ${H1 * d1} -> ${D1}. That builds and runs; it is a different model from the one the edit described. Set head_dim to ${Number.isInteger(D1 / H1) ? D1 / H1 : "hidden_size / num_attention_heads"} or remove it.`,
+        subjects: ["head_dim", ...D0 !== D1 ? ["hidden_size"] : [], ...H0 !== H1 ? ["num_attention_heads"] : []]
+      });
+    }
+    if (H0 != null && H0 !== H1 && K0 != null && K1 === K0 && K1 > 0 && H1 % K1 === 0) {
+      const from = K0 === H0 ? "multi-head attention" : `groups of ${H0 / K0}`;
+      const to = K1 === H1 ? "multi-head attention" : `groups of ${H1 / K1}`;
+      out.push({
+        rule: "attention-config-drift",
+        severity: "warn",
+        title: `num_attention_heads moved ${H0} -> ${H1} and num_key_value_heads stayed ${K1}: ${from} became ${to}`,
+        detail: `k_proj and v_proj keep ${K1} heads, so each key/value head now serves ${H1 / K1} query heads instead of ${H0 / K0}. The KV cache and the pretrained k/v weights are sized for the old split. If the head count was meant to scale, scale num_key_value_heads with it.`,
+        subjects: ["num_attention_heads", "num_key_value_heads"]
+      });
+    }
+  }
+  const M0 = g(base, "max_position_embeddings");
+  const M1 = g(head, "max_position_embeddings");
+  const f0 = ropeFactor(base);
+  const f1 = ropeFactor(head);
+  if (M0 != null && M1 != null) {
+    if (M1 > M0 && f0 === f1) {
+      out.push({
+        rule: "rope-context-drift",
+        severity: "warn",
+        title: `max_position_embeddings raised ${M0} -> ${M1} with ${f1 == null ? "no RoPE scaling" : `the RoPE scaling factor unchanged at ${f1}`}`,
+        detail: `The config now admits ${M1}-token inputs, and nothing changed how positions past ${M0} are encoded. The model runs at those lengths and its positions beyond the trained range are extrapolated rather than interpolated. Raise the scaling factor by ${(M1 / M0).toFixed(2)}x with the length, or leave the length where it was.`,
+        subjects: ["max_position_embeddings", "rope_scaling"]
+      });
+    } else if (f0 !== f1 && M0 === M1 && f1 != null) {
+      out.push({
+        rule: "rope-context-drift",
+        severity: "warn",
+        title: `RoPE scaling factor moved ${f0 ?? "none"} -> ${f1} and max_position_embeddings stayed ${M1}`,
+        detail: "Every position is now encoded for the scaled range, and the declared context is still the old one. Runtimes size the window from max_position_embeddings (vLLM's default max_model_len), so the extension is never used while short inputs pay for it.",
+        subjects: ["rope_scaling", "max_position_embeddings"]
+      });
+    } else if (f0 != null && f1 != null && f0 !== f1 && M0 !== M1) {
+      const rm = M1 / M0;
+      const rf = f1 / f0;
+      if (Math.abs(rm / rf - 1) > 0.01) {
+        out.push({
+          rule: "rope-context-drift",
+          severity: "warn",
+          title: `max_position_embeddings moved x${rm.toFixed(2)} (${M0} -> ${M1}) and the RoPE factor moved x${rf.toFixed(2)} (${f0} -> ${f1})`,
+          detail: "The two were in step in the base and are not now: one of them describes a context the other does not.",
+          subjects: ["max_position_embeddings", "rope_scaling"]
+        });
+      }
+    }
+  }
+  return out;
+}
+function looksLikeHFConfig(v) {
+  if (!isObj(v)) return false;
+  if (typeof v.model_type === "string" || Array.isArray(v.architectures)) return true;
+  return NESTED.some((s) => isObj(v[s]) && typeof v[s].model_type === "string");
+}
+var PEFT_SUPPORTED = /* @__PURE__ */ new Set(["linear", "lmHead", "embedding", "conv1d", "conv2d", "conv3d"]);
+var ATTN_ROLES = /* @__PURE__ */ new Set(["q_proj", "k_proj", "v_proj", "o_proj"]);
+var SKIP_TYPES = /* @__PURE__ */ new Set(["input", "output", "stickyNote"]);
+var CHECKPOINT_ALIASES = {
+  query: ["q_proj"],
+  wq: ["q_proj"],
+  q: ["q_proj"],
+  key: ["k_proj"],
+  wk: ["k_proj"],
+  k: ["k_proj"],
+  value: ["v_proj"],
+  wv: ["v_proj"],
+  v: ["v_proj"],
+  out_proj: ["o_proj"],
+  wo: ["o_proj", "fc2", "down_proj"],
+  o: ["o_proj"],
+  dense: ["o_proj", "fc2"],
+  c_proj: ["o_proj", "fc2"],
+  c_attn: ["q_proj", "k_proj", "v_proj"],
+  query_key_value: ["q_proj", "k_proj", "v_proj"],
+  qkv: ["q_proj", "k_proj", "v_proj"],
+  qkv_proj: ["q_proj", "k_proj", "v_proj"],
+  wqkv: ["q_proj", "k_proj", "v_proj"],
+  w_pack: ["q_proj", "k_proj", "v_proj"],
+  in_proj: ["q_proj", "k_proj", "v_proj"],
+  w1: ["gate_proj", "fc1"],
+  w3: ["up_proj"],
+  w2: ["down_proj", "fc2"],
+  gate_up_proj: ["gate_proj", "up_proj"],
+  c_fc: ["fc1"],
+  wi: ["fc1", "up_proj"],
+  dense_h_to_4h: ["fc1"],
+  dense_4h_to_h: ["fc2"],
+  fc_in: ["fc1"],
+  fc_out: ["fc2"]
+};
+var leafOf = (s) => s.split(".").pop() ?? s;
+function checkLoraTargets(model, targetsIn, inventory) {
+  const comps = (model.components ?? []).filter((c) => c && !SKIP_TYPES.has(c.type));
+  const byNameMap = new Map(comps.map((c) => [c.name, c]));
+  const path = (c, fallback) => c?.scope && c.scope.length ? c.scope : c?.name ?? fallback;
+  const candidates = [];
+  const opened = /* @__PURE__ */ new Set();
+  for (const m of inventory.modules) {
+    const c = byNameMap.get(m.layer);
+    const own = m.name === m.layer;
+    const key = own ? path(c, m.name) : `${path(c, m.layer)}.${m.module}`;
+    candidates.push({ key, leaf: m.module, type: own ? m.type : "linear", supported: true, module: m, invented: !own });
+    if (own) opened.add(m.layer);
+  }
+  for (const c of comps) {
+    if (opened.has(c.name)) continue;
+    if ((c.type === "linear" || c.type === "lmHead") && (c.params ?? {}).tied === true) continue;
+    const key = path(c, c.name);
+    candidates.push({ key, leaf: leafOf(key), type: c.type, supported: PEFT_SUPPORTED.has(c.type), invented: false });
+  }
+  const findings = [];
+  const perTarget = [];
+  let hits = [];
+  const shown = Array.isArray(targetsIn) ? JSON.stringify(targetsIn) : JSON.stringify(targetsIn);
+  const isAllLinear = (t) => t.toLowerCase() === "all-linear";
+  const entryMatches = (t, c) => {
+    if (c.key === t || c.key.endsWith(`.${t}`)) return true;
+    if (!c.invented) return false;
+    const lt = leafOf(t);
+    return c.leaf === lt || (CHECKPOINT_ALIASES[lt.toLowerCase()] ?? []).includes(c.leaf);
+  };
+  const allLinear = () => candidates.filter((c) => c.module && c.module.role !== "head");
+  if (typeof targetsIn === "string") {
+    if (isAllLinear(targetsIn)) hits = allLinear();
+    else {
+      let re = null;
+      try {
+        re = new RegExp(`^(?:${targetsIn})$`);
+      } catch {
+        re = null;
+      }
+      if (!re) {
+        findings.push({
+          rule: "lora-target-no-match",
+          severity: "block",
+          title: `target_modules ${shown} is not a valid regular expression`,
+          detail: "PEFT reads a string target_modules as a regular expression matched against each full module name.",
+          subjects: [targetsIn]
+        });
+      } else {
+        const r = re;
+        hits = candidates.filter((c) => r.test(c.key) || c.invented && r.test(c.leaf));
+      }
+    }
+  } else {
+    const seen = /* @__PURE__ */ new Set();
+    for (const t of targetsIn) {
+      const got = isAllLinear(t) ? allLinear() : candidates.filter((c) => entryMatches(t, c));
+      perTarget.push({ target: t, count: got.length });
+      for (const c of got) seen.add(c);
+    }
+    hits = [...seen];
+  }
+  const matched = hits.filter((c) => c.supported);
+  const wrappers = hits.filter((c) => !c.supported);
+  const linearLeaves = [...new Set(candidates.filter((c) => c.supported && c.module).map((c) => c.leaf))];
+  if (!findings.length && matched.length === 0) {
+    findings.push({
+      rule: "lora-target-no-match",
+      severity: "block",
+      title: `LoRA target_modules ${shown} match${Array.isArray(targetsIn) && targetsIn.length !== 1 ? "" : "es"} no Linear module in the graph${wrappers.length ? ` (only ${plural(wrappers.length, "non-Linear module")})` : ""}`,
+      detail: "An adapter with nothing to attach to trains zero parameters. A first adapter like this raises in PEFT; a second one on the same model is accepted silently (peft#3533). " + (linearLeaves.length ? `Linear module names in this graph: ${list(linearLeaves, 12)}.` : "This graph has no Linear module to target."),
+      subjects: Array.isArray(targetsIn) ? targetsIn : [targetsIn]
+    });
+  }
+  if (matched.length) {
+    const dead = perTarget.filter((p) => p.count === 0).map((p) => p.target);
+    if (dead.length) {
+      findings.push({
+        rule: "lora-target-partial",
+        severity: "warn",
+        title: `${plural(dead.length, "target")} matched nothing: ${list(dead)}`,
+        detail: `The adapter attaches to the other entries and says nothing about these. Linear module names here: ${list(linearLeaves, 12)}.`,
+        subjects: dead
+      });
+    }
+    const partialRoles = [];
+    for (const role of ATTN_ROLES) {
+      const total = candidates.filter((c) => c.module?.role === role).length;
+      const got = matched.filter((c) => c.module?.role === role).length;
+      if (got > 0 && got < total) partialRoles.push(`${role} in ${got} of ${total} layers`);
+    }
+    if (partialRoles.length) {
+      findings.push({
+        rule: "lora-target-partial",
+        severity: "warn",
+        title: `the targets reach only part of the attention stack: ${partialRoles.join("; ")}`,
+        detail: "The pattern names a projection in some layers and misses it in the rest, so the adapter changes some layers and leaves the others exactly as pretrained. If the layer range was deliberate, ignore this.",
+        subjects: partialRoles
+      });
+    }
+  }
+  if (wrappers.length) {
+    const w = wrappers.map((c) => `${c.key} (${c.type})`);
+    findings.push({
+      rule: "lora-target-wrapper",
+      severity: "warn",
+      title: `target_modules hit ${plural(wrappers.length, "module")} that ${wrappers.length === 1 ? "is" : "are"} not a Linear: ${list(w)}`,
+      detail: "PEFT injects LoRA into nn.Linear, nn.Embedding, nn.Conv1d/2d/3d and transformers Conv1D. A class that holds a Linear without being one (Gemma4ClippableLinear, peft#3129), a whole attention block, or a norm is refused or skipped. Target the Linear inside it by its own name.",
+      subjects: wrappers.map((c) => c.key)
+    });
+  }
+  return {
+    targets: targetsIn,
+    matched: matched.map((c) => ({ name: c.key, type: c.type })),
+    perTarget,
+    wrappers: wrappers.map((c) => ({ name: c.key, type: c.type })),
+    byConvention: !(typeof targetsIn === "string" && isAllLinear(targetsIn)) && hits.some((c) => c.invented),
+    findings
+  };
+}
+function renderEditFindingsMarkdown(findings, heading = "**Edits that run and are wrong**") {
+  if (!findings.length) return "";
+  const L = heading ? [heading] : [];
+  for (const f of findings) L.push(`- ${f.severity === "block" ? "**block**" : "warn"} \`${f.rule}\`: ${f.title}. ${f.detail}`);
+  return L.join("\n");
+}
+
 // src/utils/changeSpec.ts
 var PEFT_KINDS = ["lora", "qlora", "dora"];
 var QUANT_PRECISIONS = ["fp32", "fp16", "int8", "int4"];
@@ -6080,12 +6730,13 @@ function readChangeSpec(input) {
     else {
       const peft = typeof a.peft === "string" ? a.peft.toLowerCase() : "lora";
       const rankRaw = a.rank == null ? 16 : typeof a.rank === "string" ? Number(a.rank) : a.rank;
-      const targets = Array.isArray(a.targets) ? a.targets.filter((t) => typeof t === "string" && t.length > 0).slice(0, MAX_TARGETS) : [];
+      const pattern = typeof a.targets === "string" && a.targets.length > 0 && a.targets.toLowerCase() !== "all-linear" ? a.targets.slice(0, MAX_BASE_LEN) : void 0;
+      const targets = Array.isArray(a.targets) ? a.targets.filter((t) => typeof t === "string" && t.length > 0).slice(0, MAX_TARGETS) : typeof a.targets === "string" && a.targets.toLowerCase() === "all-linear" ? ["all-linear"] : [];
       if (!PEFT_KINDS.includes(peft)) problems.push(`adapter.peft: expected one of ${PEFT_KINDS.join(", ")}, got ${JSON.stringify(a.peft)}`);
       else if (typeof rankRaw !== "number" || !Number.isInteger(rankRaw) || rankRaw <= 0) problems.push(`adapter.rank: expected a positive integer, got ${JSON.stringify(a.rank)}`);
       else {
-        if (a.targets != null && !Array.isArray(a.targets)) problems.push("adapter.targets: expected a list of module names");
-        spec.adapter = { peft, rank: rankRaw, targets };
+        if (a.targets != null && !Array.isArray(a.targets) && typeof a.targets !== "string") problems.push("adapter.targets: expected a list of module names or one pattern");
+        spec.adapter = { peft, rank: rankRaw, targets, ...pattern ? { pattern } : {} };
       }
     }
   }
@@ -6179,18 +6830,11 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
   }
   const precision = spec.quant?.precision ?? "fp16";
   const weightBytes = ctx.params > 0 ? computeQuantPreview(model).totalBytes[precision] : null;
-  if (spec.adapter && spec.adapter.targets.length) {
-    const names = model.components.map((c2) => `${c2.name ?? ""} ${c2.id} ${c2.type}`.toLowerCase());
-    const missing = spec.adapter.targets.filter((t) => {
-      const needle = t.toLowerCase();
-      return !names.some((n2) => n2.includes(needle));
-    });
-    if (missing.length) {
-      warnings.push({
-        title: `change: adapter targets not found in the graph (${missing.join(", ")})`,
-        detail: "Targets are module-name prefixes; a graph read from config names layers by type, so this may be a naming difference rather than a missing layer.",
-        stage: "change"
-      });
+  let adapterMatch = null;
+  if (spec.adapter && ctx.lora && (spec.adapter.pattern || spec.adapter.targets.length)) {
+    adapterMatch = checkLoraTargets(model, spec.adapter.pattern ?? spec.adapter.targets, ctx.lora);
+    for (const f of adapterMatch.findings) {
+      (f.severity === "block" ? blockers : warnings).push({ title: `change: ${f.title}`, detail: f.detail, stage: "change", rule: f.rule });
     }
   }
   if (ctx.baseLegal === false) {
@@ -6231,6 +6875,7 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
         gpu,
         weightBytes,
         kvBytesPerToken,
+        stateBytesPerRequest: recurrentStateBytesForModel(model, 2),
         flopsPerToken: 2 * ctx.params,
         promptTokens: spec.serving.promptTokens,
         genTokens: spec.serving.genTokens,
@@ -6252,12 +6897,13 @@ function evaluateChangeSpec(model, spec, problems, ctx) {
     spec,
     estimates: { trainableParams, trainMemGb, weightBytes, servingFits },
     gate: { ok: blockers.length === 0, blockers, warnings },
+    adapterMatch,
     problems
   };
 }
 function describeChangeSpec(spec) {
   const bits = [];
-  if (spec.adapter) bits.push(`${spec.adapter.peft.toUpperCase()} r=${spec.adapter.rank}${spec.adapter.targets.length ? ` on ${spec.adapter.targets.join(",")}` : ""}`);
+  if (spec.adapter) bits.push(`${spec.adapter.peft.toUpperCase()} r=${spec.adapter.rank}${spec.adapter.pattern ? ` on /${spec.adapter.pattern}/` : spec.adapter.targets.length ? ` on ${spec.adapter.targets.join(",")}` : ""}`);
   else bits.push("full weights");
   if (spec.quant) bits.push(spec.quant.precision);
   if (spec.serving) bits.push(`serve ${spec.serving.gpu} ${spec.serving.promptTokens + spec.serving.genTokens} tok \xD7 ${spec.serving.batchSize}`);
@@ -6499,7 +7145,7 @@ function readPolicy(input) {
   const raw = input;
   const policy = {};
   const problems = [];
-  const num3 = (k) => {
+  const num4 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     const n2 = typeof v === "string" ? Number(v) : v;
@@ -6509,7 +7155,7 @@ function readPolicy(input) {
     }
     return n2;
   };
-  const list = (k) => {
+  const list2 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
@@ -6527,15 +7173,15 @@ function readPolicy(input) {
     if (typeof raw.must_fit !== "string") problems.push("must_fit: expected a GPU name like A100-40GB");
     else policy.must_fit = raw.must_fit;
   }
-  const mm = num3("max_memory_gb");
+  const mm = num4("max_memory_gb");
   if (mm != null) policy.max_memory_gb = mm;
-  const ml = num3("max_layers");
+  const ml = num4("max_layers");
   if (ml != null) policy.max_layers = ml;
-  const mc = num3("max_cost_usd");
+  const mc = num4("max_cost_usd");
   if (mc != null) policy.max_cost_usd = mc;
-  const ft = list("forbid_types");
+  const ft = list2("forbid_types");
   if (ft) policy.forbid_types = ft;
-  const rt = list("require_types");
+  const rt = list2("require_types");
   if (rt) policy.require_types = rt;
   return { policy, problems };
 }
@@ -6621,14 +7267,33 @@ function findingOf(f) {
   if (f.fix) out.fix = f.fix;
   return out;
 }
-var OPTIMIZER_K = 1.26;
-var OUTPUT_K = 1.57;
-var ATTENTION_K = 3.47;
+var OPTIMIZER_K = 1.2;
+var OUTPUT_K = 0.88;
+var ATTENTION_K = 3.64;
+var INTERNAL_K = 1.34;
+var RECURRENT_K = 5.2;
+var TRANSIENT_K = 2.02;
 var ACTIVATION_K = OUTPUT_K;
+var MEMORY_CALIBRATION = {
+  /** Measured runs the factors were fitted on (out-of-memory runs included). */
+  fittedRuns: 178,
+  architectures: 41,
+  /** Held out one architecture at a time: median error on runs of 1 GB or more, percent. */
+  heldOutMedianPct: 7,
+  /** Held out: did-not-fit card checks flagged, of how many. */
+  flagged: 113,
+  noFit: 131,
+  /** Runs measured after the factors were fixed, never in any fit, and the median miss on the ones that fit, percent. */
+  afterFitRuns: 25,
+  afterFitMedianPct: 14
+};
 var ACTIVATION_BYTES_PER_ELEMENT = 2;
 var ATTENTION_TYPES2 = /attention|transformerEncoder|transformerDecoder|^mla$|ditBlock|swin/i;
+var ALWAYS_STORES_SCORES = /^hstuBlock$/;
+var NOT_PER_TOKEN = /embed|positional|conv|^ema/i;
+var RECURRENT_GATES = { lstm: 4, gru: 3, rnn: 1 };
 function layerAttentionElems(c, shapes) {
-  if (!ATTENTION_TYPES2.test(c.type)) return 0;
+  if (!ATTENTION_TYPES2.test(c.type) && !ALWAYS_STORES_SCORES.test(c.type)) return 0;
   const sh = shapes.get(c.id);
   const i = sh?.in ?? sh?.out;
   if (!i || i.length < 1) return 0;
@@ -6643,29 +7308,68 @@ function layerAttentionElems(c, shapes) {
   }
   return heads * L * L * layers;
 }
-function layerActivationElems(c, shapes, attention) {
+function storesScoresUnder(attention) {
+  return attention === "eager" ? (c) => ATTENTION_TYPES2.test(c.type) || ALWAYS_STORES_SCORES.test(c.type) : (c) => ALWAYS_STORES_SCORES.test(c.type);
+}
+function layerMemoryTerms(c, shapes, storesScores) {
   if (c.type === "input" || c.type === "output" || c.type === "stickyNote") return null;
-  const out = shapes.get(c.id)?.out ?? c.outputShape;
+  const sh = shapes.get(c.id);
+  const out = sh?.out ?? c.outputShape;
   if (!out || !out.length || out.some((d) => !Number.isFinite(d) || d <= 0)) return null;
-  const scores = attention === "eager" ? layerAttentionElems(c, shapes) * ATTENTION_K : 0;
-  return out.reduce((a, b) => a * b, 1) * OUTPUT_K + scores;
+  const outputs = out.reduce((a, b) => a * b, 1);
+  const scores = storesScores(c) ? layerAttentionElems(c, shapes) : 0;
+  const inShape = sh?.in ?? null;
+  const p = c.params ?? {};
+  let internal = 0;
+  const din = inShape?.length ? inShape[inShape.length - 1] : 0;
+  if (!NOT_PER_TOKEN.test(c.type) && din >= 2 && inShape.every((d) => Number.isFinite(d) && d > 0)) {
+    let params = estimateLayerParams(c.type, c.params, inShape ?? void 0) ?? 0;
+    if (/moe/i.test(c.type)) {
+      const e = Number(p.numExperts ?? 8), k = Number(p.topK ?? 2), s = Number(p.numSharedExperts ?? 0);
+      if (e + s > 0) params *= Math.min(1, (k + s) / (e + s));
+    }
+    const tokens = outputs / out[out.length - 1];
+    internal = Math.max(0, tokens * params / din - outputs);
+  }
+  let recurrent = 0;
+  const gates = RECURRENT_GATES[c.type.toLowerCase()];
+  if (gates) {
+    const steps = inShape && inShape.length >= 2 ? inShape[inShape.length - 2] : 1;
+    const hidden = Number(p.hiddenSize ?? p.hidden_size ?? 128);
+    const layers = Number(p.numLayers ?? p.num_layers ?? 1);
+    recurrent = steps * hidden * gates * layers * (p.bidirectional ? 2 : 1);
+  }
+  return { outputs, scores, internal, recurrent };
 }
-function attentionElemsFor(model, shapes) {
-  return model.components.reduce((a, c) => a + layerAttentionElems(c, shapes) * ATTENTION_K, 0);
-}
-function activationElemsFor(model, shapes, attention) {
-  let elems = 0;
+function memoryTermsFor(model, shapes, storesScores) {
+  const t = { outputs: 0, scores: 0, internal: 0, recurrent: 0, largest: 0 };
   let seen = false;
   for (const c of model.components) {
-    const e = layerActivationElems(c, shapes, attention);
-    if (e == null) continue;
+    const l = layerMemoryTerms(c, shapes, storesScores);
+    if (!l) continue;
     seen = true;
-    elems += e;
+    t.outputs += l.outputs;
+    t.scores += l.scores;
+    t.internal += l.internal;
+    t.recurrent += l.recurrent;
+    t.largest = Math.max(t.largest, l.outputs, l.scores);
   }
-  return seen ? elems : null;
+  return seen ? t : null;
+}
+function weighted(t) {
+  return t.outputs * OUTPUT_K + t.scores * ATTENTION_K + t.internal * INTERNAL_K + t.recurrent * RECURRENT_K + (t.largest ?? 0) * TRANSIENT_K;
+}
+function activationElemsFor(model, shapes, attention) {
+  const t = memoryTermsFor(model, shapes, storesScoresUnder(attention));
+  return t == null ? null : weighted(t);
 }
 function activationGbAt(elems, batchSize) {
   return elems * batchSize * ACTIVATION_BYTES_PER_ELEMENT / 1e9;
+}
+function attentionElemsFor(model, shapes) {
+  const eager = activationElemsFor(model, shapes, "eager");
+  const sdpa = activationElemsFor(model, shapes, "sdpa");
+  return eager == null || sdpa == null ? 0 : Math.max(0, eager - sdpa);
 }
 function attentionScoresGbFor(model, batchSize) {
   const shapes = propagateShapes(model).shapes;
@@ -6722,10 +7426,21 @@ function deviceMapFor(model, gpus, opts = {}) {
   if (!gpus.length || !layers.length) return { splits, fits: false };
   let fits = true;
   let cur = null;
+  const stores = storesScoresUnder(attention);
+  let largestId = null;
+  let largest = 0;
+  for (const c of layers) {
+    const l = layerMemoryTerms(c, shapes, stores);
+    if (l && Math.max(l.outputs, l.scores) > largest) {
+      largest = Math.max(l.outputs, l.scores);
+      largestId = c.id;
+    }
+  }
   for (const c of layers) {
     const inShape = shapes.get(c.id)?.in ?? void 0;
     const params = estimateLayerParams(c.type, c.params, inShape ?? void 0) ?? 0;
-    const elems = layerActivationElems(c, shapes, attention);
+    const l = layerMemoryTerms(c, shapes, stores);
+    const elems = l == null ? null : weighted({ ...l, largest: c.id === largestId ? largest : 0 });
     const w = params * 16 * OPTIMIZER_K / 1e9 + (elems == null ? 0 : activationGbAt(elems, batch));
     const cap = cur ? gpus[cur.card] / FIT_HEADROOM : 0;
     if (!cur || cur.gb + w > cap && cur.layers > 0 && cur.card + 1 < gpus.length) {
@@ -6797,10 +7512,17 @@ function fitsCard(peakGb, params, gb) {
   if (params <= 0) return null;
   return peakGb * FIT_HEADROOM <= gb;
 }
+function smallestCardFor(peakGb, params) {
+  return PREFLIGHT_GPUS.find((g) => fitsCard(peakGb, params, g.gb))?.name ?? null;
+}
 var ATTENTION_LABEL = { sdpa: "SDPA", flash: "flash attention", eager: "eager" };
 function attentionPhrase(attention, scoresGb) {
   if (scoresGb == null || !(scoresGb > 0.05)) return "";
   return attention === "eager" ? `attention: eager, scores stored (${scoresGb.toFixed(1)} GB of the peak)` : `attention: ${ATTENTION_LABEL[attention]}, scores not stored; eager would add ${scoresGb.toFixed(1)} GB`;
+}
+function calibrationSentence() {
+  const c = MEMORY_CALIBRATION;
+  return `Six factors fitted on ${c.fittedRuns} measured runs across ${c.architectures} architectures, out-of-memory runs included, with the attention-score term only where the run stored scores; held out one architecture at a time, the median error is ${c.heldOutMedianPct}% above 1 GB and it flagged ${c.flagged} of the ${c.noFit} times a run did not fit a card; on ${c.afterFitRuns} runs at the edge of a 24 GB card measured after the fit, the median miss is ${c.afterFitMedianPct}%.`;
 }
 function attentionSentence(attention, scoresGb) {
   const p = attentionPhrase(attention, scoresGb);
@@ -6827,7 +7549,7 @@ function paramSummary(c) {
   }
   return bits.length ? ` (${bits.join(", ")})` : "";
 }
-function byName(model) {
+function byName2(model) {
   const map = /* @__PURE__ */ new Map();
   for (const c of model.components) map.set(c.name, c);
   return map;
@@ -6835,8 +7557,8 @@ function byName(model) {
 function diffFor(head, headFacts, base) {
   const baseFacts = factsFor(base);
   const d = diffArchitectures(base, head);
-  const baseBy = byName(base);
-  const headBy = byName(head);
+  const baseBy = byName2(base);
+  const headBy = byName2(head);
   const lines = [];
   for (const name of d.layersAdded) {
     const c = headBy.get(name);
@@ -6966,7 +7688,8 @@ function unreadablePlan(blockers) {
     policy: null,
     history: null,
     change: null,
-    lora: null
+    lora: null,
+    edit: null
   };
 }
 function buildPlan(input, opts = {}) {
@@ -7029,7 +7752,7 @@ function buildPlanUnchecked(model, base, opts) {
     // sentence used to say "50,000 samples (assumed)" unconditionally, so a
     // plan priced over 40 million rows would have carried a footnote about a
     // workload it did not use.
-    assumptions: `Cost is a roofline estimate on the priced GPU for ${f.epochs} epochs at batch ${f.batchSize}${tokensAt(f.seqLen)} over ${f.samples.toLocaleString()} samples` + (f.samplesSource ? ` (from "${f.samplesSource}")` : " (assumed; no dataset attached)") + (f.activationGb != null ? `. GPU fit is the training peak at batch ${f.batchSize}${tokensAt(f.seqLen)}, AdamW with bf16 autocast: weights, gradients and optimizer state (${f.footprintGb.toFixed(2)} GB, ${OPTIMIZER_K} x 16 bytes per parameter) plus activations (${f.activationGb.toFixed(1)} GB: ${OUTPUT_K} x every layer's output${attention === "eager" && f.attentionGb > 0.05 ? `, and ${f.attentionGb.toFixed(1)} GB of attention scores eager attention stores for backward` : ""}), with 1.15x headroom. ${attentionSentence(attention, f.attentionGb)}Factors fitted on 141 measured runs across 44 templates, with the attention-score term present on the templates that ran eager attention; held out, the median error is 8% above 1 GB and the card verdict agrees with measurement 98% of the time; recurrent cells are under-counted.` : ". GPU fit is fp32 weights plus gradients plus two Adam moments (16 bytes per parameter) with 1.15x headroom; no shape propagated, so activations are not included.")
+    assumptions: `Cost is a roofline estimate on the priced GPU for ${f.epochs} epochs at batch ${f.batchSize}${tokensAt(f.seqLen)} over ${f.samples.toLocaleString()} samples` + (f.samplesSource ? ` (from "${f.samplesSource}")` : " (assumed; no dataset attached)") + (f.activationGb != null ? `. GPU fit is the training peak at batch ${f.batchSize}${tokensAt(f.seqLen)}, AdamW with bf16 autocast: weights, gradients and optimizer state (${f.footprintGb.toFixed(2)} GB, ${OPTIMIZER_K} x 16 bytes per parameter) plus activations (${f.activationGb.toFixed(1)} GB: every layer's output, the intermediates inside each layer, recurrent gate states and the largest tensor's backward copy${attention === "eager" && f.attentionGb > 0.05 ? `, and ${f.attentionGb.toFixed(1)} GB of attention scores eager attention stores for backward` : ""}), with 1.15x headroom. ${attentionSentence(attention, f.attentionGb)}${calibrationSentence()}` : ". GPU fit is fp32 weights plus gradients plus two Adam moments (16 bytes per parameter) with 1.15x headroom; no shape propagated, so activations are not included.")
   };
   const diff = base ? diffFor(model, f, base) : null;
   const read = opts.policy != null ? readPolicy(opts.policy) : null;
@@ -7043,14 +7766,16 @@ function buildPlanUnchecked(model, base, opts) {
     policy = { applied: false, violations: 0 };
   }
   let change = null;
-  const lora = f.params > 0 ? loraTargetsFor(model) : null;
+  let lora = f.params > 0 ? loraTargetsFor(model) : null;
   if (opts.spec != null) {
     const readSpec = readChangeSpec(opts.spec);
     if (!readSpec) {
       f.warnings = [...f.warnings, { title: "change: unreadable spec (expected an object)", stage: "change" }];
     } else {
       const withheld = opts.incompleteRead && typeof opts.incompleteRead.reason === "string";
+      lora ??= loraTargetsFor(model);
       change = evaluateChangeSpec(model, readSpec.spec, readSpec.problems, {
+        lora,
         baseFingerprint: architectureHashFromJson(model) ?? "",
         baseLegal: withheld ? null : f.blockers.length === 0,
         trainingPeak: (adapter) => trainingPeakFor({ params: f.params, peakGb: f.peakGb, activationGb: f.activationGb, lora }, adapter),
@@ -7060,6 +7785,27 @@ function buildPlanUnchecked(model, base, opts) {
       });
       f.blockers = [...f.blockers, ...change.gate.blockers];
       f.warnings = [...f.warnings, ...change.gate.warnings];
+    }
+  }
+  let edit = null;
+  {
+    const checked = [];
+    const found = [];
+    if (base) {
+      checked.push("graph");
+      found.push(...checkGraphEdit(base, model));
+    }
+    if (opts.config != null && opts.baseConfig != null && typeof opts.config === "object" && typeof opts.baseConfig === "object") {
+      checked.push("config");
+      found.push(...checkConfigEdit(opts.baseConfig, opts.config));
+    }
+    if (checked.length) {
+      edit = { checked, findings: found };
+      for (const x of found) {
+        const pf = { title: `edit: ${x.title}`, detail: x.detail, stage: "edit", rule: x.rule };
+        if (x.severity === "block") f.blockers = [...f.blockers, pf];
+        else f.warnings = [...f.warnings, pf];
+      }
     }
   }
   cost.refusedRunUsd = f.blockers.length > 0 ? f.estCostUsd : null;
@@ -7082,7 +7828,8 @@ function buildPlanUnchecked(model, base, opts) {
     policy,
     history,
     change,
-    lora
+    lora: f.params > 0 ? lora : null,
+    edit
   };
   plan.summary = summaryFor(f, plan, diff, Boolean(incomplete));
   return plan;
@@ -7339,6 +8086,10 @@ function renderPlanText(plan) {
     if (d.legalityChanged === "became_illegal") L.push("  LEGALITY  base ran, this does not");
     if (d.legalityChanged === "became_legal") L.push("  LEGALITY  base did not run, this does");
   }
+  if (plan.edit?.findings.length) {
+    L.push(`Edits that run and are wrong (${plan.edit.checked.join(" + ")}):`);
+    L.push(...clip(plan.edit.findings, (x) => `  ${x.severity === "block" ? "!" : "-"} ${x.rule}: ${x.title}`));
+  }
   return L.join("\n");
 }
 function renderPlanMarkdown(plan) {
@@ -7363,13 +8114,13 @@ function renderPlanMarkdown(plan) {
   L.push("");
   if (plan.run.blockers.length) {
     L.push(plan.run.legal == null ? "**Findings from an incomplete read** (unverified: a layer this read could not open may explain, or cause, any of them)" : "**Blockers**");
-    for (const b of plan.run.blockers.slice(0, 6)) L.push(`- ${b.title}${b.detail ? `: ${b.detail}` : ""}${b.fix ? ` Fix: ${b.fix}` : ""}`);
+    for (const b of plan.run.blockers.slice(0, 6)) L.push(`- ${b.title}${b.detail && b.stage !== "edit" ? `: ${b.detail}` : ""}${b.fix ? ` Fix: ${b.fix}` : ""}`);
     if (plan.run.blockers.length > 6) L.push(`- and ${plan.run.blockers.length - 6} more`);
     L.push("");
   }
   if (plan.run.warnings.length) {
     L.push("**Warnings**");
-    for (const w of plan.run.warnings.slice(0, 6)) L.push(`- ${w.title}${w.detail ? `: ${w.detail}` : ""}`);
+    for (const w of plan.run.warnings.slice(0, 6)) L.push(`- ${w.title}${w.detail && w.stage !== "edit" ? `: ${w.detail}` : ""}`);
     if (plan.run.warnings.length > 6) L.push(`- and ${plan.run.warnings.length - 6} more`);
     L.push("");
   }
@@ -7393,6 +8144,10 @@ function renderPlanMarkdown(plan) {
     for (const x of [...ch.gate.blockers, ...ch.gate.warnings].slice(0, 8)) L.push(`- ${x.title}${x.detail ? ` (\`${x.detail}\`)` : ""}`);
     L.push("");
   }
+  if (plan.edit?.findings.length) {
+    L.push(renderEditFindingsMarkdown(plan.edit.findings, `**Edits that run and are wrong** (${plan.edit.checked.join(" + ")} compared with the base; nothing here raises an error)`));
+    L.push("");
+  }
   if (d && d.lines.length) {
     L.push(`**Changes vs ${d.base.name}** (+${d.added} -${d.removed} ~${d.changed})`);
     L.push("```");
@@ -7406,12 +8161,12 @@ function renderPlanMarkdown(plan) {
 
 // src/utils/oomDiagnosis.ts
 var UNIT = { b: 1e-9, kib: 1024 / 1e9, kb: 1e-6, mib: 1024 ** 2 / 1e9, mb: 1e-3, gib: 1024 ** 3 / 1e9, gb: 1, tib: 1024 ** 4 / 1e9 };
-var num2 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
+var num3 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
 var SIZE = String.raw`([\d.,]+)\s*(B|KiB|KB|MiB|MB|GiB|GB|TiB)`;
 function grab(text, re) {
   const m = re.exec(text);
   if (!m) return null;
-  const v = num2(m[1], m[2]);
+  const v = num3(m[1], m[2]);
   return Number.isFinite(v) ? v : null;
 }
 function parseOomMessage(text) {
@@ -7424,7 +8179,7 @@ function parseOomMessage(text) {
     const reservedUnallocatedGb = grab(t, new RegExp(String.raw`${SIZE} is reserved by PyTorch but unallocated`, "i"));
     let other = 0;
     for (const m of t.matchAll(new RegExp(String.raw`Process \d+ has ${SIZE} memory in use`, "gi"))) {
-      const v = num2(m[1], m[2]);
+      const v = num3(m[1], m[2]);
       if (Number.isFinite(v)) other += v;
     }
     const processInUseGb = grab(t, new RegExp(String.raw`this process has ${SIZE} memory in use`, "i"));
@@ -7517,7 +8272,7 @@ function sizeFixes(facts, cardGb) {
       changesTraining: false
     });
   }
-  if (facts.activationPerSampleGb != null && facts.batch != null && facts.footprintGb != null) {
+  if (facts.activationPerSampleGb != null && facts.batch != null && facts.footprintGb != null && facts.footprintGb * HEADROOM2 <= cardGb) {
     const act = facts.activationPerSampleGb * facts.batch;
     out.push({
       action: "turn on activation (gradient) checkpointing",
@@ -7660,7 +8415,9 @@ function inferencePeakFor(model, opts) {
   const kvPerSequenceGb = kvBytesPerToken * tokens / 1e9;
   const weightsGb = bytes / 1e9;
   const kvGb = kvPerSequenceGb * batch;
-  const peakGb = weightsGb + kvGb;
+  const stateBytesPerSequence = recurrentStateBytesForModel(model, kvValueBytes);
+  const stateGb = stateBytesPerSequence * batch / 1e9;
+  const peakGb = weightsGb + kvGb + stateGb;
   const fits = PREFLIGHT_GPUS.map((g) => ({ gpu: g.name, gb: g.gb, fits: peakGb * FIT_HEADROOM <= g.gb }));
   const smallest = [...fits].filter((f) => f.fits).sort((a, b) => a.gb - b.gb)[0];
   return {
@@ -7672,6 +8429,8 @@ function inferencePeakFor(model, opts) {
     kvBytesPerToken,
     kvPerSequenceGb,
     kvGb,
+    stateBytesPerSequence,
+    stateGb,
     peakGb,
     headroom: FIT_HEADROOM,
     fits,
@@ -7729,17 +8488,27 @@ export {
   DEFAULT_INFERENCE_BATCH,
   DEFAULT_OOM_TRAIN_BATCH,
   DEFAULT_SEQ_LEN,
+  EDIT_RULE_IDS,
+  EDIT_RULE_SEEN_IN,
   FIT_HEADROOM,
   INFERENCE_NOT_COUNTED,
+  INTERNAL_K,
+  MEMORY_CALIBRATION,
   OPTIMIZER_K,
   OUTPUT_K,
+  RECURRENT_K,
+  TRANSIENT_K,
   activationGbFor,
   adapterParamsFor,
   attentionPhrase,
   attentionScoresGbFor,
   buildPlan,
+  calibrationSentence,
   changeGateSentence,
   checkComfyWorkflow,
+  checkConfigEdit,
+  checkGraphEdit,
+  checkLoraTargets,
   deviceMapFor,
   diagnoseOom,
   factsFor2 as factsFor,
@@ -7747,8 +8516,11 @@ export {
   historySentence,
   inferenceFactsFor,
   inferencePeakFor,
+  layerMemoryTerms,
+  looksLikeHFConfig,
   loraTargetsFor,
   maxBatchFor,
+  memoryTermsFor,
   oomFactsForModel,
   parseHumanSize,
   parseOomMessage,
@@ -7757,10 +8529,13 @@ export {
   readGraph,
   readPolicy,
   readSeqLen,
+  renderEditFindingsMarkdown,
   renderLoraText,
   renderOomText,
   renderPlanMarkdown,
   renderPlanText,
+  smallestCardFor,
+  storesScoresUnder,
   tokenSeqLenOf,
   trainingPeakFor,
   withSeqLen

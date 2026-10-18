@@ -12,6 +12,7 @@
  */
 export const SHORT: Record<string, string> = {
   size_training_job: 'Call BEFORE launching any training job: peak memory at your batch, smallest card that fits, max batch per card, two-card split, run cost. Calibrated fit check. Offline.',
+  check_edit: 'Call after editing a model\'s config or architecture, before training: silent edit bugs (vocab resize, tying, heads, RoPE, LoRA targets) and the memory delta. Offline.',
   diagnose_oom: 'Call after a CUDA out-of-memory error, before changing batch size: the one cause (too big, fragmented, another process, undeclared memory) and fixes, least invasive first. Offline.',
   plan: 'The card the CI bot posts: memory, GPU fit, cost, whether it runs, your .neurarch.yml rules, last run here. Sends the graph to /api/v1/plan.',
   history: 'What this exact structure measured last time it trained in your organisation. Sends the fingerprint, never the graph. Needs NEURARCH_API_KEY.',
@@ -53,6 +54,7 @@ export const SHORT: Record<string, string> = {
 export const TITLES: Record<string, string> = {
   size_training_job: 'Size a training job',
   diagnose_oom: 'Diagnose a CUDA OOM',
+  check_edit: 'Check a model edit',
   plan: 'Plan this design',
   history: 'Training history',
   get_model_summary: 'Model summary',

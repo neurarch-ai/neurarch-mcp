@@ -2,19 +2,18 @@
  * The plan bundle is a copy of the Neurarch app's lib/modelPlan.bundle.mjs,
  * and size_training_job prints its numbers as calibrated measurements. So this
  * file pins the numbers, not only the exports: a peak computed by the app's own
- * `buildPlan` (src/utils/modelPlan.ts at neurarch-ai/neurarch 11c02b72, the
- * 141-run refit) on two of the app's templates (public/templates/gpt2 and
- * phi3-mini), copied into src/test/templates/ with only the dashes in their
- * prose notes changed. A stale copy fails here: checked against the pre-refit
- * bundle from f0acf8a0^, which has no attentionScoresGbFor and puts gpt2 at
- * 13.38 GB and phi3-mini at 77.05 GB, so every test in this file but the
- * import check went red.
+ * `buildPlan` (src/utils/modelPlan.ts at neurarch-ai/neurarch a1bac74e, the
+ * six-term refit on 178 runs, #306) on two of the app's templates
+ * (public/templates/gpt2 and phi3-mini), copied into src/test/templates/ with
+ * only the dashes in their prose notes changed. Every expected value below was
+ * printed by running that source and this bundle on the same file; the two
+ * agreed to the last digit. A stale copy fails here: the three-term bundle
+ * this replaced puts gpt2 at 10.38 GB under eager and phi3-mini at 47.72 GB.
  *
- * Since neurarch #285 (582aafe3) the plan defaults to SDPA attention, which
- * stores no score matrix. The 11c02b72 numbers are eager numbers, so they are
- * pinned under attention: 'eager', where the bundle at 96254170 reproduces
- * them to the last digit; the SDPA defaults are pinned beside them, and each
- * is the eager peak minus attentionScoresGbFor at the same batch.
+ * The plan defaults to SDPA attention (neurarch #285), which stores no score
+ * matrix, so the eager numbers are pinned under attention: 'eager' and the
+ * SDPA defaults beside them, each the eager peak minus attentionScoresGbFor
+ * at the same batch.
  */
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
@@ -26,10 +25,23 @@ async function template(name: string): Promise<unknown> {
 
 describe('vendored plan contract', () => {
   it('exports the functions this server declares', () => {
-    for (const fn of ['buildPlan', 'attentionScoresGbFor', 'maxBatchFor', 'deviceMapFor'] as const) {
+    for (const fn of ['buildPlan', 'attentionScoresGbFor', 'maxBatchFor', 'deviceMapFor', 'calibrationSentence'] as const) {
       expect(typeof plan[fn], fn).toBe('function');
     }
-    expect([plan.OPTIMIZER_K, plan.OUTPUT_K, plan.ATTENTION_K]).toEqual([1.26, 1.57, 3.47]);
+    expect([plan.OPTIMIZER_K, plan.OUTPUT_K, plan.ATTENTION_K, plan.INTERNAL_K, plan.RECURRENT_K, plan.TRANSIENT_K])
+      .toEqual([1.2, 0.88, 3.64, 1.34, 5.2, 2.02]);
+    expect(plan.FIT_HEADROOM).toBe(1.15);
+    expect(plan.MEMORY_CALIBRATION).toEqual({
+      fittedRuns: 178, architectures: 41, heldOutMedianPct: 7, flagged: 113, noFit: 131, afterFitRuns: 25, afterFitMedianPct: 14,
+    });
+    for (const fn of ['checkGraphEdit', 'checkConfigEdit', 'checkLoraTargets', 'looksLikeHFConfig', 'loraTargetsFor'] as const) {
+      expect(typeof plan[fn], fn).toBe('function');
+    }
+    expect(plan.EDIT_RULE_IDS).toEqual([
+      'vocab-resize-incomplete', 'weight-tying-lost', 'attention-config-drift', 'rope-context-drift',
+      'lora-target-no-match', 'lora-target-partial', 'lora-target-wrapper',
+    ]);
+    for (const id of plan.EDIT_RULE_IDS) expect(Array.isArray(plan.EDIT_RULE_SEEN_IN[id]), id).toBe(true);
     for (const fn of ['parseOomMessage', 'diagnoseOom', 'renderOomText', 'oomFactsForModel'] as const) {
       expect(typeof plan[fn], fn).toBe('function');
     }
@@ -43,54 +55,74 @@ describe('vendored plan contract', () => {
     expect(src).not.toMatch(/\bfetch\(/);
   });
 
-  // Expected values: buildPlan(template, { run: { batchSize: 32 } }) in the app
-  // repository at 11c02b72 (eager by then, eager by name now), printed to full
-  // precision.
-  it('matches the app\'s buildPlan on the gpt2 template under eager attention (fits a T4)', async () => {
-    const p = plan.buildPlan(await template('gpt2'), { run: { batchSize: 32 }, attention: 'eager' });
-    expect(p.model.params).toBe(84331345);
-    expect(p.cost.peakGb).toBeCloseTo(10.376738319040001, 9);
-    expect(p.cost.activationGb).toBeCloseTo(8.676618403840001, 9);
-    expect(p.cost.smallestFitGpu).toBe('T4 (16GB)');
-    expect(p.cost.maxBatch).toEqual({ T4: 45, A100_40: 122, H100_80: 250 });
-    expect(p.cost.twoCardSplit).toBeNull();
-  });
-
-  it('matches the app\'s buildPlan on the phi3-mini template under eager attention (does not fit a T4)', async () => {
-    const m = await template('phi3-mini');
+  // Expected values: buildPlan(template, { run: { batchSize: 32 }, attention })
+  // in the app repository at a1bac74e, printed to full precision.
+  it('matches the app\'s buildPlan on the gpt2 template under eager attention', async () => {
+    const m = await template('gpt2');
     const p = plan.buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
-    expect(p.model.params).toBe(310288704);
-    expect(p.cost.peakGb).toBeCloseTo(47.71804469248001, 9);
-    expect(p.cost.activationGb).toBeCloseTo(41.462624419840004, 9);
-    expect(plan.attentionScoresGbFor(m as never, 32)).toBeCloseTo(29.807073034240002, 9);
-    expect(p.cost.smallestFitGpu).toBe('A100 (80GB)');
+    expect(p.model.params).toBe(84331345);
+    expect(p.cost.peakGb).toBeCloseTo(15.181297531306669, 9);
+    expect(p.cost.activationGb).toBeCloseTo(13.562135707306668, 9);
+    expect(plan.attentionScoresGbFor(m as never, 32)).toBeCloseTo(2.9313151795200003, 9);
+    expect(p.cost.smallestFitGpu).toBe('L4 (24GB)');
     expect(p.cost.gpuFits.T4).toBe(false);
-    expect(p.cost.maxBatch).toEqual({ T4: 5, A100_40: 22, H100_80: 48 });
-    expect(p.cost.twoCardSplit?.gpu).toBe('A100 (40GB)');
+    expect(p.cost.maxBatch).toEqual({ T4: 29, A100_40: 78, H100_80: 160 });
+    expect(p.cost.twoCardSplit?.gpu).toBe('T4 (16GB)');
     expect(p.cost.twoCardSplit?.fits).toBe(true);
   });
 
-  // Expected values: buildPlan(template, { run: { batchSize: 32 } }) in the app
-  // repository at 96254170, printed to full precision. SDPA is the default.
+  it('matches the app\'s buildPlan on the phi3-mini template under eager attention (needs an 80 GB card)', async () => {
+    const m = await template('phi3-mini');
+    const p = plan.buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
+    expect(p.model.params).toBe(310288704);
+    expect(p.cost.peakGb).toBeCloseTo(66.50700668927999, 9);
+    expect(p.cost.activationGb).toBeCloseTo(60.54946357247999, 9);
+    expect(plan.attentionScoresGbFor(m as never, 32)).toBeCloseTo(40.129590722559996, 9);
+    expect(p.cost.smallestFitGpu).toBe('A100 (80GB)');
+    expect(p.cost.gpuFits).toEqual({ T4: false, A100_40: false, H100_80: true });
+    expect(p.cost.maxBatch).toEqual({ T4: 4, A100_40: 15, H100_80: 33 });
+    expect(p.cost.twoCardSplit).toBeNull();
+  });
+
   it('defaults to SDPA: the eager peak minus the plan\'s own attention-score term', async () => {
     const g = await template('gpt2');
     const pg = plan.buildPlan(g, { run: { batchSize: 32 } });
     expect(pg.cost.attention).toBe('sdpa');
     expect(pg.cost.seqLen).toBe(1024);
-    expect(pg.cost.peakGb).toBeCloseTo(7.582325222080001, 9);
-    expect(pg.cost.peakGb).toBeCloseTo(10.376738319040001 - plan.attentionScoresGbFor(g as never, 32), 9);
-    expect(pg.cost.maxBatch).toEqual({ T4: 66, A100_40: 179, H100_80: 369 });
+    expect(pg.cost.peakGb).toBeCloseTo(12.249982351786668, 9);
+    expect(pg.cost.peakGb).toBeCloseTo(15.181297531306669 - plan.attentionScoresGbFor(g as never, 32), 9);
+    expect(pg.cost.activationGb).toBeCloseTo(10.630820527786668, 9);
+    expect(pg.cost.smallestFitGpu).toBe('T4 (16GB)');
+    expect(pg.cost.maxBatch).toEqual({ T4: 37, A100_40: 99, H100_80: 204 });
 
     const m = await template('phi3-mini');
     const pm = plan.buildPlan(m, { run: { batchSize: 32 } });
     expect(pm.cost.attention).toBe('sdpa');
     expect(pm.cost.seqLen).toBe(2048);
-    expect(pm.cost.peakGb).toBeCloseTo(17.91097165824, 9);
-    expect(pm.cost.peakGb).toBeCloseTo(47.71804469248001 - plan.attentionScoresGbFor(m as never, 32), 9);
-    expect(pm.cost.activationGb).toBeCloseTo(11.6555513856, 9);
+    expect(pm.cost.peakGb).toBeCloseTo(26.377415966719997, 9);
+    expect(pm.cost.peakGb).toBeCloseTo(66.50700668927999 - plan.attentionScoresGbFor(m as never, 32), 9);
+    expect(pm.cost.activationGb).toBeCloseTo(20.419872849919997, 9);
     expect(pm.cost.gpuFits.T4).toBe(false);
-    expect(pm.cost.smallestFitGpu).toBe('L4 (24GB)');
-    expect(pm.cost.maxBatch).toEqual({ T4: 21, A100_40: 78, H100_80: 173 });
+    expect(pm.cost.smallestFitGpu).toBe('L40S (48GB)');
+    expect(pm.cost.maxBatch).toEqual({ T4: 12, A100_40: 45, H100_80: 99 });
+    expect(pm.cost.twoCardSplit?.gpu).toBe('L4 (24GB)');
+  });
+
+  it('the footprint term is OPTIMIZER_K x 16 bytes per parameter, so sizeJob\'s linear split holds', async () => {
+    for (const name of ['gpt2', 'phi3-mini']) {
+      const p = plan.buildPlan(await template(name), { run: { batchSize: 32 }, attention: 'eager' });
+      expect(p.cost.peakGb - p.cost.activationGb!, name).toBeCloseTo((p.model.params * 16 * plan.OPTIMIZER_K) / 1e9, 6);
+      const p64 = plan.buildPlan(await template(name), { run: { batchSize: 64 }, attention: 'eager' });
+      expect(p64.cost.activationGb!, name).toBeCloseTo(2 * p.cost.activationGb!, 6);
+    }
+  });
+
+  it('calibrationSentence is written from MEMORY_CALIBRATION', () => {
+    const c = plan.MEMORY_CALIBRATION;
+    const s = plan.calibrationSentence();
+    for (const v of [c.fittedRuns, c.architectures, `${c.heldOutMedianPct}%`, `${c.flagged} of the ${c.noFit}`, c.afterFitRuns, `${c.afterFitMedianPct}%`]) {
+      expect(s).toContain(String(v));
+    }
   });
 
   it('prices on the card it is given, so the server\'s card names match the bundle\'s', async () => {

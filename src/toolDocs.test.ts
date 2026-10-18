@@ -19,6 +19,8 @@ describe('tool descriptions', () => {
     // cap: the next tool pays for itself out of somebody else's description.
     // size_training_job did (~0.35k): rank_designs left the core listing, and
     // the plan, trace, rank and find_layers schemas were trimmed to fit.
+    // check_edit (~0.25k) did too: the model_path description injected on
+    // every read tool was cut to a third of its length.
     const core = JSON.stringify(listedTools(true, 'core')).length / 4;
     const full = JSON.stringify(listedTools(true, 'full')).length / 4;
     expect(core).toBeLessThan(4800);

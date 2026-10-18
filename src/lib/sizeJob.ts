@@ -28,16 +28,22 @@ import {
   OPTIMIZER_K,
   OUTPUT_K,
   ATTENTION_K,
+  INTERNAL_K,
+  RECURRENT_K,
+  TRANSIENT_K,
+  calibrationSentence,
+  FIT_HEADROOM,
+  DEFAULT_SEQ_LEN as PLAN_DEFAULT_SEQ_LEN,
   type ModelPlan,
 } from '../vendor/plan.bundle.mjs';
 
 export type Attention = 'sdpa' | 'flash' | 'eager';
 
 /** Same headroom every card check in the plan uses: allocator fragmentation and the CUDA context. */
-export const HEADROOM = 1.15;
+export const HEADROOM = FIT_HEADROOM;
 
 /** Sequence length a token model is sized at when the caller does not say (its context, if shorter). */
-export const DEFAULT_SEQ_LEN = 2048;
+export const DEFAULT_SEQ_LEN = PLAN_DEFAULT_SEQ_LEN;
 
 export interface Card {
   /** What the agent writes and what the result says. */
@@ -137,13 +143,28 @@ export function untrustworthy(model: ModelArchitecture): string | null {
     + '(trace_model, or NEURARCH_TRACE=1 python train.py) or load it as hf:<org/name> for a graph whose input is token ids.';
 }
 
-/** The sentence every result carries, written from the factors the bundle actually uses. */
+/**
+ * How many of the same 131 held-out did-not-fit card checks `accelerate
+ * estimate-memory` flagged. The one number in the accuracy sentence that is
+ * not in the bundle's MEMORY_CALIBRATION: it is the comparison the app quotes
+ * beside it (neurarch-ai/neurarch README and /memory-calibration.html at
+ * a1bac74e). Check it there when MEMORY_CALIBRATION moves.
+ */
+export const ACCELERATE_FLAGGED_AT_MOST = 8;
+
+/**
+ * The sentence every result carries. The factors and the calibration are the
+ * bundle's own (`calibrationSentence()` is written from MEMORY_CALIBRATION),
+ * so a refit that ships in a new bundle changes this sentence with it; the
+ * held-out median is never quoted without the 14% after-fit miss beside it.
+ */
 export const ACCURACY_SENTENCE =
-  'Calibrated estimate of the training peak under AdamW with bf16 autocast: '
-  + `${OPTIMIZER_K} x 16 bytes per parameter (weights, gradients, optimizer state) + ${OUTPUT_K} x the bf16 size of every layer output `
-  + `+ ${ATTENTION_K} x the bf16 size of stored attention scores (eager attention only; SDPA and flash keep none). `
-  + 'Fitted on 141 measured runs across 44 architectures and checked on 187: of the 90 times a measured run did not fit a 16, 24, 40 or 80 GB card it flagged 54 '
-  + '(accelerate estimate-memory flagged at most 9); on new configurations at the edge of a card the median miss is 42%, so treat it as a fit check. '
+  'Calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: '
+  + `${OPTIMIZER_K} x 16 bytes per parameter (weights, gradients, optimizer state), plus, per sample in bf16, `
+  + `${OUTPUT_K} x every layer output, ${ATTENTION_K} x stored attention scores (eager attention only; SDPA and flash keep none), `
+  + `${INTERNAL_K} x each layer's weight-matrix intermediates, ${RECURRENT_K} x recurrent gate states and ${TRANSIENT_K} x the largest single tensor. `
+  + `${calibrationSentence()} On the same held-out checks accelerate estimate-memory flagged at most ${ACCELERATE_FLAGGED_AT_MOST}. `
+  + 'At the edge of a card treat it as a fit check, not a precise number. '
   + `A card "fits" when it holds the peak x ${HEADROOM} (allocator fragmentation and the CUDA context).`;
 
 export interface SizeJobInput {
@@ -300,9 +321,6 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
   const actCounted = plan.cost.activationGb == null ? null : peakGb - sizer.footprintGb;
   if (plan.cost.activationGb == null) {
     caveats.push('No shape propagated through this graph, so activations are not counted: the peak is weights and optimizer state only, a floor. Trace the model for real shapes.');
-  }
-  if (model.components.some(c => /^(lstm|gru|rnn|bidirectionalLSTM|bidirectionalGRU)$/.test(c.type))) {
-    caveats.push('Recurrent cells keep internal gate states that are not layer outputs; the fit under-counts them (70 to 80% under in calibration).');
   }
   if (attention !== 'eager' && attnDropped > 0.05) {
     caveats.push(`Sized for ${attention} attention. Under eager attention the same job keeps another ${gbText(attnDropped)} GB of attention scores.`);

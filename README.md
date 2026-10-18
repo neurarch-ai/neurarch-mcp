@@ -11,9 +11,9 @@
 [![smithery badge](https://smithery.ai/badge/neurarch-ai/neurarch-mcp)](https://smithery.ai/servers/neurarch-ai/neurarch-mcp)
 [![GitHub stars](https://img.shields.io/github/stars/neurarch-ai/neurarch-mcp.svg?style=social)](https://github.com/neurarch-ai/neurarch-mcp/stargazers)
 
-Call `size_training_job` before a job launches and the agent learns, for the model, batch and card in front of it: **the peak memory** (weights and optimizer state, activations, stored attention scores, each shown), **the smallest card that holds it**, **the largest batch each card holds**, a two-card split when one card does not, **what one run costs**, and a one-line verdict such as `will not fit a T4: needs ~21 GB with headroom (peak 18 GB) at batch 32, seq 2048, use L4 or batch <= 21`. `history` adds **what that structure measured the last time it ran** in your organisation. After a CUDA out-of-memory error, `diagnose_oom` reads the message against the same estimate and names the cause (too big for the card, fragmentation, another process, logits over a large vocabulary, growth during the run) with the least invasive fix first. Then whether it forward-passes: the structural checks the CI bot runs (`lint_model`, `check_design`), offline too. It answers the same whether a person or an agent wrote the job, which is the question the person who owns the GPU bill is asking.
+Call `size_training_job` before a job launches and the agent learns, for the model, batch and card in front of it: **the peak memory** (weights and optimizer state, activations, stored attention scores, each shown), **the smallest card that holds it**, **the largest batch each card holds**, a two-card split when one card does not, **what one run costs**, and a one-line verdict such as `will not fit a T4: needs ~30 GB with headroom (peak 26 GB) at batch 32, seq 2048, use L40S or batch <= 12`. `history` adds **what that structure measured the last time it ran** in your organisation. After a CUDA out-of-memory error, `diagnose_oom` reads the message against the same estimate and names the cause (too big for the card, fragmentation, another process, logits over a large vocabulary, growth during the run) with the least invasive fix first. Then whether it forward-passes: the structural checks the CI bot runs (`lint_model`, `check_design`), offline too. It answers the same whether a person or an agent wrote the job, which is the question the person who owns the GPU bill is asking.
 
-The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.26 x 16 bytes per parameter, plus 1.57 x the bf16 size of every layer output, plus 3.47 x the bf16 size of stored attention scores (eager attention only; SDPA and flash keep none). Fitted on 141 measured runs across 44 architectures and checked on 187: of the 90 times a measured run did not fit a 16, 24, 40 or 80 GB card, it flagged 54, where `accelerate estimate-memory` flagged at most 9. On 16 new configurations measured at the edge of a 24 GB card after the fit, the median miss is 42%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html). Recurrent cells are under-counted, and the tool says so when the graph has one.
+The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.2 x 16 bytes per parameter, plus, per sample in bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager attention only; SDPA and flash keep none), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate states and 2.02 x the largest single tensor. Fitted on 178 measured runs across 41 architectures, out-of-memory runs included. Held out one architecture at a time, the median error is 7% above 1 GB and it flagged 113 of the 131 times a run did not fit a 16, 24, 40 or 80 GB card, where `accelerate estimate-memory` flagged at most 8. On 25 runs measured after the fit, at the edge of a 24 GB card, the median miss is 14%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html).
 
 Get the graph by tracing the model for real shapes, or point the server at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account. The two that do not, `plan` and `history`, read what a frontier model structurally cannot know: what happened the last time this exact structure trained here. That is not in the weights and not in the repository. They are the only tools in this package that open a socket.
 
@@ -111,6 +111,7 @@ Every read tool also takes an optional `model_path`, so **one server covers a wh
 |---|---|
 | `size_training_job` | **What a training job needs before it takes a GPU reservation.** Inputs: the model (the server's, `model_path` to a `.py`, a traced `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`, or `hf_id`), `batch_size`, and optionally `gpu` (`"A100-40"`, `"H100"`, `"8xH100"`), `seq_len`, `attention` (`sdpa` default, `flash`, `eager`), `epochs` and `samples` for the price. Returns the training peak at that batch with its weights-and-optimizer, activation and attention-score parts; the smallest card that holds it with 1.15x headroom; the largest batch on each of T4, L4, A10G, L40S, A100-40, A100-80 and H100-80; a two-card split when one card does not hold it; one run's cost on the requested card or the cheapest that fits; a verdict line; whether the graph forward-passes; the structural fingerprint for `history`; and the held-out accuracy sentence. An N-card request is read both as plain DDP (a full copy per card at the per-device batch) and as sharded FSDP / ZeRO-3. Computed by the same `buildPlan` the Neurarch app, the CI bot and `POST /api/v1/plan` run, vendored, offline. A graph that feeds a hidden-state or image tensor into a token embedding is refused rather than sized, because the number would be wrong by the hidden width. |
 | `diagnose_oom` | **Why a job ran out of GPU memory, and the smallest change that fixes it.** Call it after a CUDA out-of-memory error, before changing batch size. Inputs: `error` (the text as printed, either PyTorch wording), and optionally the model (as above, or `hf_id`, read from the local config cache with no network when it is there), `batch`, `seq_len`, `step`, `attention`, and `inference: true` with `gen_tokens` for a generation job. It reads the allocated, reserved-but-empty, other-process and failing-request numbers out of the message, compares them with the same predicted peak `size_training_job` uses, and returns one `cause` (`too-big-for-card`, `fragmentation`, `other-process`, `large-logits`, `undeclared-memory`, `grows-during-run`, `unknown`), a `summary`, the `evidence` lines it was read from, `fixes` ordered least invasive first with a `changesTraining` flag on each, and the `job` facts used. A smaller batch is offered only when the job is too big for the card, and then with the gradient accumulation that keeps the effective batch. The diagnosis is the app's own (`npx neurarch oom`), vendored in the plan bundle. |
+| `check_edit` | **Whether an edit to a model's config or architecture is one that runs and is wrong, and what it did to memory.** Call it after editing and before training. Inputs: the base (`base_model_path`: a `.py`, a `.neurarch.json`, `zoo:<id>` or `hf:<org/name>`; or `base_config`) and the changed model (the server's, `model_path`, `model_source`, or `config`); `base_config` and `config` take a Hugging Face `config.json` as an object, JSON text or a path. Optionally `lora_target_modules`, `batch` (default 32), `seq_len`, `gpu`, `attention`. Returns `findings`, each with a stable `rule`, a severity, the tensors or keys it is about, and `seenIn` (the public upstream reports of that failure): `vocab-resize-incomplete` (a resize that left a token-indexed tensor at the old vocabulary), `weight-tying-lost`, `attention-config-drift` (heads, `head_dim`, `hidden_size` and kv heads that have to move together), `rope-context-drift` (a longer context with no RoPE scaling), and, against `lora_target_modules` matched the way PEFT matches it, `lora-target-no-match`, `lora-target-partial` and `lora-target-wrapper`; config divisibility comes back under the lint ids `head-dim-divisibility` and `gqa-head-divisibility`. Then `memory`: the training peak before and after at that batch and sequence length, the delta, and whether the job still fits `gpu` (or the smallest card that holds it, before and after), from the same estimate `size_training_job` uses. The checks are the app's own (`src/utils/editChecks.ts`), vendored in the plan bundle. |
 
 ### The plan card, and the memory behind it
 
@@ -198,6 +199,42 @@ npx -y neurarch-mcp lint a.py b.py --json         # for CI
 npx -y neurarch-mcp check model.py                # the full verdict
 npx -y neurarch-mcp check zoo:qwen2.5-7b          # on a reference architecture
 ```
+
+### A Claude Code hook: refuse the launch that will not fit
+
+`neurarch-mcp hook` is a [PreToolUse hook](https://docs.claude.com/en/docs/claude-code/hooks) for Claude Code. Before each Bash call it reads the pending command from stdin; when the command launches training (`python train.py`, `accelerate launch`, `torchrun`, `deepspeed`, `sky launch`) it sizes the job exactly as `size_training_job` does, and when the job will not fit the card it declares it exits 2, which blocks the call and hands the agent the reason: the peak, the card, the largest batch that fits it, and the smallest card that holds the job. Every other command runs untouched, and the hook prints nothing.
+
+Add it to `.claude/settings.json` in the repository (or `~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "npx -y neurarch-mcp hook --hf" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`--hf` lets it read `config.json` from huggingface.co for a model named as `org/name` (cached for a day); drop it to stay offline, and then only local models (a `.py`, a `.neurarch.json`, a checkpoint directory with a `config.json`, `zoo:<id>`, or an `hf:` id already in the cache) are sized. For a hook that runs on every Bash call, `npm i -g neurarch-mcp` and `"command": "neurarch-mcp hook --hf"` skip npx's startup.
+
+The model, batch, sequence length and card come from the command line (`--model` / `--model_name_or_path`, `--batch_size` / `--per_device_train_batch_size` times `--nproc_per_node` / `--num_processes`, `--max_seq_length` / `--seq_len`, `--gpu`, `sky launch --gpus A100-80GB:8`, `--attn_implementation`), and anything the command leaves out from a `job:` block in the nearest `.neurarch.yml`:
+
+```yaml
+job:
+  model: meta-llama/Llama-3.2-1B   # a path, zoo:<id>, hf:<org/name> or org/name
+  gpu: L4                          # "A100-40", "H100", "8xH100"
+  batch: 32                        # global batch
+  seq_len: 2048
+  attention: sdpa                  # sdpa (default), flash or eager
+```
+
+It fails open. A command it does not recognise, a job with no declared card or batch, a model it cannot load, a card it cannot parse (a bare `A100` is ambiguous), or any error at all lets the call run. So does a job the estimate does not model: `--gradient_checkpointing`, LoRA or PEFT flags, 4- or 8-bit loading and CPU offload, since the number is a full fine-tune's peak. The estimate is a fit check, not a measurement, so `NEURARCH_ALLOW_OOM=1` in front of a command lets a refused launch through.
 
 ## Client setup
 
@@ -331,7 +368,7 @@ A new tool is a small, self-contained PR: see [CONTRIBUTING.md](./CONTRIBUTING.m
 
 - **Not a generic codebase indexer.** It reads model definitions (`.py`, `.neurarch.json`, `zoo:`, `hf:`), not your whole tree. For codebase structure, use [GitNexus](https://github.com/abhigyanpatwari/GitNexus) or similar.
 - **Not a trainer.** It tells you what a run needs, whether it would start, what it would cost and where the result could be served; it never spends your GPU time.
-- **Not a measurement.** `size_training_job` is a calibrated estimate (of 90 measured runs that did not fit a card it flagged 54; 42% median miss on new edge-of-card configurations); it is not a profiler, and a job using an optimizer other than AdamW, or no bf16 autocast, will differ. `check_design` says when a decision is yours.
+- **Not a measurement.** `size_training_job` is a calibrated estimate (fitted on 178 measured runs across 41 architectures; held out, 7% median error and 113 of the 131 runs that did not fit a card flagged; 14% median miss on 25 runs measured after the fit); it is not a profiler, and a job using an optimizer other than AdamW, or no bf16 autocast, will differ. `check_design` says when a decision is yours.
 - **Not connected to your Neurarch workspace.** It reads files. Live editing happens in the [Neurarch app](https://neurarch.com); `--watch` follows its saves.
 
 ## Issues & Feedback

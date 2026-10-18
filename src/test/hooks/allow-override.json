@@ -1,0 +1,7 @@
+{
+  "session_id": "fixture",
+  "cwd": "__CWD__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": { "command": "NEURARCH_ALLOW_OOM=1 python train.py --model templates/phi3-mini.neurarch.json --batch_size 32 --gpu T4" }
+}

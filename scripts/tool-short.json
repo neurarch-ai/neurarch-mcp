@@ -1,6 +1,7 @@
 {
   "size_training_job": "Call BEFORE launching any training job: peak memory at your batch, smallest card that fits, max batch per card, two-card split, run cost. Calibrated fit check. Offline.",
   "diagnose_oom": "Call after a CUDA out-of-memory error, before changing batch size: the one cause (too big, fragmented, another process, undeclared memory) and fixes, least invasive first. Offline.",
+  "check_edit": "Call after editing a model's config or architecture, before training: silent edit bugs (vocab resize, tying, heads, RoPE, LoRA targets) and the memory delta. Offline.",
   "get_model_summary": "Layer count, total params, dominant layer types, input/output shape. Cheapest orientation.",
   "describe_architecture": "One-call orientation: pipeline order, depth, IO shapes, params and MACs, top hotspots, validation. Start here.",
   "get_layer": "Everything about one layer by name: type, params, shapes, upstream and downstream.",

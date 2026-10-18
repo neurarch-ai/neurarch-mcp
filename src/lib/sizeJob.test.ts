@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { sizeJob, parseGpu, withSeqLen, CARDS, ACCURACY_SENTENCE } from './sizeJob.js';
-import { buildPlan } from '../vendor/plan.bundle.mjs';
+import { buildPlan, attentionScoresGbFor, MEMORY_CALIBRATION, calibrationSentence } from '../vendor/plan.bundle.mjs';
 import { loadZooModel } from '../sources.js';
 import type { ModelArchitecture } from './types.js';
 
@@ -56,7 +56,11 @@ describe('a template that fits a T4 and one that does not', () => {
     expect(s.cost?.gpu).toBe('T4');
     expect(s.cost?.usd).toBeGreaterThan(0);
     expect(s.accuracy).toBe(ACCURACY_SENTENCE);
-    expect(s.accuracy).toMatch(/141 measured runs across 44 architectures.*flagged 54.*42%/);
+    const c = MEMORY_CALIBRATION;
+    expect(s.accuracy).toContain(calibrationSentence());
+    expect(s.accuracy).toMatch(new RegExp(`${c.fittedRuns} measured runs across ${c.architectures} architectures.*flagged ${c.flagged} of the ${c.noFit}.*${c.afterFitMedianPct}%`));
+    expect(s.accuracy).toMatch(/accelerate estimate-memory flagged at most 8/);
+    expect(s.accuracy).not.toMatch(/\b(141|187|54 of|42%)/);
     expect(s.accuracy).not.toMatch(/98%/);
   });
 
@@ -76,11 +80,23 @@ describe('a template that fits a T4 and one that does not', () => {
     expect(sizeJob(m, { batchSize: mb + 1, gpu: 'T4' }).fits).toBe(false);
   });
 
-  it('under eager attention phi3-mini needs more than an A100-40 and gets the plan\'s two-card split', async () => {
-    const s = sizeJob(await template('phi3-mini'), { batchSize: 32, gpu: 'A100-40', attention: 'eager' });
+  it('under eager attention phi3-mini needs an 80 GB card, and two A100-40s are not offered without a cut that holds', async () => {
+    const m = await template('phi3-mini');
+    const s = sizeJob(m, { batchSize: 32, gpu: 'A100-40', attention: 'eager' });
+    const p = buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
     expect(s.fits).toBe(false);
-    expect(s.verdict).toMatch(/^will not fit an A100-40: needs ~55 GB with headroom \(peak 48 GB\).*use A100-80 or batch <= 22$/);
-    expect(s.twoCardSplit?.gpu).toBe('A100-40');
+    expect(s.verdict).toMatch(new RegExp(`^will not fit an A100-40: needs ~${Math.round(p.cost.peakGb * 1.15)} GB with headroom \\(peak ${Math.round(p.cost.peakGb)} GB\\).*use A100-80 or batch <= ${p.cost.maxBatch.A100_40}$`));
+    expect(s.twoCardSplit).toBeNull();
+    expect(p.cost.twoCardSplit).toBeNull();
+  });
+
+  it('under eager attention gpt2 does not fit one T4 and gets the plan\'s two-card split', async () => {
+    const m = await template('gpt2');
+    const s = sizeJob(m, { batchSize: 32, gpu: 'T4', attention: 'eager' });
+    const p = buildPlan(m, { run: { batchSize: 32 }, attention: 'eager' });
+    expect(s.fits).toBe(false);
+    expect(p.cost.twoCardSplit?.gpu).toBe('T4 (16GB)');
+    expect(s.twoCardSplit?.gpu).toBe('T4');
     expect(s.twoCardSplit?.fits).toBe(true);
   });
 });
@@ -91,15 +107,17 @@ describe('the attention flag', () => {
     const eager = sizeJob(m, { batchSize: 32, attention: 'eager' });
     const sdpa = sizeJob(m, { batchSize: 32 });
     const flash = sizeJob(m, { batchSize: 32, attention: 'flash' });
+    const scores = attentionScoresGbFor(m, 32);
+    expect(scores).toBeGreaterThan(1);
     expect(sdpa.job.attention).toBe('sdpa');
-    expect(eager.memory!.peakGb - sdpa.memory!.peakGb).toBeCloseTo(29.81, 1);
-    expect(sdpa.memory!.attentionScoresDroppedGb).toBeCloseTo(29.81, 1);
-    expect(eager.memory!.attentionScoresGb).toBeCloseTo(29.81, 1);
+    expect(eager.memory!.peakGb - sdpa.memory!.peakGb).toBeCloseTo(scores, 1);
+    expect(sdpa.memory!.attentionScoresDroppedGb).toBeCloseTo(scores, 1);
+    expect(eager.memory!.attentionScoresGb).toBeCloseTo(scores, 1);
     expect(flash.memory!.peakGb).toBe(sdpa.memory!.peakGb);
-    // It changes the answer, not just the number: an A100-80 under eager, an L4 under SDPA.
+    // It changes the answer, not just the number: an 80 GB card under eager, a 48 GB one under SDPA.
     expect(eager.smallestFitGpu).toBe('A100-80');
-    expect(sdpa.smallestFitGpu).toBe('L4');
-    expect(sdpa.caveats.join(' ')).toMatch(/Under eager attention the same job keeps another 30 GB/);
+    expect(sdpa.smallestFitGpu).toBe('L40S');
+    expect(sdpa.caveats.join(' ')).toMatch(new RegExp(`Under eager attention the same job keeps another ${Math.round(scores)} GB`));
   });
 });
 

@@ -1,0 +1,7 @@
+{
+  "session_id": "fixture",
+  "cwd": "__CWD__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": { "file_path": "/tmp/train.py", "content": "python train.py --model templates/phi3-mini.neurarch.json --batch_size 32 --gpu T4" }
+}

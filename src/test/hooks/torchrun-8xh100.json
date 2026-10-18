@@ -1,0 +1,7 @@
+{
+  "session_id": "fixture",
+  "cwd": "__CWD__",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": { "command": "torchrun --nproc_per_node=8 train.py --model templates/phi3-mini.neurarch.json --per_device_train_batch_size 32 --gpu H100" }
+}
