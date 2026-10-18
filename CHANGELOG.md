@@ -15,8 +15,8 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   simulated op by op (a port of Primus's simulator) instead of the closed-form
   formula, so `predicted.formula` now reads `1F1B schedule simulated op by op`.
   On the 2 x H100 Qwen3-4B pipeline A/B the predicted gain is within 1.5 points
-  of the measured one, and against vTrain's published step times the error
-  fell from 33.2% to 9.0% (neurarch-ai/neurarch #335). Recommended splits move
+  of the measured one (neurarch-ai/neurarch #335); absolute step time is less
+  reliable than the gain. Recommended splits move
   accordingly: Qwen3-8B at TP4 PP4 on H100 now recommends `10,10,9,7`.
 - **`check_serving_config` sizes memory with each engine's own arithmetic**:
   vLLM's KV cache groups and blocks, SGLang's `mem_fraction_static` formula,
