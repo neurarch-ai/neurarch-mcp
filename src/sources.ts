@@ -102,6 +102,14 @@ export interface HFLoadResult {
   configSource: 'config' | 'diffusers' | 'fallback' | 'cache';
   realParamCount?: number;
   cached: boolean;
+  /**
+   * The config.json the graph was built from. Kept because the graph cannot
+   * say everything the config does: a classification head's label count is
+   * only in `architectures` + `id2label` (data fit reads it). Absent in a
+   * cache entry written before 0.17.3, which is served as it is (reading the
+   * cache never opens a socket); the label check then reports itself skipped.
+   */
+  config?: Record<string, unknown>;
 }
 
 /** A config this machine already fetched, or null. Reading it opens no socket. */
@@ -163,6 +171,7 @@ export async function loadHFModel(modelId: string): Promise<HFLoadResult> {
     configSource: config._configSource ?? 'config',
     realParamCount: typeof config._realParamCount === 'number' ? config._realParamCount : undefined,
     cached: false,
+    config: config as Record<string, unknown>,
   };
   await mkdir(hfCacheDir(), { recursive: true }).catch(() => undefined);
   await writeFile(cacheFile, JSON.stringify(result)).catch(() => undefined);

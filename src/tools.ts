@@ -17,6 +17,7 @@ import { LEDGER_TOOLS } from './ledgerTools.js';
 import { SIZING_TOOLS } from './sizingTools.js';
 import { OOM_TOOLS } from './oomTools.js';
 import { EDIT_TOOLS } from './editTools.js';
+import { DATA_SCHEMA, parseDataArg, hfConfigOf, dataFitFor } from './lib/dataFit.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
 export interface ToolContext {
@@ -437,18 +438,29 @@ const checkDesignTool: ToolDef = {
     + 'best and at what latency, and which decisions are still the human\'s to make. '
     + 'Call this BEFORE proposing an architecture change and again after, so you can say what your '
     + 'edit actually did. Broader than validate_model, which is the local structural subset. '
+    + 'Pass data (seq_len, tokenizer_size, num_classes, image_size, channels) to add dataFit: whether that data fits '
+    + 'what the model accepts (position table, embedding rows, classifier head, image size, channels), each of which '
+    + 'otherwise crashes on the first batch. For an hf: model the label count comes from its config.json; for any other '
+    + 'graph pass config (a Hugging Face config.json object) to read the head from it. '
     + 'Runs offline, needs no API key, and makes no network call.',
   inputSchema: {
     type: 'object',
     properties: {
-      verbose: { type: 'boolean', description: 'Include every stage\'s machine-readable data (cost breakdown, deploy targets, contract). Default false: verdict, findings, stage headlines and the decision.' },
-      ask_user: { type: 'boolean', description: 'If the verdict ends in a decision only the human can make, ask them through the client (MCP elicitation) and include their answer. Default false.' },
+      verbose: { type: 'boolean', description: 'Add every stage\'s data (cost breakdown, deploy targets, contract).' },
+      ask_user: { type: 'boolean', description: 'Ask the human (MCP elicitation) a decision only they can make.' },
+      data: DATA_SCHEMA,
+      config: { type: 'object', description: 'HF config.json (label count).' },
     },
     additionalProperties: false,
   },
-  handler: async ({ verbose, ask_user }: { verbose?: boolean; ask_user?: boolean }, model, ctx) => {
+  handler: async ({ verbose, ask_user, data, config }: { verbose?: boolean; ask_user?: boolean; data?: unknown; config?: Record<string, unknown> }, model, ctx) => {
+    const dataSpec = data != null ? parseDataArg('check_design', data) : null;
+    if (config != null && (typeof config !== 'object' || Array.isArray(config))) throw new Error('check_design: config must be a config.json object.');
     const full = checkDesign(model);
     if ('error' in full) return full;
+    // Beside the verdict, as POST /api/v1/check returns it: the stage findings
+    // are the graph's, a data-fit finding is about the graph AND the data.
+    const dataFit = dataSpec ? dataFitFor(model, dataSpec, config ?? await hfConfigOf(model)) : undefined;
     const out: Record<string, unknown> = verbose ? { ...full } : {
       ...full,
       stages: full.stages.map(s => ({ stage: s.stage, status: s.status, headline: s.headline })),
@@ -461,6 +473,7 @@ const checkDesignTool: ToolDef = {
       });
       out.decision = { ...full.decision, answer };
     }
+    if (dataFit) out.dataFit = dataFit;
     return out;
   },
 };
