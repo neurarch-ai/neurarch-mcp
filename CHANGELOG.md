@@ -6,6 +6,24 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.2] - 2026-10-17
+
+### Changed
+- **`neurarch-mcp hook` reads the `.neurarch.yml` `job:` block neurarch-bot reads** (its
+  `scripts/job.py`): a top-level `job:` and a model entry's own `job:` merged
+  over it key by key; `gpu`, `batch` (per step), `seq_len`, `grad_accum`,
+  `attention`, `epochs`, `samples`, each a value or a `file:key` pointer into a
+  YAML or JSON training config read relative to the repository root, dotted
+  keys allowed; unknown keys ignored. When the job does not fit and
+  `grad_accum` is set, the reason names the batch and accumulation steps that
+  keep the effective batch, by the bot's own split. `model` is the hook's only
+  extra key: the bot reads the model from its traced file list. The tests run
+  on the bot's `examples/.neurarch.yml`, copied verbatim, and the resolved job
+  matches what the bot's `resolve_job` reads from the same files.
+  0.17.1's hook read a `job:` block of its own (top level only, literal
+  values, `batch` as a global batch); this replaces it. 0.17.1 was never
+  published, so no released version reads the old shape.
+
 ## [0.17.1] - 2026-10-17
 
 ### Added

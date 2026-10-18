@@ -240,18 +240,23 @@ Add it to `.claude/settings.json` in the repository (or `~/.claude/settings.json
 
 `--hf` lets it read `config.json` from huggingface.co for a model named as `org/name` (cached for a day); drop it to stay offline, and then only local models (a `.py`, a `.neurarch.json`, a checkpoint directory with a `config.json`, `zoo:<id>`, or an `hf:` id already in the cache) are sized. For a hook that runs on every Bash call, `npm i -g neurarch-mcp` and `"command": "neurarch-mcp hook --hf"` skip npx's startup.
 
-The model, batch, sequence length and card come from the command line (`--model` / `--model_name_or_path`, `--batch_size` / `--per_device_train_batch_size` times `--nproc_per_node` / `--num_processes`, `--max_seq_length` / `--seq_len`, `--gpu`, `sky launch --gpus A100-80GB:8`, `--attn_implementation`), and anything the command leaves out from a `job:` block in the nearest `.neurarch.yml`:
+The model, batch, sequence length and card come from the command line (`--model` / `--model_name_or_path`, `--batch_size` / `--per_device_train_batch_size` times `--nproc_per_node` / `--num_processes`, `--gradient_accumulation_steps`, `--max_seq_length` / `--seq_len`, `--gpu`, `sky launch --gpus A100-80GB:8`, `--attn_implementation`), and anything the command leaves out from the `job:` block in the nearest `.neurarch.yml`.
+
+That block is the one [neurarch-bot](https://github.com/neurarch-ai/neurarch-bot) reads for the memory line on its pull request comment, with the same semantics, so one file drives both: the agent is refused before the launch for the same reason the pull request would turn red. A top-level `job:` applies to every model and a model entry's own `job:` merges over it key by key. The keys are `gpu`, `batch` (the per-step batch the memory is sized at), `seq_len`, `grad_accum` (only sets the effective batch the reason quotes), `attention`, `epochs` and `samples`; each is a value or a `file:key` pointer into your own YAML or JSON training config, read relative to the repository root, dotted keys allowed. Unknown keys are ignored. One key is the hook's own: `model`, because the bot takes the model from its traced file list and the hook has no trace to read it from.
 
 ```yaml
 job:
-  model: meta-llama/Llama-3.2-1B   # a path, zoo:<id>, hf:<org/name> or org/name
-  gpu: L4                          # "A100-40", "H100", "8xH100"
-  batch: 32                        # global batch
-  seq_len: 2048
-  attention: sdpa                  # sdpa (default), flash or eager
+  model: meta-llama/Llama-3.2-1B               # hook only: a path, zoo:<id>, hf:<org/name> or org/name
+  gpu: A10G                                    # T4, L4, A10G, L40S, A100 40GB, A100 80GB, H100, 8xH100
+  batch: configs/pretrain.yaml:batch_size      # a number, or file:key into your training config
+  seq_len: configs/pretrain.yaml:seq_len
+  grad_accum: configs/pretrain.yaml:grad_accum
+  attention: sdpa                              # sdpa (default), flash or eager
 ```
 
-It fails open. A command it does not recognise, a job with no declared card or batch, a model it cannot load, a card it cannot parse (a bare `A100` is ambiguous), or any error at all lets the call run. So does a job the estimate does not model: `--gradient_checkpointing`, LoRA or PEFT flags, 4- or 8-bit loading and CPU offload, since the number is a full fine-tune's peak. The estimate is a fit check, not a measurement, so `NEURARCH_ALLOW_OOM=1` in front of a command lets a refused launch through.
+A per-model `job:` applies when its entry's `path` (or its own `model`) names the model being launched, or when it is the only entry with one. The command line wins over the block, key by key. A pointer that does not resolve leaves its key unset rather than guessed.
+
+It fails open. A command it does not recognise, a job with no declared card or batch (including a `file:key` pointer that does not resolve), a model it cannot load, a card it cannot parse (a bare `A100` is ambiguous), or any error at all lets the call run. So does a job the estimate does not model: `--gradient_checkpointing`, LoRA or PEFT flags, 4- or 8-bit loading and CPU offload, since the number is a full fine-tune's peak. The estimate is a fit check, not a measurement, so `NEURARCH_ALLOW_OOM=1` in front of a command lets a refused launch through.
 
 ## Client setup
 

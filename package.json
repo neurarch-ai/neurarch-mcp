@@ -1,6 +1,6 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.17.1",
+  "version": "0.17.2",
   "description": "MCP server that tells Claude Code, Cursor, Claude Desktop, VS Code and other MCP-aware agents what a training job needs before it takes a GPU: size_training_job returns the calibrated training peak at your batch, the smallest card that holds it, max batch per card, a two-card split and one run's cost (fitted on 178 measured runs across 41 architectures; held out, median error 7% and it flagged 113 of the 131 jobs that did not fit their card, accelerate estimate-memory at most 8; 14% median miss on 25 runs measured after the fit). Then whether the model forward-passes: the design linter (lint_model) and full verdict (check_design), offline. Point it at a PyTorch .py, a traced .neurarch.json or a Hugging Face repo; plan posts the same card as the CI bot, history reads what this structure measured the last time it trained in your organisation, diagnose_oom explains a CUDA out-of-memory error and the least invasive fix, and with --write the agent can edit the graph. Also a CLI: neurarch-mcp lint model.py.",
   "type": "module",
   "bin": {

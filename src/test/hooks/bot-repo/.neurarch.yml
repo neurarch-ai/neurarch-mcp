@@ -1,0 +1,124 @@
+# .neurarch.yml, every supported key, annotated. Copy it to the root of your repository and
+# delete what you do not want.
+#
+# Two halves. `models:` says what to plan, and it is the only required one. `policy:` is your
+# house rules: the lines your team decided on, which the plan turns into blockers and warnings
+# on every pull request and quotes back exactly as you wrote them here.
+#
+# You do not have to write this file by hand. Run the Action once with `mode: init` and it walks
+# the repository, traces every model it can construct, and opens a pull request adding this file
+# with your models in it and a policy block whose numbers come from what it just measured.
+#
+# The Action: https://github.com/neurarch-ai/neurarch-bot   How it works: https://neurarch.com/bot
+
+
+# ---------------------------------------------------------------------------- models
+#
+# One entry per model. `path` and `input` are required; everything else has a default.
+
+models:
+  # The simple case: a class in a file, constructed with no arguments.
+  - path: models/small_cnn.py:SmallCNN   # file.py:ClassOrFactory, relative to the repo root
+    input: 1,3,32,32                     # the forward's input shape, batch first
+
+  # Token ids are integers, not floats, so the spec carries `:long`. A shape with a colon in it
+  # has to be quoted, because YAML would otherwise read the colon as a mapping.
+  - path: models/tiny_gpt.py:TinyGPT
+    input: "1,32:long"
+
+  # A model whose constructor takes arguments cannot be listed as a class: `path` is called with
+  # none. Write a zero-argument factory beside it and point at that.
+  - path: models/gpt.py:tiny_gpt_for_ci  # def tiny_gpt_for_ci(): return GPT(vocab_size=1000)
+    input: "1,128:long"
+
+  # Everything optional, on one entry.
+  - path: models/two_tower.py:TwoTower
+    input: "1,64:long"                   # the first argument the forward takes
+    extra_inputs:                        # and the rest, in order, for a multi-input forward
+      - "1,64:long"
+      - 1,32
+    depth: 2                             # stop descending at this module depth. The default
+                                         # walks to the leaves; a depth of 2 keeps the plan
+                                         # readable for a model with hundreds of layers.
+    name: Two-tower retrieval model      # what to call it in the comment. Defaults to the class.
+    policy:                              # this model's own rules, merged over the block below
+      max_params: 50M                    # key by key, so one tighter line does not drop the rest
+
+  # The job: what the training run reserves. The comment opens with the peak at THIS batch and
+  # sequence length against THIS card, and the check fails when a change stops it fitting
+  # (Action input `fail-on-no-fit`, default true). Each value is a number or a `file:key`
+  # reference into your own training config, read at the commit being planned, so a pull
+  # request that only raises `batch_size` there is planned like a model change.
+  - path: models/doc_lm.py:DocLM
+    input: "1,32:long"                   # traced short; seq_len below is what is sized
+    job:
+      gpu: A10G                          # T4, L4, A10G, L40S, A100 40GB, A100 80GB, H100
+      batch: configs/pretrain.yaml:batch_size
+      seq_len: configs/pretrain.yaml:seq_len
+      grad_accum: configs/pretrain.yaml:grad_accum   # printed as the effective batch
+      epochs: 3                          # for the cost line; default 10
+      samples: 400000                    # for the cost line; default 50,000, labelled assumed
+      # attention: sdpa                  # sdpa (default), flash or eager; eager stores scores
+
+
+# ---------------------------------------------------------------------------- job (default)
+#
+# A top-level `job:` applies to every model, and a model's own `job:` merges over it key by key.
+# job:
+#   gpu: A10G
+#   batch: 32
+
+
+# ---------------------------------------------------------------------------- policy
+#
+# House rules. Every line here is a decision your team made, and the pull request comment names
+# the file and line each violated rule is written on, so whoever reads it can go and argue with
+# the line rather than with the bot.
+#
+# A policy needs no API key: it can only ever make a verdict stricter, never more permissive.
+# An unreadable line is reported inside the plan (as a warning naming the key) instead of
+# failing the run, so a typo never turns a whole repository's checks red.
+
+policy:
+  # --- these five block: a violation turns the pull request check red ---
+
+  # The largest a model may get. Accepts 500K, 200M, 1.5B or a plain integer.
+  # Blocks: "policy: max_params 500K exceeded (1.1M)".
+  # Worth setting to a round number just above the largest model you run today: a cap ten times
+  # your biggest model never fires, and a rule that cannot fail is not a rule.
+  max_params: 200M
+
+  # The smallest card every model must still fit, counting fp32 weights, gradients and two Adam
+  # moments (16 bytes a parameter) with 1.3x headroom. One of: T4, A100-40GB, H100-80GB.
+  # Blocks: "policy: must_fit T4 16GB violated (needs 34.1 GB)".
+  must_fit: A100-40GB
+
+  # A ceiling on layer count, which is a proxy for how long a forward pass takes to debug.
+  # Blocks: "policy: max_layers 400 exceeded (612)".
+  max_layers: 400
+
+  # Layer types nobody here may use. The names are Neurarch's component types, lowercase.
+  # Blocks: "policy: forbidden layer type softmax present".
+  # The classic pair: a Softmax in front of CrossEntropyLoss, or a Sigmoid in front of
+  # BCEWithLogitsLoss, applies the activation twice. The model trains, converges to something,
+  # and is wrong the whole time, which is exactly the class of bug a structural check catches
+  # and a test suite does not.
+  forbid_types: [softmax, sigmoid]
+
+  # Layer types every model must contain. Use it for a convention your team relies on rather
+  # than for a preference: this blocks a pull request.
+  # Blocks: "policy: required layer type layerNorm missing".
+  require_types: [layerNorm]
+
+  # --- these two warn: they are printed and the check stays green (`fail-on-warn: true` on the
+  #     Action turns every warning into a failure, these included) ---
+
+  # Training memory, in GB, by the same accounting as must_fit.
+  # Warns: "policy: max_memory_gb 32 exceeded (41.2 GB)".
+  max_memory_gb: 32
+
+  # The estimated cost of one training run, in dollars, on the priced GPU. A roofline estimate
+  # over an assumed dataset, so it is an order of magnitude and not an invoice, which is why it
+  # warns rather than blocks.
+  # Warns: "policy: max_cost_usd 50 exceeded ($112.40)".
+  max_cost_usd: 50
