@@ -63,6 +63,7 @@ export const CORE_TOOLS: readonly string[] = [
   'trace_model',
   'plan',
   'history',
+  'diagnose_oom',
   'check_design',
   'lint_model',
   'describe_architecture',
@@ -140,7 +141,7 @@ export const MODEL_PATH_PARAM = 'model_path';
 
 const MODEL_PATH_PROPERTY = {
   type: 'string',
-  description: 'Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>).',
+  description: 'Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>.',
 };
 
 /**
@@ -189,6 +190,7 @@ export interface ListedTool {
  */
 const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
   size_training_job: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, fits: { type: ['boolean', 'null'] } } },
+  diagnose_oom: { type: 'object', additionalProperties: true, properties: { cause: { type: 'string' }, summary: { type: 'string' }, fixes: { type: 'array' } } },
   plan: { type: 'object', additionalProperties: true, properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
   history: { type: 'object', additionalProperties: true, properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
   check_design: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },

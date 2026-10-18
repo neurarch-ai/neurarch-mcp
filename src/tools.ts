@@ -15,6 +15,7 @@ import { lintModelGraph, edgeProvenance, type EngineFinding } from './vendor/eng
 import { EXTRA_TOOLS } from './extraTools.js';
 import { LEDGER_TOOLS } from './ledgerTools.js';
 import { SIZING_TOOLS } from './sizingTools.js';
+import { OOM_TOOLS } from './oomTools.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
 export interface ToolContext {
@@ -734,6 +735,7 @@ function bucketize(
 
 export const TOOLS: ToolDef[] = [
   ...SIZING_TOOLS,
+  ...OOM_TOOLS,
   getModelSummary,
   describeArchitectureTool,
   getLayer,

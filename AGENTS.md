@@ -41,6 +41,23 @@ with bf16 autocast (141 measured runs, 44 architectures, held-out median error
 8% above 1 GB, card verdict agrees with measurement 98% of the time), not a
 measurement; say so when you quote it.
 
+## After a CUDA out-of-memory error
+
+**Call `diagnose_oom` after a CUDA out-of-memory error, before changing batch
+size**, with the error text and the job you ran:
+
+```
+diagnose_oom { error: "<the OOM text>", model_path: "Model.neurarch.json", batch: 64, seq_len: 2048, step: 0 }
+diagnose_oom { error: "<the OOM text>", hf_id: "Qwen/Qwen2.5-0.5B", batch: 8, inference: true, gen_tokens: 512 }
+```
+
+It names one cause (too big for the card, a fragmented allocator, another
+process on the card, a giant logits tensor, memory the graph does not declare,
+or growth during the run) with the numbers it read it from, and fixes ordered
+least invasive first. Apply the first fix. Halve the batch only when the cause
+is `too-big-for-card`, and then keep the effective batch with the gradient
+accumulation the fix names.
+
 Then, in this order:
 
 1. `history` with the fingerprint the sizing result returns: what this
@@ -99,6 +116,7 @@ the same package.
 | Question | Tool |
 |---|---|
 | What will this job need, and on which card? | `size_training_job` |
+| Why did it run out of memory, and what is the smallest fix? | `diagnose_oom` |
 | What is this model? | `describe_architecture`, `get_model_summary`, `mermaid_diagram` |
 | Where is the budget? | `param_count_by_block`, `flops_by_block`, `list_blocks`, `get_block` |
 | Will it run? | `validate_model`, `lint_model`, `check_design` |

@@ -41,11 +41,62 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
       "batch_size"
+    ],
+    "additionalProperties": false
+  },
+  "diagnose_oom": {
+    "type": "object",
+    "properties": {
+      "error": {
+        "type": "string",
+        "description": "The OOM text as printed."
+      },
+      "hf_id": {
+        "type": "string",
+        "description": "Hugging Face org/name."
+      },
+      "batch": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "seq_len": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Tokens per sample (the prompt, if inference)."
+      },
+      "step": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "attention": {
+        "type": "string",
+        "enum": [
+          "sdpa",
+          "flash",
+          "eager"
+        ]
+      },
+      "inference": {
+        "type": "boolean",
+        "description": "Generation, not training."
+      },
+      "gen_tokens": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Default 256."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
+      }
+    },
+    "required": [
+      "error"
     ],
     "additionalProperties": false
   },
@@ -54,7 +105,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -64,7 +115,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -78,7 +129,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -115,7 +166,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -133,7 +184,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -166,7 +217,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -185,7 +236,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -203,7 +254,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -217,7 +268,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -227,7 +278,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -241,7 +292,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -258,7 +309,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -271,7 +322,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -290,7 +341,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -308,7 +359,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -326,7 +377,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -352,7 +403,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -362,7 +413,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -376,7 +427,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -423,7 +474,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -440,7 +491,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -462,7 +513,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -480,7 +531,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -503,7 +554,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -534,7 +585,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -579,7 +630,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "required": [
@@ -612,7 +663,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false
@@ -626,7 +677,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Answer about another model instead (a .py/.neurarch.json path, zoo:<id>, or hf:<org/name>)."
+        "description": "Another model: .py/.neurarch.json path, zoo:<id> or hf:<org/name>."
       }
     },
     "additionalProperties": false

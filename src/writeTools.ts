@@ -19,22 +19,22 @@ const addLayerTool: ToolDef = {
       type: {
         type: 'string',
         description:
-          'Layer type. Examples: "linear", "conv2d", "layerNorm", "multiHeadAttention", "dropout", "embedding". The full list lives in the ComponentType union in the Neurarch schema.',
+          'Layer type, e.g. "linear", "conv2d", "layerNorm", "multiHeadAttention".',
       },
-      name: { type: 'string', description: 'Unique layer name. Fails if duplicate.' },
+      name: { type: 'string', description: 'Unique layer name.' },
       after: {
         type: 'string',
         description:
-          'Optional. Name or id of an existing layer. When provided, the new layer is auto-connected as a downstream of it (single edge, from bottom to top).',
+          'Existing layer (name or id) to wire the new one after.',
       },
       params: {
         type: 'object',
         description:
-          'Layer hyperparameters, shape varies by type. For example linear takes {in_features: 768, out_features: 256}; conv2d takes {in_channels, out_channels, kernel_size, stride, padding}; dropout takes {p: 0.1}.',
+          'Hyperparameters by type, e.g. linear {in_features, out_features}, dropout {p}.',
       },
       scope: {
         type: 'string',
-        description: 'Optional dotted module path, e.g. "encoder.layer.3". Used by the Scope Folder panel in the UI.',
+        description: 'Dotted module path, e.g. "encoder.layer.3".',
       },
     },
     required: ['type', 'name'],
