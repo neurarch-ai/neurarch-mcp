@@ -34,6 +34,12 @@ import {
   calibrationSentence,
   FIT_HEADROOM,
   DEFAULT_SEQ_LEN as PLAN_DEFAULT_SEQ_LEN,
+  MEMORY_CALIBRATION,
+  UPPER_K,
+  UPPER_COVERAGE,
+  upperPeakGb,
+  fitVerdict,
+  type FitVerdict,
   type ModelPlan,
 } from '../vendor/plan.bundle.mjs';
 
@@ -194,15 +200,40 @@ export interface SizeJobResult {
     /** Stored attention scores this job does NOT keep because it runs SDPA/flash (0 when eager). */
     attentionScoresDroppedGb: number;
   } | null;
+  /** The cheapest card that holds the point estimate x 1.15. */
   smallestFitGpu: string | null;
+  /**
+   * The cheapest card that holds the UPPER bound x 1.15: "the smallest card
+   * that holds it" when a wrong answer costs a reservation. Null when no
+   * listed card does.
+   */
+  smallestSafeGpu: string | null;
+  /**
+   * Per card, the plan's three answers (neurarch #312): `fits` (the upper
+   * bound with headroom fits), `borderline` (only the point estimate is
+   * inside the card: measure once) or `does_not_fit`.
+   */
+  gpuVerdict: Record<string, FitVerdict | null> | null;
+  /** The conservative peak and what it was read from. */
+  upperBound: {
+    peakGb: number;
+    /** upperBound.peakGb x 1.15: what a card must hold for `fits`. */
+    needGb: number;
+    multiplier: number;
+    coverage: number;
+    runs: number;
+    sentence: string;
+  } | null;
   maxBatch: Record<string, number | null> | null;
+  /** The largest batch whose upper bound fits each card with headroom. */
+  maxBatchSafe: Record<string, number | null> | null;
   multiCard: {
     cards: number;
     card: string;
     /** Each card holds a full copy at the per-device batch (plain DDP). */
-    ddp: { perDeviceBatch: number; peakGbPerCard: number; fits: boolean };
+    ddp: { perDeviceBatch: number; peakGbPerCard: number; fits: boolean; verdict: FitVerdict | null };
     /** One model sharded across the cards (FSDP / ZeRO-3), the peak at the global batch against summed capacity. */
-    sharded: { peakGb: number; capacityGb: number; fits: boolean; maxGlobalBatch: number | null };
+    sharded: { peakGb: number; capacityGb: number; fits: boolean; verdict: FitVerdict | null; maxGlobalBatch: number | null };
   } | null;
   twoCardSplit: (NonNullable<ModelPlan['cost']['twoCardSplit']> & { conservative: boolean; note?: string }) | null;
   cost: { gpu: string; cards: number; usd: number | null; trainSec: number | null; assumptions: string } | null;
@@ -232,6 +263,23 @@ function sizerFor(plan: ModelPlan, model: ModelArchitecture, batch: number, atte
     attnDropped: attention === 'eager' ? 0 : attnAtBatch,
   };
 }
+
+/** The same job at the upper bound: both terms scaled by UPPER_K, as the plan's maxBatchSafe does. */
+function upperSizer(s: Sizer): Sizer {
+  return {
+    footprintGb: s.footprintGb * UPPER_K,
+    perSampleGb: s.perSampleGb == null ? null : s.perSampleGb * UPPER_K,
+    peakAt: (b: number) => s.peakAt(b) * UPPER_K,
+  };
+}
+
+/** The upper bound in the words the CLI prints beside its "upper bound" line. */
+export const UPPER_BOUND_SENTENCE =
+  `the estimate x ${UPPER_K}: held out by architecture, ${Math.round(UPPER_COVERAGE * 100)}% of ${MEMORY_CALIBRATION.upperRuns} measured runs peaked at or under it`;
+
+/** The CLI's "borderline" line. */
+export const BORDERLINE_SENTENCE =
+  'the estimate fits, the upper bound with 1.15x headroom does not: measure once (one step at this batch) before reserving';
 
 function maxBatchOn(s: Sizer, gb: number): number | null {
   if (s.perSampleGb == null) return null;
@@ -307,7 +355,8 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
     accuracy: ACCURACY_SENTENCE,
   };
   const unsized = (verdict: string): SizeJobResult => ({
-    sized: false, verdict, fits: null, ...head, memory: null, smallestFitGpu: null, maxBatch: null,
+    sized: false, verdict, fits: null, ...head, memory: null, smallestFitGpu: null, smallestSafeGpu: null,
+    gpuVerdict: null, upperBound: null, maxBatch: null, maxBatchSafe: null,
     multiCard: null, twoCardSplit: null, cost: null, caveats,
   });
 
@@ -331,6 +380,18 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
   const maxBatch: Record<string, number | null> = {};
   for (const c of CARDS) maxBatch[c.id] = maxBatchOn(sizer, c.gb);
 
+  // The three-way answer, from the plan's own fitVerdict on this job's peak
+  // (the SDPA / flash adjustment above included), so the bound and the
+  // point estimate move together.
+  const params = plan.model.params;
+  const peakUpper = upperPeakGb(peakGb);
+  const gpuVerdict: Record<string, FitVerdict | null> = {};
+  for (const c of CARDS) gpuVerdict[c.id] = fitVerdict(peakGb, params, c.gb);
+  const safest = CARDS.find(c => gpuVerdict[c.id] === 'fits') ?? null;
+  const safe = upperSizer(sizer);
+  const maxBatchSafe: Record<string, number | null> = {};
+  for (const c of CARDS) maxBatchSafe[c.id] = maxBatchOn(safe, c.gb);
+
   // Multi-card: both readings, because the job's parallelism decides which applies.
   let multiCard: SizeJobResult['multiCard'] = null;
   if (requested && requested.count > 1) {
@@ -341,10 +402,17 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
     multiCard = {
       cards: n,
       card: requested.card.id,
-      ddp: { perDeviceBatch: perDevice, peakGbPerCard: r2(ddpPeak), fits: ddpPeak * HEADROOM <= requested.card.gb },
-      sharded: { peakGb: r2(peakGb), capacityGb: cap, fits: needGb <= cap, maxGlobalBatch: maxBatchOn(sizer, cap) },
+      ddp: { perDeviceBatch: perDevice, peakGbPerCard: r2(ddpPeak), fits: ddpPeak * HEADROOM <= requested.card.gb, verdict: fitVerdict(ddpPeak, params, requested.card.gb) },
+      sharded: { peakGb: r2(peakGb), capacityGb: cap, fits: needGb <= cap, verdict: fitVerdict(peakGb, params, cap), maxGlobalBatch: maxBatchOn(sizer, cap) },
     };
   }
+
+  // "borderline there", with the card that holds the upper bound when one does.
+  const borderlineTail = (id: string) => {
+    const other = safest && safest.id !== id ? safest : null;
+    return `; borderline on ${article(id)} ${id}: ${BORDERLINE_SENTENCE}`
+      + (other ? `; ${article(other.id)} ${other.id} holds the upper bound (~${gbText(peakUpper)} GB)` : safest ? '' : '; no listed card holds the upper bound');
+  };
 
   // The verdict line, for the card asked about or the cheapest that holds it.
   let fits: boolean;
@@ -356,6 +424,7 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
     fits = fitsOn(c.gb);
     if (fits) {
       verdict = `fits ${article(c.id)} ${c.id} with ${headroomPct(c.gb, peakGb)}% headroom ${atBatch} (peak ~${gbText(peakGb)} GB of ${c.gb} GB)`;
+      if (gpuVerdict[c.id] === 'borderline') verdict += borderlineTail(c.id);
     } else {
       const alt = smallest && smallest.gb > c.gb ? smallest.id : CARDS.filter(x => x.gb > c.gb).find(x => fitsOn(x.gb))?.id;
       const mb = maxBatch[c.id];
@@ -366,6 +435,8 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
       verdict = `will not fit ${article(c.id)} ${c.id}: needs ~${gbText(needGb)} GB with headroom (peak ${gbText(peakGb)} GB) ${atBatch}`
         + (options.length ? `, ${options.join(' or ')}` : '')
         + (mb == null && sizer.footprintGb * HEADROOM > c.gb ? `; no batch fits, weights and optimizer state alone are ${gbText(sizer.footprintGb)} GB` : '');
+      // Inside the card but inside the headroom too: the plan calls that borderline, not a no.
+      if (gpuVerdict[c.id] === 'borderline') verdict += `; borderline rather than a certain no: the estimate itself (${gbText(peakGb)} GB) is inside the ${c.gb} GB, so measure once (one step at this batch) before reserving`;
     }
   } else if (requested && multiCard) {
     const { card, ddp, sharded } = multiCard;
@@ -378,10 +449,17 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
       verdict = `will not fit ${label} even sharded: needs ~${gbText(needGb)} GB with headroom against ${sharded.capacityGb} GB`
         + (sharded.maxGlobalBatch != null ? `; global batch <= ${sharded.maxGlobalBatch} fits sharded` : '');
     }
+    // The reading that decided "fits" is the one whose bound is reported.
+    const decided = ddp.fits ? ddp.verdict : sharded.fits ? sharded.verdict : null;
+    if (decided === 'borderline') {
+      verdict += `; borderline ${ddp.fits ? `per ${card} under DDP` : 'sharded'}: ${BORDERLINE_SENTENCE}`
+        + (ddp.fits && sharded.verdict === 'fits' ? ' or shard it (FSDP / ZeRO-3), which holds the upper bound' : '');
+    }
   } else {
     fits = !!smallest;
     if (smallest) {
       verdict = `fits ${article(smallest.id)} ${smallest.id} (the cheapest listed card that holds it) with ${headroomPct(smallest.gb, peakGb)}% headroom ${atBatch} (peak ~${gbText(peakGb)} GB)`;
+      if (gpuVerdict[smallest.id] === 'borderline') verdict += borderlineTail(smallest.id);
     } else {
       const big = CARDS[CARDS.length - 1];
       const mb = maxBatch[big.id];
@@ -434,7 +512,18 @@ export function sizeJob(input: ModelArchitecture, opts: SizeJobInput): SizeJobRe
       attentionScoresDroppedGb: r2(attnDropped),
     },
     smallestFitGpu: smallest?.id ?? null,
+    smallestSafeGpu: safest?.id ?? null,
+    gpuVerdict,
+    upperBound: {
+      peakGb: r2(peakUpper),
+      needGb: r2(peakUpper * HEADROOM),
+      multiplier: UPPER_K,
+      coverage: UPPER_COVERAGE,
+      runs: MEMORY_CALIBRATION.upperRuns,
+      sentence: UPPER_BOUND_SENTENCE,
+    },
     maxBatch,
+    maxBatchSafe,
     multiCard,
     twoCardSplit: split,
     cost,

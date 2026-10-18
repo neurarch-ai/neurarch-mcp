@@ -22,7 +22,7 @@ No Playwright or browser is involved. Each GIF comes out at about 35 to 60 KB.
 
 ## The numbers must come from real tool output
 
-Only the model's closing sentences are scripted, and the README caption says so. Every other number has to be copied from a real tool call. When a release changes the estimate, re-run these calls, update `scripts.mjs`, and update the version and commit in its header comment:
+Only the model's closing sentences are scripted, and the README caption says so. Every other number has to be copied from a real tool call. For the two `npx neurarch` GIFs, every string is the CLI's own: a column, a row or a line may be dropped and a long sentence wrapped, never shortened or reworded. When a release changes the estimate, re-run these calls, update `scripts.mjs`, and update the version and commit in its header comment:
 
 ```bash
 M=src/test/templates/phi3-mini.neurarch.json

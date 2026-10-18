@@ -7285,8 +7285,50 @@ var MEMORY_CALIBRATION = {
   noFit: 131,
   /** Runs measured after the factors were fixed, never in any fit, and the median miss on the ones that fit, percent. */
   afterFitRuns: 25,
-  afterFitMedianPct: 14
+  afterFitMedianPct: 14,
+  /**
+   * The upper multiplier U: held out one architecture at a time, measured peak
+   * / predicted peak over the fitted runs of 1 GB or more, at the 90th and
+   * 95th percentile (nearest rank), rounded up to two decimals. Predicted x U
+   * is at or above the measured peak on that share of held-out runs.
+   */
+  upperK90: 1.17,
+  upperK95: 1.43,
+  /** Held-out runs (1 GB or more, measured peak) the multipliers were read from. */
+  upperRuns: 91
 };
+var UPPER_K = MEMORY_CALIBRATION.upperK95;
+var UPPER_COVERAGE = 0.95;
+var UPPER_FLOOR_GB = 1;
+function upperPeakGb(peakGb) {
+  if (!(peakGb > 0)) return 0;
+  return Math.max(peakGb * UPPER_K, UPPER_FLOOR_GB);
+}
+function fitVerdict(peakGb, params, gb) {
+  if (params <= 0) return null;
+  if (upperPeakGb(peakGb) * FIT_HEADROOM <= gb) return "fits";
+  return peakGb <= gb ? "borderline" : "does_not_fit";
+}
+var MIG_PROFILES = {
+  A100_40: [{ name: "1g.5gb", gb: 5 }, { name: "1g.10gb", gb: 10 }, { name: "2g.10gb", gb: 10 }, { name: "3g.20gb", gb: 20 }, { name: "4g.20gb", gb: 20 }, { name: "7g.40gb", gb: 40 }],
+  A100_80: [{ name: "1g.10gb", gb: 10 }, { name: "1g.20gb", gb: 20 }, { name: "2g.20gb", gb: 20 }, { name: "3g.40gb", gb: 40 }, { name: "4g.40gb", gb: 40 }, { name: "7g.80gb", gb: 80 }],
+  H100_80: [{ name: "1g.10gb", gb: 10 }, { name: "1g.20gb", gb: 20 }, { name: "2g.20gb", gb: 20 }, { name: "3g.40gb", gb: 40 }, { name: "4g.40gb", gb: 40 }, { name: "7g.80gb", gb: 80 }]
+};
+var MIG_SOURCE = "NVIDIA Multi-Instance GPU User Guide, Supported MIG Profiles";
+var SHAREABLE_NOTE = "Memory only: copies of the conservative peak (upper bound x 1.15 headroom each) that fit the card's memory. Compute, memory bandwidth and the per-process CUDA context are not considered.";
+function shareableFor(peakGbUpper) {
+  if (!(peakGbUpper > 0)) return null;
+  const per = peakGbUpper * FIT_HEADROOM;
+  const mig = (k) => MIG_PROFILES[k].find((p) => per <= p.gb)?.name ?? null;
+  return {
+    perCopyGb: per,
+    cards: PREFLIGHT_GPUS.map((g) => ({ gpu: g.name, gb: g.gb, copies: Math.floor(g.gb / per) })),
+    mig: { A100_40: mig("A100_40"), A100_80: mig("A100_80"), H100_80: mig("H100_80") },
+    migSource: MIG_SOURCE,
+    memoryOnly: true,
+    note: SHAREABLE_NOTE
+  };
+}
 var ACTIVATION_BYTES_PER_ELEMENT = 2;
 var ATTENTION_TYPES2 = /attention|transformerEncoder|transformerDecoder|^mla$|ditBlock|swin/i;
 var ALWAYS_STORES_SCORES = /^hstuBlock$/;
@@ -7515,6 +7557,17 @@ function fitsCard(peakGb, params, gb) {
 function smallestCardFor(peakGb, params) {
   return PREFLIGHT_GPUS.find((g) => fitsCard(peakGb, params, g.gb))?.name ?? null;
 }
+function smallestSafeCardFor(peakGb, params) {
+  return PREFLIGHT_GPUS.find((g) => fitVerdict(peakGb, params, g.gb) === "fits")?.name ?? null;
+}
+function verdictWord(v) {
+  return v == null ? "n/a" : v === "fits" ? "fits" : v === "borderline" ? "borderline" : "does not fit";
+}
+var UPPER_BOUND = { multiplier: UPPER_K, coverage: UPPER_COVERAGE, runs: MEMORY_CALIBRATION.upperRuns, multiplier90: MEMORY_CALIBRATION.upperK90 };
+function upperBoundPhrase(plan) {
+  const u = plan.cost.upperBound;
+  return `upper bound ~${plan.cost.peakGbUpper.toFixed(1)} GB (the estimate x${u.multiplier}: held out by architecture, ${Math.round(u.coverage * 100)}% of ${u.runs} measured runs of 1 GB+ peaked at or under their own estimate x${u.multiplier})`;
+}
 var ATTENTION_LABEL = { sdpa: "SDPA", flash: "flash attention", eager: "eager" };
 function attentionPhrase(attention, scoresGb) {
   if (scoresGb == null || !(scoresGb > 0.05)) return "";
@@ -7611,7 +7664,11 @@ function summaryFor(f, plan, diff, withheld) {
     parts.push(f.warnings.length ? `will run, ${f.warnings.length} warning${f.warnings.length === 1 ? "" : "s"}` : "will run");
     const fits = plan.cost.gpuFits;
     const smallest = plan.cost.smallestFitGpu ? `${/^[AEIOU]/i.test(plan.cost.smallestFitGpu) ? "an" : "a"} ${plan.cost.smallestFitGpu}` : fits.T4 ? "a T4" : fits.A100_40 ? "an A100 40GB" : fits.H100_80 ? "an H100 80GB" : null;
-    if (smallest) parts.push(`fits ${smallest} at batch ${batchOf(plan)}`);
+    const article = (g) => `${/^[AEIOU]/i.test(g) ? "an" : "a"} ${g}`;
+    const safe = plan.cost.smallestSafeGpu;
+    if (smallest && plan.cost.smallestFitGpu && safe !== plan.cost.smallestFitGpu) {
+      parts.push(`fits ${smallest} at batch ${batchOf(plan)}, borderline there (measure once; ${safe ? `${article(safe)} holds the upper bound` : "no listed card holds the upper bound"})`);
+    } else if (smallest) parts.push(`fits ${smallest} at batch ${batchOf(plan)}`);
     else if (fits.T4 === false) parts.push("does not fit a single 80GB card");
     if (f.estCostUsd != null) parts.push(`about ${fmtUsd(f.estCostUsd)} to train`);
   }
@@ -7673,6 +7730,12 @@ function unreadablePlan(blockers) {
       peakGb: 0,
       activationGb: null,
       smallestFitGpu: null,
+      peakGbUpper: 0,
+      upperBound: UPPER_BOUND,
+      gpuVerdict: { T4: null, A100_40: null, H100_80: null },
+      smallestSafeGpu: null,
+      maxBatchSafe: { T4: null, A100_40: null, H100_80: null },
+      shareable: null,
       maxBatch: { T4: null, A100_40: null, H100_80: null },
       twoCardSplit: null,
       attention: DEFAULT_ATTENTION,
@@ -7732,6 +7795,22 @@ function buildPlanUnchecked(model, base, opts) {
     A100_40: maxBatchFor(batchFacts, gpuGb("A100 (40GB)", 40)),
     H100_80: maxBatchFor(batchFacts, gpuGb("H100", 80))
   } : { T4: null, A100_40: null, H100_80: null };
+  const peakGbUpper = f.params > 0 ? upperPeakGb(f.peakGb) : 0;
+  const gpuVerdict = {
+    T4: fitVerdict(f.peakGb, f.params, gpuGb("T4", 16)),
+    A100_40: fitVerdict(f.peakGb, f.params, gpuGb("A100 (40GB)", 40)),
+    H100_80: fitVerdict(f.peakGb, f.params, gpuGb("H100", 80))
+  };
+  const safeFacts = {
+    footprintGb: f.footprintGb * UPPER_K,
+    activationPerSampleGb: elems == null ? null : activationGbAt(elems, 1) * UPPER_K,
+    activationGbAt: elems == null ? void 0 : (b) => activationGbAt(elems, b) * UPPER_K
+  };
+  const maxBatchSafe = f.params > 0 ? {
+    T4: maxBatchFor(safeFacts, gpuGb("T4", 16)),
+    A100_40: maxBatchFor(safeFacts, gpuGb("A100 (40GB)", 40)),
+    H100_80: maxBatchFor(safeFacts, gpuGb("H100", 80))
+  } : { T4: null, A100_40: null, H100_80: null };
   const cost = {
     estCostUsd: f.estCostUsd,
     estTrainSec: f.estTrainSec,
@@ -7741,6 +7820,12 @@ function buildPlanUnchecked(model, base, opts) {
     fitsGpu: f.fitsGpu,
     gpuFits,
     peakGb: f.peakGb,
+    peakGbUpper,
+    upperBound: UPPER_BOUND,
+    gpuVerdict,
+    smallestSafeGpu: f.params > 0 ? smallestSafeCardFor(f.peakGb, f.params) : null,
+    maxBatchSafe,
+    shareable: f.params > 0 ? shareableFor(peakGbUpper) : null,
     activationGb: f.activationGb,
     smallestFitGpu: f.smallestFitGpu,
     maxBatch,
@@ -8032,6 +8117,36 @@ function maxBatchLine(plan) {
   const v = (x) => x == null ? "n/a" : x.toLocaleString("en-US");
   return `T4 ${v(mb.T4)} \xB7 A100 40GB ${v(mb.A100_40)} \xB7 H100 80GB ${v(mb.H100_80)} (est.)`;
 }
+function safeBatchLine(plan) {
+  const mb = plan.cost.maxBatchSafe;
+  if (!mb || mb.T4 == null && mb.A100_40 == null && mb.H100_80 == null) return null;
+  const v = (x) => x == null ? "n/a" : x.toLocaleString("en-US");
+  return `T4 ${v(mb.T4)} \xB7 A100 40GB ${v(mb.A100_40)} \xB7 H100 80GB ${v(mb.H100_80)} (upper bound fits)`;
+}
+function fitWord(plan, k) {
+  const v = plan.cost.gpuVerdict?.[k];
+  if (v === void 0) return yesNo(plan.cost.gpuFits[k]);
+  return v == null ? "n/a" : v === "fits" ? "yes" : v === "borderline" ? "BORDERLINE" : "no";
+}
+function fitsRow(plan) {
+  return `T4 16GB ${fitWord(plan, "T4")} \xB7 A100 40GB ${fitWord(plan, "A100_40")} \xB7 H100 80GB ${fitWord(plan, "H100_80")}`;
+}
+function borderlineSentence(plan) {
+  const v = plan.cost.gpuVerdict;
+  if (!v) return null;
+  const names = { T4: "T4 16GB", A100_40: "A100 40GB", H100_80: "H100 80GB" };
+  const cards = Object.keys(names).filter((k) => v[k] === "borderline").map((k) => names[k]);
+  if (!cards.length) return null;
+  return `borderline on ${cards.join(", ")}: the point estimate fits, the upper bound with 1.15x headroom does not. Measure once (one step at this batch) before reserving.`;
+}
+function shareLine(plan) {
+  const s = plan.cost.shareable;
+  if (!s) return null;
+  const pick = ["T4 (16GB)", "A100 (40GB)", "H100 (80GB)"];
+  const cards = s.cards.filter((c) => pick.includes(c.gpu)).map((c) => `${c.copies} on ${c.gpu.replace(/ \((\d+GB)\)/, " $1")}`);
+  const mig = [s.mig.A100_40 ? `A100-40 ${s.mig.A100_40}` : null, s.mig.A100_80 ? `A100-80 ${s.mig.A100_80}` : null, s.mig.H100_80 ? `H100 ${s.mig.H100_80}` : null].filter(Boolean);
+  return `${s.perCopyGb.toFixed(1)} GB a copy: ${cards.join(" \xB7 ")}${mig.length ? `; smallest MIG slice ${mig.join(", ")}` : "; no MIG slice holds it"} (memory only)`;
+}
 function splitLine(plan) {
   const s = plan.cost.twoCardSplit;
   if (!s) return null;
@@ -8046,12 +8161,18 @@ function renderPlanText(plan) {
   L.push(
     plan.run.legal == null ? `  will run  CANNOT SAY (${plan.run.withheld ?? "the read was incomplete"})` : plan.run.legal ? `  will run  yes (${plan.run.blockers.length} blockers, ${plan.run.warnings.length} warnings)` : `  will run  NO  (${plan.run.blockers.length} blocker${plan.run.blockers.length === 1 ? "" : "s"})`
   );
-  const g = plan.cost.gpuFits;
-  L.push(`  fits      T4 16GB ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}   (peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? ", activations unknown" : ", est."})`);
+  L.push(`  fits      ${fitsRow(plan)}   (peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? ", activations unknown" : ", est."})`);
+  if (plan.cost.peakGbUpper > 0) L.push(`  upper     ${upperBoundPhrase(plan).slice("upper bound ".length)}`);
+  const bl = borderlineSentence(plan);
+  if (bl) L.push(`  measure   ${bl}`);
+  const share = shareLine(plan);
+  if (share) L.push(`  share     ${share}`);
   const att = attentionPhrase(plan.cost.attention, plan.cost.attentionScoresGb);
   if (att) L.push(`  attention ${att.slice("attention: ".length)}`);
   const mbLine = maxBatchLine(plan);
   if (mbLine) L.push(`  max batch ${mbLine}`);
+  const sbLine = safeBatchLine(plan);
+  if (sbLine) L.push(`  safe batch ${sbLine}`);
   const split = splitLine(plan);
   if (split) L.push(`  split     ${split}`);
   L.push(
@@ -8094,7 +8215,6 @@ function renderPlanText(plan) {
 }
 function renderPlanMarkdown(plan) {
   const m = plan.model;
-  const g = plan.cost.gpuFits;
   const d = plan.diff;
   const L = [];
   L.push(`**${plan.summary}**`, "");
@@ -8102,11 +8222,18 @@ function renderPlanMarkdown(plan) {
   L.push(`| Layers / params | ${m.layers} / ${fmtParamCount(m.params)}${d ? ` (${fmtSigned(d.paramsDelta)}${d.paramsDeltaPct == null ? "" : `, ${d.paramsDeltaPct >= 0 ? "+" : ""}${d.paramsDeltaPct.toFixed(0)}%`})` : ""} |`);
   L.push(`| Shape | \`${fmtShape(m.inputShape)}\` -> \`${fmtShape(m.outputShape)}\` |`);
   L.push(`| Will it run | ${plan.run.legal == null ? `**cannot say**: ${plan.run.withheld ?? "the read was incomplete"}` : plan.run.legal ? `yes, ${plan.run.warnings.length} warning${plan.run.warnings.length === 1 ? "" : "s"}` : `**no**, ${plan.run.blockers.length} blocker${plan.run.blockers.length === 1 ? "" : "s"}`}${plan.run.legal == null ? "" : d?.legalityChanged === "became_illegal" ? " (**base ran, this does not**)" : d?.legalityChanged === "became_legal" ? " (base did not run, this does)" : ""} |`);
-  L.push(`| GPU fit | T4 ${yesNo(g.T4)} \xB7 A100 40GB ${yesNo(g.A100_40)} \xB7 H100 80GB ${yesNo(g.H100_80)}${d?.memoryDeltaGb != null ? ` (memory ${d.memoryDeltaGb >= 0 ? "+" : "-"}${Math.abs(d.memoryDeltaGb).toFixed(2)} GB)` : ""}, peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? " (activations unknown)" : " (est.)"} |`);
+  L.push(`| GPU fit | T4 ${fitWord(plan, "T4")} \xB7 A100 40GB ${fitWord(plan, "A100_40")} \xB7 H100 80GB ${fitWord(plan, "H100_80")}${d?.memoryDeltaGb != null ? ` (memory ${d.memoryDeltaGb >= 0 ? "+" : "-"}${Math.abs(d.memoryDeltaGb).toFixed(2)} GB)` : ""}, peak ~${plan.cost.peakGb.toFixed(1)} GB at batch ${batchOf(plan)}${tokensAt(plan.cost.seqLen)}${plan.cost.activationGb == null ? " (activations unknown)" : " (est.)"} |`);
+  if (plan.cost.peakGbUpper > 0) L.push(`| Upper bound | ${upperBoundPhrase(plan).slice("upper bound ".length)} |`);
+  const blm = borderlineSentence(plan);
+  if (blm) L.push(`| **Borderline** | ${blm.slice(blm.indexOf(": ") + 2)} (${blm.slice("borderline on ".length, blm.indexOf(": "))}) |`);
+  const shm = shareLine(plan);
+  if (shm) L.push(`| Shareable | ${shm} |`);
   const att = attentionPhrase(plan.cost.attention, plan.cost.attentionScoresGb);
   if (att) L.push(`| Attention | ${att.slice("attention: ".length)} |`);
   const mb = maxBatchLine(plan);
   if (mb) L.push(`| Max batch | ${mb} |`);
+  const sb = safeBatchLine(plan);
+  if (sb) L.push(`| Safe batch | ${sb} |`);
   const sp = splitLine(plan);
   if (sp) L.push(`| Two-card split | ${sp} |`);
   L.push(`| Est. training | ${plan.cost.estCostUsd != null ? `~${fmtUsd(plan.cost.estCostUsd)} / ${fmtDuration(plan.cost.estTrainSec)} on ${plan.cost.fitsGpu ?? "the priced GPU"}` : "not estimable"}${d?.costDeltaUsd != null ? ` (${fmtSignedUsd(d.costDeltaUsd)})` : ""} |`);
@@ -8220,10 +8347,10 @@ var GIANT_REQUEST_SHARE = 0.2;
 var HEADROOM2 = 1.15;
 var LATE_STEP = 5;
 var f2 = (x) => x >= 10 ? x.toFixed(1) : x.toFixed(2);
-function batchThatFits(facts, cardGb) {
+function batchThatFits(facts, cardGb, k = 1) {
   const { footprintGb, activationPerSampleGb } = facts;
   if (footprintGb == null || activationPerSampleGb == null || !(activationPerSampleGb > 0)) return null;
-  const b = Math.floor((cardGb / HEADROOM2 - footprintGb) / activationPerSampleGb);
+  const b = Math.floor((cardGb / HEADROOM2 - footprintGb * k) / (activationPerSampleGb * k));
   return b >= 1 ? b : null;
 }
 function inferenceSizeFixes(facts, cardGb) {
@@ -8359,6 +8486,33 @@ function diagnoseOom(text, facts = {}) {
       ]
     );
   }
+  if (!inference && card != null && facts.predictedPeakGb != null && facts.predictedUpperGb != null && facts.predictedUpperGb * HEADROOM2 > card && !(facts.step != null && facts.step > LATE_STEP)) {
+    const k = facts.upperK ?? facts.predictedUpperGb / facts.predictedPeakGb;
+    const cov = facts.upperCoverage != null ? `${Math.round(facts.upperCoverage * 100)}% of held-out measured runs peaked at or under it` : "the conservative estimate";
+    evidence.push(`the conservative peak is ${f2(facts.predictedUpperGb)} GB (${f2(facts.predictedUpperGb * HEADROOM2)} GB with headroom): ${cov}`);
+    const fixes = [];
+    const b = batchThatFits(facts, card, k);
+    if (b != null && facts.batch != null && b < facts.batch) {
+      let micro = b;
+      while (micro > 1 && facts.batch % micro !== 0) micro--;
+      const accum = facts.batch / micro;
+      fixes.push({
+        action: `batch ${micro} with gradient accumulation of ${accum} steps`,
+        because: `${b} is the largest batch whose conservative peak fits ${f2(card)} GB with ${Math.round((HEADROOM2 - 1) * 100)}% headroom; ${micro} x ${accum} keeps the effective batch at ${facts.batch}`,
+        changesTraining: false
+      });
+    }
+    fixes.push({
+      action: "measure one step before the full run: log torch.cuda.max_memory_allocated() after the first optimizer step",
+      because: "at the edge of a card the estimate is a fit check, not a precise number; one measured step settles it",
+      changesTraining: false
+    });
+    return result(
+      "borderline",
+      `The job was borderline on this card: the predicted peak of ${f2(facts.predictedPeakGb)} GB fits ${f2(card)} GB with headroom, but the conservative peak of ${f2(facts.predictedUpperGb)} GB does not. This out-of-memory is inside the estimate's own error, not evidence of memory the model does not declare.`,
+      fixes
+    );
+  }
   if (card != null && facts.predictedPeakGb != null && facts.predictedPeakGb <= card * FITS_WITH_ROOM) {
     const late = facts.step != null && facts.step > LATE_STEP;
     return result(
@@ -8454,6 +8608,9 @@ function factsFor2(model, batch, seqLen, attention, step) {
   const act = plan.cost.activationGb;
   return {
     predictedPeakGb: plan.cost.peakGb,
+    predictedUpperGb: plan.cost.peakGbUpper,
+    upperK: plan.cost.upperBound.multiplier,
+    upperCoverage: plan.cost.upperBound.coverage,
     footprintGb: act != null ? plan.cost.peakGb - act : null,
     activationPerSampleGb: act != null && batch > 0 ? act / batch : null,
     batch,
@@ -8480,6 +8637,185 @@ function inferenceFactsFor(model, batch, promptTokens, inference, step) {
 function oomFactsForModel(model, opts = {}) {
   return opts.inference ? inferenceFactsFor(model, opts.batch ?? DEFAULT_INFERENCE_BATCH, opts.seqLen ?? null, opts.inference, opts.step ?? null) : factsFor2(model, opts.batch ?? DEFAULT_OOM_TRAIN_BATCH, opts.seqLen ?? null, opts.attention ?? "sdpa", opts.step ?? null);
 }
+
+// src/utils/configDataFit.ts
+var CLASSIFIER_ARCH = /For(Sequence|Token|Image|Audio|MultipleChoice)Classification$/;
+var posInt = (v) => {
+  const n2 = typeof v === "string" && v.trim() !== "" ? Number(v) : v;
+  return typeof n2 === "number" && Number.isInteger(n2) && n2 > 0 ? n2 : null;
+};
+function inputContractOf(model, config) {
+  const comps = model.components ?? [];
+  const first = (t) => comps.find((c) => c.type === t);
+  const source = {};
+  const emb = first("embedding");
+  const vocabSize = posInt(emb?.params?.vocabSize);
+  if (vocabSize != null) source.vocabSize = "the token embedding";
+  const patch = first("patchEmbed");
+  const learned = first("learnedPositionalEmbedding");
+  let maxPositions = null;
+  let positionKind = null;
+  if (!patch) {
+    if (learned && posInt(learned.params?.maxLen) != null) {
+      maxPositions = posInt(learned.params?.maxLen);
+      positionKind = "learned";
+      source.maxPositions = "the learned position table";
+    } else if (posInt(emb?.params?.maxSeqLen) != null) {
+      maxPositions = posInt(emb?.params?.maxSeqLen);
+      positionKind = comps.some((c) => c.type === "rope") ? "rotary" : "declared";
+      source.maxPositions = positionKind === "rotary" ? "max_position_embeddings (rotary)" : "the declared maximum length";
+    }
+  }
+  let imageSize = null;
+  let channels = null;
+  if (patch) {
+    imageSize = posInt(patch.params?.imgSize);
+    channels = posInt(patch.params?.inChans);
+    if (imageSize != null) source.imageSize = "the patch embedding";
+    if (channels != null) source.channels = "the patch embedding";
+  } else if (!emb) {
+    const shape = first("input")?.params?.shape ?? null;
+    if (Array.isArray(shape) && shape.length === 3 && shape.every((x) => posInt(x) != null)) {
+      channels = shape[0];
+      source.channels = "the input shape";
+    }
+  }
+  let numLabels = null;
+  const archs = Array.isArray(config?.architectures) ? config.architectures.map(String) : [];
+  if (archs.some((a) => CLASSIFIER_ARCH.test(a))) {
+    const id2label = config?.id2label;
+    numLabels = id2label && typeof id2label === "object" ? Object.keys(id2label).length || null : posInt(config?.num_labels);
+    if (numLabels != null) source.numLabels = `the ${archs.find((a) => CLASSIFIER_ARCH.test(a))} head`;
+  } else if (!emb) {
+    const tail = [...comps].reverse().find((c) => !["output", "softmax", "dropout", "flatten", "activation", "relu"].includes(c.type));
+    if (tail?.type === "linear" && posInt(tail.params?.outFeatures) != null) {
+      numLabels = posInt(tail.params?.outFeatures);
+      source.numLabels = "the final Linear";
+    }
+  }
+  return { vocabSize, maxPositions, positionKind, numLabels, imageSize, channels, source };
+}
+function readDataSpec(raw) {
+  if (raw == null || typeof raw !== "object") return { error: "`data` must be an object." };
+  const r = raw;
+  const fields = [
+    ["seqLen", ["seq_len", "seqLen"]],
+    ["tokenizerSize", ["tokenizer_size", "tokenizerSize", "vocab_size"]],
+    ["numClasses", ["num_classes", "numClasses", "num_labels"]],
+    ["imageSize", ["image_size", "imageSize"]],
+    ["channels", ["channels", "num_channels"]]
+  ];
+  const out = {};
+  for (const [key, names] of fields) {
+    const name = names.find((n2) => r[n2] != null);
+    if (!name) continue;
+    const v = posInt(r[name]);
+    if (v == null) return { error: `\`data.${name}\` must be a positive integer.` };
+    out[key] = v;
+  }
+  return out;
+}
+function checkDataFit(contract, data) {
+  const checked = [];
+  const skipped = [];
+  const findings = [];
+  const c = contract;
+  if (data.seqLen != null) {
+    if (c.maxPositions == null) {
+      skipped.push({ check: "sequence length", reason: c.imageSize != null ? "a vision model: its position table is checked against the image size" : "the model declares no maximum length" });
+    } else {
+      checked.push("sequence length");
+      if (data.seqLen > c.maxPositions) {
+        if (c.positionKind === "learned") {
+          findings.push({
+            rule: "seq-over-positions",
+            severity: "block",
+            title: `Sequences of ${data.seqLen} tokens are longer than the ${c.maxPositions}-row position table`,
+            detail: `Position ids past ${c.maxPositions - 1} index outside a learned table, so the first batch that long raises an IndexError (a device-side assert on GPU) after the reservation is taken.`,
+            fix: `Truncate or chunk to ${c.maxPositions} tokens, or pick a model whose context covers ${data.seqLen}.`
+          });
+        } else {
+          findings.push({
+            rule: "seq-over-context",
+            severity: "warn",
+            title: `Sequences of ${data.seqLen} tokens are past the model's ${c.maxPositions}-token context`,
+            detail: c.positionKind === "rotary" ? "Rotary positions are computed, so the job runs; quality past the trained length is not something the config can vouch for, and attention memory grows with the length." : "The config declares this as the longest input; past it, behaviour depends on the implementation.",
+            fix: c.positionKind === "rotary" ? "Set rope_scaling for the longer context, or truncate to the trained length." : `Truncate to ${c.maxPositions} tokens.`
+          });
+        }
+      }
+    }
+  }
+  if (data.tokenizerSize != null) {
+    if (c.vocabSize == null) skipped.push({ check: "tokenizer size", reason: "the model has no token embedding" });
+    else {
+      checked.push("tokenizer size");
+      if (data.tokenizerSize > c.vocabSize) {
+        findings.push({
+          rule: "tokenizer-over-vocab",
+          severity: "block",
+          title: `The tokenizer has ${data.tokenizerSize} ids and the embedding has ${c.vocabSize} rows`,
+          detail: `Any of the ${data.tokenizerSize - c.vocabSize} ids past ${c.vocabSize - 1} indexes outside the embedding. The usual cause is special tokens added to the tokenizer without resizing the model.`,
+          fix: "Call model.resize_token_embeddings(len(tokenizer)) before training, and budget for the new rows."
+        });
+      }
+    }
+  }
+  if (data.numClasses != null) {
+    if (c.numLabels == null) skipped.push({ check: "label count", reason: "no classification head is visible in the config or the graph" });
+    else {
+      checked.push("label count");
+      if (data.numClasses > c.numLabels) {
+        findings.push({
+          rule: "labels-over-head",
+          severity: "block",
+          title: `The data has ${data.numClasses} labels and ${c.source.numLabels ?? "the head"} emits ${c.numLabels}`,
+          detail: `A label id of ${c.numLabels} or more is out of range for the loss, which on GPU is a device-side assert with no line number.`,
+          fix: `Load with num_labels=${data.numClasses} (and ignore_mismatched_sizes=True for a pretrained head).`
+        });
+      } else if (data.numClasses < c.numLabels) {
+        findings.push({
+          rule: "labels-under-head",
+          severity: "warn",
+          title: `The data has ${data.numClasses} labels and the head emits ${c.numLabels}`,
+          detail: "It runs; the extra outputs are never a target, which is usually a head left over from a different task.",
+          fix: `Load with num_labels=${data.numClasses} if the head is meant for this data.`
+        });
+      }
+    }
+  }
+  if (data.imageSize != null) {
+    if (c.imageSize == null) skipped.push({ check: "image size", reason: "the model has no fixed image size (no patch position table)" });
+    else {
+      checked.push("image size");
+      if (data.imageSize !== c.imageSize) {
+        findings.push({
+          rule: "image-size-mismatch",
+          severity: "block",
+          title: `Images are ${data.imageSize}px and the position table was built for ${c.imageSize}px`,
+          detail: "The patch count no longer matches the learned position table, so the forward pass raises on the first batch.",
+          fix: `Resize to ${c.imageSize}px, or pass interpolate_pos_encoding=True where the model supports it.`
+        });
+      }
+    }
+  }
+  if (data.channels != null) {
+    if (c.channels == null) skipped.push({ check: "channels", reason: "the model states no input channels" });
+    else {
+      checked.push("channels");
+      if (data.channels !== c.channels) {
+        findings.push({
+          rule: "channels-mismatch",
+          severity: "block",
+          title: `Images have ${data.channels} channel${data.channels === 1 ? "" : "s"} and the first layer expects ${c.channels}`,
+          detail: "The first convolution or patch projection has a fixed input-channel count; a mismatch raises on the first batch.",
+          fix: data.channels === 1 && c.channels === 3 ? "Repeat the grey channel to three in the transform." : `Convert the images to ${c.channels} channels.`
+        });
+      }
+    }
+  }
+  return { checked, skipped, findings, contract };
+}
 export {
   ACTIVATION_K,
   ATTENTION_K,
@@ -8494,28 +8830,38 @@ export {
   INFERENCE_NOT_COUNTED,
   INTERNAL_K,
   MEMORY_CALIBRATION,
+  MIG_PROFILES,
+  MIG_SOURCE,
   OPTIMIZER_K,
   OUTPUT_K,
   RECURRENT_K,
+  SHAREABLE_NOTE,
   TRANSIENT_K,
+  UPPER_COVERAGE,
+  UPPER_FLOOR_GB,
+  UPPER_K,
   activationGbFor,
   adapterParamsFor,
   attentionPhrase,
   attentionScoresGbFor,
+  borderlineSentence,
   buildPlan,
   calibrationSentence,
   changeGateSentence,
   checkComfyWorkflow,
   checkConfigEdit,
+  checkDataFit,
   checkGraphEdit,
   checkLoraTargets,
   deviceMapFor,
   diagnoseOom,
   factsFor2 as factsFor,
+  fitVerdict,
   fmtParamCount,
   historySentence,
   inferenceFactsFor,
   inferencePeakFor,
+  inputContractOf,
   layerMemoryTerms,
   looksLikeHFConfig,
   loraTargetsFor,
@@ -8526,6 +8872,7 @@ export {
   parseOomMessage,
   peakInputsOf,
   readAttention,
+  readDataSpec,
   readGraph,
   readPolicy,
   readSeqLen,
@@ -8534,9 +8881,15 @@ export {
   renderOomText,
   renderPlanMarkdown,
   renderPlanText,
+  shareLine,
+  shareableFor,
   smallestCardFor,
+  smallestSafeCardFor,
   storesScoresUnder,
   tokenSeqLenOf,
   trainingPeakFor,
+  upperBoundPhrase,
+  upperPeakGb,
+  verdictWord,
   withSeqLen
 };

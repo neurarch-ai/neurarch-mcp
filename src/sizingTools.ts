@@ -18,6 +18,7 @@ import { sizeJob, type Attention } from './lib/sizeJob.js';
 import { loadHFModel } from './sources.js';
 import { MEMORY_CALIBRATION as CAL } from './vendor/plan.bundle.mjs';
 import { ACCELERATE_FLAGGED_AT_MOST } from './lib/sizeJob.js';
+import { DATA_SCHEMA, parseDataArg, hfConfigOf, dataFitFor, dataBlockSentence } from './lib/dataFit.js';
 
 export const sizeTrainingJobTool: ToolDef = {
   name: 'size_training_job',
@@ -28,6 +29,12 @@ export const sizeTrainingJobTool: ToolDef = {
     + 'holds it; the largest batch each card (T4, L4, A10G, L40S, A100-40, A100-80, H100-80) holds; a two-card split when '
     + 'one card does not; what one run costs on the requested card or the cheapest that fits; and a one-line verdict such '
     + 'as "fits an A100-40 with 22% headroom" or "will not fit an A100-40: needs ~76 GB with headroom, use A100-80 or batch <= 15". '
+    + 'Every card also gets a three-way gpuVerdict (fits / borderline / does_not_fit) against a conservative upper bound '
+    + '(the estimate x 1.43, at or above the measured peak on 95% of held-out runs): borderline means measure one step before '
+    + 'reserving, and smallestSafeGpu is the cheapest card that holds the upper bound. Pass data (seq_len, tokenizer_size, '
+    + 'num_classes, image_size, channels) to also check that the data fits what the model accepts: a sequence past a learned '
+    + 'position table, a tokenizer larger than the embedding or a label past the classifier head crashes on the first batch, '
+    + 'after the reservation; for an hf: model the label count comes from the config\'s classification head. '
     + 'It also says whether the graph forward-passes, and returns the structural fingerprint to pass to `history` for '
     + 'what this structure measured the last time it ran. The number is a calibrated estimate of the training peak under '
     + `AdamW with bf16 autocast, not a measurement: fitted on ${CAL.fittedRuns} measured runs across ${CAL.architectures} architectures; held out, the median error is ${CAL.heldOutMedianPct}% `
@@ -50,12 +57,13 @@ export const sizeTrainingJobTool: ToolDef = {
       hf_id: { type: 'string', description: 'Hugging Face org/name to size instead. Needs --hf.' },
       epochs: { type: 'integer', minimum: 1, description: 'To price. Default 10.' },
       samples: { type: 'integer', minimum: 1, description: 'Per epoch, to price (default 50,000).' },
+      data: DATA_SCHEMA,
     },
     required: ['batch_size'],
     additionalProperties: false,
   },
   handler: async (
-    args: { batch_size: number; gpu?: string; seq_len?: number; attention?: Attention; hf_id?: string; epochs?: number; samples?: number },
+    args: { batch_size: number; gpu?: string; seq_len?: number; attention?: Attention; hf_id?: string; epochs?: number; samples?: number; data?: unknown },
     model: ModelArchitecture | undefined,
   ) => {
     if (!Number.isInteger(args.batch_size) || args.batch_size < 1) {
@@ -64,14 +72,18 @@ export const sizeTrainingJobTool: ToolDef = {
     if (args.attention && !['sdpa', 'flash', 'eager'].includes(args.attention)) {
       throw new Error(`size_training_job: attention "${args.attention}" is not one of sdpa, flash, eager.`);
     }
+    // Refused before any work, so a typo in the data never hides behind a sizing answer.
+    const dataSpec = args.data != null ? parseDataArg('size_training_job', args.data) : null;
     let subject = model;
     let publishedParams: number | undefined;
     let source = 'model';
+    let hfConfig: Record<string, unknown> | null | undefined;
     if (args.hf_id) {
       const id = args.hf_id.replace(/^hf:/i, '').trim();
       const loaded = await loadHFModel(id);
       subject = loaded.model;
       publishedParams = loaded.realParamCount;
+      hfConfig = loaded.config ?? null;
       source = `hf:${id} (${loaded.configSource === 'fallback' ? 'a family template, not the real config' : 'config.json'})`;
     }
     if (!subject) {
@@ -88,8 +100,20 @@ export const sizeTrainingJobTool: ToolDef = {
       epochs: args.epochs,
       samples: args.samples,
     });
+    // The data check, as the CLI runs it: seq_len is the length the peak is
+    // sized at, so it is checked against the position scheme whenever it is
+    // given; data.seq_len, when stated, is the data's own and wins.
+    let dataFit: ReturnType<typeof dataFitFor> | undefined;
+    if (dataSpec || args.seq_len != null) {
+      const spec = { ...(args.seq_len != null ? { seqLen: args.seq_len } : {}), ...(dataSpec ?? {}) };
+      if (hfConfig === undefined) hfConfig = await hfConfigOf(subject);
+      dataFit = dataFitFor(subject, spec, hfConfig);
+    }
+    const blocked = dataFit ? dataBlockSentence(dataFit) : null;
     return {
       ...result,
+      ...(blocked ? { verdict: `${blocked}; memory: ${result.verdict}` } : {}),
+      ...(dataFit ? { dataFit } : {}),
       source,
       ...(publishedParams ? { publishedParams } : {}),
     };
