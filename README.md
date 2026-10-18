@@ -17,17 +17,21 @@ Call `size_training_job` before a job launches and the agent learns, for the mod
 
 **Before launch.** The job does not fit the card it was about to take, so the agent sizes it again at the batch the tool named:
 
-![size_training_job refusing batch 32 on a T4, then confirming batch 21 fits](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/size-training-job.gif)
+![size_training_job refusing batch 32 on a T4, then confirming batch 12 fits](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/size-training-job.gif)
 
 **After a CUDA out-of-memory error.** The message is read against the same estimate, and the cause comes back with the fix that leaves training unchanged listed first:
 
-![diagnose_oom naming too-big-for-card and batch 16 with 2 accumulation steps](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/diagnose-oom.gif)
+![diagnose_oom naming too-big-for-card and batch 8 with 4 accumulation steps](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/diagnose-oom.gif)
 
 **Whether it forward-passes.** The shipped [`examples/tiny-vit.py`](./examples/tiny-vit.py) builds an attention layer its head count does not divide:
 
 ![lint_model blocking embed dim 258 with 8 heads in examples/tiny-vit.py](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/lint-model.gif)
 
-<sub>Every number in these recordings is copied from the 0.17.0 tools' output on [`phi3-mini`](./src/test/templates/phi3-mini.neurarch.json) and [`tiny-vit.py`](./examples/tiny-vit.py); the model's closing sentences are scripted.</sub>
+**Without the agent asking.** [`neurarch-mcp hook`](#a-claude-code-hook-refuse-the-launch-that-will-not-fit) sizes a `python train.py` launch before the Bash call runs and blocks the one that will not fit:
+
+![the PreToolUse hook blocking batch 32 on a T4 and letting batch 12 through](https://raw.githubusercontent.com/neurarch-ai/neurarch-mcp/main/docs/hook.gif)
+
+<sub>Every number in these recordings is copied from the 0.17.1 tools' output on [`phi3-mini`](./src/test/templates/phi3-mini.neurarch.json) and [`tiny-vit.py`](./examples/tiny-vit.py); the model's closing sentences are scripted.</sub>
 
 The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.2 x 16 bytes per parameter, plus, per sample in bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager attention only; SDPA and flash keep none), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate states and 2.02 x the largest single tensor. Fitted on 178 measured runs across 41 architectures, out-of-memory runs included. Held out one architecture at a time, the median error is 7% above 1 GB and it flagged 113 of the 131 times a run did not fit a 16, 24, 40 or 80 GB card, where `accelerate estimate-memory` flagged at most 8. On 25 runs measured after the fit, at the edge of a 24 GB card, the median miss is 14%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html).
 

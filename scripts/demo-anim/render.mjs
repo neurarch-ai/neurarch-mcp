@@ -69,7 +69,7 @@ function render(name) {
     writeFileSync(join(dir, 'list.txt'), list.join('\n') + '\n');
     const out = join(DOCS, `${name}.gif`);
     execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'concat', '-i', 'list.txt', '-vf',
-      'fps=15,split[a][b];[a]palettegen=max_colors=48:stats_mode=diff[p];[b][p]paletteuse=dither=none:diff_mode=rectangle',
+      'fps=15,split[a][b];[a]palettegen=max_colors=64:reserve_transparent=0:stats_mode=full[p];[b][p]paletteuse=dither=none:diff_mode=rectangle',
       '-loop', '0', out], { cwd: dir, stdio: 'inherit' });
     console.log(`${out}: ${i} frames, ${W}x${H}, ${(statSync(out).size / 1024).toFixed(0)} KB`);
   } finally {
