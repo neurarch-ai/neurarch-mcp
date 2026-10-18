@@ -6,6 +6,46 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.17.3] - 2026-10-18
+
+### Added
+- **`size_training_job` answers fits / borderline / does not fit per card.** The
+  vendored plan bundle now carries neurarch-ai/neurarch #312's conservative
+  peak: the estimate x 1.43, at or above the measured peak on 95% of 91
+  held-out runs. Every card gets the plan's own `fitVerdict` on this job's peak
+  (`gpuVerdict`), `upperBound` says what the bound was read from, and
+  `smallestSafeGpu` is the cheapest card that holds it with 1.15x headroom,
+  beside `smallestFitGpu` (the point estimate) and `maxBatchSafe` beside
+  `maxBatch`. A card that holds only the point estimate is `borderline`: the
+  verdict line says so in the CLI's words ("measure once (one step at this
+  batch) before reserving") and names the card that holds the upper bound. An
+  N-card request reports the bound for the DDP or sharded reading that decided
+  it. `fits` is unchanged (point estimate x 1.15).
+- **Data fit, on `size_training_job` and `check_design`.** An optional `data`
+  argument (`seq_len`, `tokenizer_size`, `num_classes`, `image_size`,
+  `channels`) returns `dataFit`: the checks that ran, the ones skipped and why,
+  and findings for a sequence past a learned position table, a tokenizer
+  larger than the embedding, labels past the classification head, and an image
+  size or channel count the first layer was not built for. These are the
+  bundle's own `inputContractOf` / `checkDataFit` (neurarch-ai/neurarch #314),
+  the functions behind `npx neurarch <id> --seq-len ... --tokenizer-size ...`
+  and the `data` field of `POST /api/v1/check`. For an `hf:` model the label
+  count comes from the config's classification head (`architectures` +
+  `id2label`), as the CLI's `dataFitHFModel` reads it; `check_design` takes a
+  `config` object for any other graph. As with the CLI's `--seq-len`,
+  `size_training_job`'s `seq_len` is checked against the position scheme
+  whenever it is given, and a blocking finding leads the verdict line.
+
+### Changed
+- The Hugging Face config cache keeps the `config.json` a graph was built
+  from, which is where the label count comes from. An entry written before
+  0.17.3 is still served offline as it is; its label check reports itself
+  skipped.
+- Vendored `plan.bundle.mjs` rebuilt from neurarch-ai/neurarch 0a440c73
+  (`engine` and `verifier` bundles unchanged).
+- The `check_design` property descriptions were shortened to keep the tool
+  listing inside its token budget.
+
 ## [0.17.2] - 2026-10-17
 
 ### Changed

@@ -33,7 +33,12 @@ describe('vendored plan contract', () => {
     expect(plan.FIT_HEADROOM).toBe(1.15);
     expect(plan.MEMORY_CALIBRATION).toEqual({
       fittedRuns: 178, architectures: 41, heldOutMedianPct: 7, flagged: 113, noFit: 131, afterFitRuns: 25, afterFitMedianPct: 14,
+      upperK90: 1.17, upperK95: 1.43, upperRuns: 91,
     });
+    for (const fn of ['upperPeakGb', 'fitVerdict', 'smallestSafeCardFor', 'inputContractOf', 'readDataSpec', 'checkDataFit'] as const) {
+      expect(typeof plan[fn], fn).toBe('function');
+    }
+    expect([plan.UPPER_K, plan.UPPER_COVERAGE, plan.UPPER_FLOOR_GB]).toEqual([1.43, 0.95, 1]);
     for (const fn of ['checkGraphEdit', 'checkConfigEdit', 'checkLoraTargets', 'looksLikeHFConfig', 'loraTargetsFor'] as const) {
       expect(typeof plan[fn], fn).toBe('function');
     }

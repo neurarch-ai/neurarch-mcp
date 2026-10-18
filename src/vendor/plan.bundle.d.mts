@@ -59,6 +59,15 @@ export interface ModelPlan {
     /** Tokens per sample a token model was sized at, or null for a non-token input. */
     seqLen: number | null;
     assumptions: string;
+    /** The conservative peak: peakGb x upperBound.multiplier, at least 1 GB; 0 with nothing to size (neurarch #312). */
+    peakGbUpper: number;
+    upperBound: UpperBound;
+    /** Three answers per card: the upper bound fits, only the point estimate does, or neither. */
+    gpuVerdict: { T4: FitVerdict | null; A100_40: FitVerdict | null; H100_80: FitVerdict | null };
+    /** The cheapest listed card whose verdict is `fits`. */
+    smallestSafeGpu: string | null;
+    /** The largest batch the upper bound fits with headroom. */
+    maxBatchSafe: { T4: number | null; A100_40: number | null; H100_80: number | null };
   };
   /** Edits that load, run and are wrong, read against the base graph and/or the base config.json. */
   edit: { checked: Array<'graph' | 'config'>; findings: EditFinding[] } | null;
@@ -66,6 +75,10 @@ export interface ModelPlan {
 }
 
 export type PlanAttention = 'sdpa' | 'flash' | 'eager';
+
+/** `fits`: the upper bound with 1.15x headroom fits. `borderline`: it does not, the point estimate is inside the card. */
+export type FitVerdict = 'fits' | 'borderline' | 'does_not_fit';
+export interface UpperBound { multiplier: number; coverage: number; runs: number; multiplier90: number }
 
 export interface BuildPlanOptions {
   base?: unknown;
@@ -126,11 +139,62 @@ export const MEMORY_CALIBRATION: {
   readonly noFit: number;
   readonly afterFitRuns: number;
   readonly afterFitMedianPct: number;
+  /** Held-out measured / predicted peak at the 90th and 95th percentile (neurarch #312). */
+  readonly upperK90: number;
+  readonly upperK95: number;
+  /** Held-out runs of 1 GB or more the two multipliers were read from. */
+  readonly upperRuns: number;
 };
 /** The fit in one sentence, written from MEMORY_CALIBRATION. */
 export function calibrationSentence(): string;
 /** The cheapest listed card a training peak fits with headroom, by the plan's own fit rule. */
 export function smallestCardFor(peakGb: number, params: number): string | null;
+
+// ── the conservative peak and the three-way verdict (neurarch #312) ─────────
+/** The multiplier the upper bound ships with (MEMORY_CALIBRATION.upperK95), and the held-out share it covers. */
+export const UPPER_K: number;
+export const UPPER_COVERAGE: number;
+/** The upper bound of any job with parameters is at least this many GB. */
+export const UPPER_FLOOR_GB: number;
+/** peakGb x UPPER_K, never under UPPER_FLOOR_GB; 0 when there is nothing to size. */
+export function upperPeakGb(peakGb: number): number;
+/** fits / borderline / does_not_fit for one card of `gb`; null when params <= 0. */
+export function fitVerdict(peakGb: number, params: number, gb: number): FitVerdict | null;
+/** The cheapest listed card whose verdict is `fits`. */
+export function smallestSafeCardFor(peakGb: number, params: number): string | null;
+
+// ── does the data fit what the config accepts (neurarch #314) ───────────────
+// The app's src/utils/configDataFit.ts. Pure: it reads no dataset, only what
+// the caller states, and lists which checks ran.
+
+export interface ModelInputContract {
+  vocabSize: number | null;
+  maxPositions: number | null;
+  positionKind: 'learned' | 'rotary' | 'declared' | null;
+  numLabels: number | null;
+  imageSize: number | null;
+  channels: number | null;
+  source: Partial<Record<'vocabSize' | 'maxPositions' | 'numLabels' | 'imageSize' | 'channels', string>>;
+}
+export interface DataSpec { seqLen?: number; tokenizerSize?: number; numClasses?: number; imageSize?: number; channels?: number }
+export interface DataFitFinding {
+  rule: 'seq-over-positions' | 'seq-over-context' | 'tokenizer-over-vocab' | 'labels-over-head' | 'labels-under-head' | 'image-size-mismatch' | 'channels-mismatch';
+  severity: 'block' | 'warn';
+  title: string;
+  detail: string;
+  fix: string;
+}
+export interface DataFitReport {
+  checked: string[];
+  skipped: Array<{ check: string; reason: string }>;
+  findings: DataFitFinding[];
+  contract: ModelInputContract;
+}
+/** What the model accepts; the label count only from a config whose `architectures` names a classification head. */
+export function inputContractOf(model: unknown, config?: Record<string, unknown> | null): ModelInputContract;
+/** Reads `{ seq_len, tokenizer_size, num_classes, image_size, channels }` (snake or camel case); a present field that is not a positive integer is an error. */
+export function readDataSpec(raw: unknown): DataSpec | { error: string };
+export function checkDataFit(contract: ModelInputContract, data: DataSpec): DataFitReport;
 
 // ── edits that load, run and are wrong (check_edit) ─────────────────────────
 // The app's src/utils/editChecks.ts (neurarch-ai/neurarch), bundled through

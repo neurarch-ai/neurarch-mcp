@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "neurarch-mcp",
   "display_name": "Neurarch",
-  "version": "0.17.2",
+  "version": "0.17.3",
   "description": "Before a training job takes a GPU: peak memory at its batch, the smallest card, max batch per card, the cost, and whether it forward-passes.",
   "long_description": "Call size_training_job before a training job launches and the agent learns what it actually needs: the training peak at its batch (weights and optimizer state, activations, stored attention scores), the smallest card that holds it, the largest batch each card holds, a two-card split when one card does not, and what one run costs. The number is a calibrated estimate under AdamW with bf16 autocast, fitted on 178 measured runs across 41 architectures; held out, the median error is 7% and it flagged 113 of the 131 times a run did not fit a card where accelerate estimate-memory flagged at most 8; on 25 runs measured after the fit the median miss is 14%. Then whether it forward-passes: the design linter (lint_model) and the full readiness verdict (check_design), plus layers, parameters, FLOPs, 81 bundled reference architectures and runnable PyTorch export. All of that runs on your machine. Two tools reach the network when called: plan renders the same card the Neurarch CI bot posts, and history says what this exact structure measured the last time it trained inside your organisation.",
   "author": {
@@ -49,7 +49,7 @@
   "tools": [
     {
       "name": "size_training_job",
-      "description": "Call before launching a training job: peak memory at your batch, smallest card that fits, max batch per card, two-card split, one run's cost. Calibrated fit check."
+      "description": "Call before launching a training job: peak memory at your batch, fits / borderline / does not fit per card against an upper bound, the smallest card that holds it, max batch, two-card split, one run's cost, and whether the data fits the model."
     },
     {
       "name": "diagnose_oom",

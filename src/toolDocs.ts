@@ -11,7 +11,7 @@
  * from "always in context" to "one read away".
  */
 export const SHORT: Record<string, string> = {
-  size_training_job: 'Call BEFORE launching any training job: peak memory at your batch, smallest card that fits, max batch per card, two-card split, run cost. Calibrated fit check. Offline.',
+  size_training_job: 'Call BEFORE any training launch: peak memory at your batch, per-card fits/borderline/no, smallest safe card, max batch, two-card split, cost; data: does it fit the model. Offline.',
   check_edit: 'Call after editing a model\'s config or architecture, before training: silent edit bugs (vocab resize, tying, heads, RoPE, LoRA targets) and the memory delta. Offline.',
   diagnose_oom: 'Call after a CUDA out-of-memory error, before changing batch size: the one cause (too big, fragmented, another process, undeclared memory) and fixes, least invasive first. Offline.',
   plan: 'The card the CI bot posts: memory, GPU fit, cost, whether it runs, your .neurarch.yml rules, last run here. Sends the graph to /api/v1/plan.',
@@ -30,7 +30,7 @@ export const SHORT: Record<string, string> = {
   diff_models: 'Structural diff against another .neurarch.json: layers added, removed, modified; connection changes.',
   validate_model: 'Is this a well-formed graph: cycles, dangling refs, duplicate ids or names, orphans. First rung of the ladder.',
   lint_model: 'The structural design rules (head-dim and GQA divisibility, norm/activation order, dropout ranges, missing residuals) with provenance for the measured ones. Second rung. Offline.',
-  check_design: 'The full verdict: will it train, cost, where it can run, decisions still the human\'s. Third rung. Offline. verbose:true adds stage data.',
+  check_design: 'The full verdict: will it train, cost, where it can run, decisions still the human\'s. Third rung. Offline. data: does it fit the model.',
   find_path: 'Shortest directed path between two layers, or null.',
   list_connections: 'The edge list, optionally filtered by from/to.',
   list_hyperparams: 'Model-level hyperparameters the user set in the app.',
