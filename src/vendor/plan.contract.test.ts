@@ -51,6 +51,15 @@ describe('vendored plan contract', () => {
       expect(typeof plan[fn], fn).toBe('function');
     }
     expect([plan.DEFAULT_OOM_TRAIN_BATCH, plan.DEFAULT_GEN_TOKENS, plan.DEFAULT_INFERENCE_BATCH]).toEqual([32, 256, 1]);
+    for (const fn of ['readLayout', 'readHistogram', 'checkParallelLayout', 'renderLayoutText', 'readServeSpec', 'parseServeCommand', 'checkServeConfig', 'renderServeText'] as const) {
+      expect(typeof plan[fn], fn).toBe('function');
+    }
+    // The sentences check_parallel_layout and check_serving_config return as `basis`:
+    // a stale bundle (before neurarch #325's bandwidth term) says FLOPs only.
+    expect(plan.LAYOUT_BASIS).toMatch(/^Derived from the graph, not measured\./);
+    expect(plan.LAYOUT_BASIS).toMatch(/80% of its memory bandwidth/);
+    expect(plan.SERVE_BASIS).toMatch(/^Derived from config\.json, the engine flags and the card, not measured\./);
+    expect(Array.isArray(plan.QUANT_SUPPORT)).toBe(true);
   });
 
   it('needs nothing from the outside world', async () => {

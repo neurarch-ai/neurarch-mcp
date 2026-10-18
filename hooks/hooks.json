@@ -1,5 +1,5 @@
 {
-  "description": "Before each Bash call, neurarch-mcp hook sizes a training launch (python train.py, accelerate launch, torchrun, deepspeed, sky launch) and exits 2 with the reason when the job will not fit the card it names. Every other command runs untouched.",
+  "description": "Before each Bash call, neurarch-mcp hook sizes a training launch (python train.py, accelerate launch, torchrun, deepspeed, sky launch) and exits 2 with the reason when the job will not fit the card it names, and pre-checks a vLLM or SGLang launch (vllm serve, python -m sglang.launch_server) against the model's config.json, exiting 2 on a blocking finding. Every other command runs untouched.",
   "hooks": {
     "PreToolUse": [
       {

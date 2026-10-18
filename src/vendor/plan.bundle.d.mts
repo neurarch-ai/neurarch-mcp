@@ -311,3 +311,165 @@ export function oomFactsForModel(model: unknown, opts?: OomJobOptions): JobFacts
 export const DEFAULT_OOM_TRAIN_BATCH: number;
 export const DEFAULT_GEN_TOKENS: number;
 export const DEFAULT_INFERENCE_BATCH: number;
+
+// ── the parallel layout check (check_parallel_layout) ───────────────────────
+// The app's src/utils/parallelLayout.ts (neurarch-ai/neurarch #319, #323,
+// #325), the code behind `npx neurarch layout` and the `layout` field of
+// POST /api/v1/check. Every time and balance number in it is predicted from
+// the graph, never measured; `LAYOUT_BASIS` is the sentence that says so.
+
+export interface ParallelLayout {
+  tp: number;
+  pp: number;
+  dp: number;
+  cp?: number;
+  ep?: number;
+  numGpus?: number;
+  gpu?: string;
+  microBatch: number;
+  globalBatch?: number;
+  gradAccum?: number;
+  seqLen: number;
+  schedule?: '1f1b' | 'interleaved';
+  virtualStages?: number;
+  layersPerStage?: number[];
+  zeroStage?: 0 | 1 | 2 | 3;
+  fsdp?: boolean;
+  activationCheckpointing?: boolean;
+  seqLenHistogram?: Array<{ len: number; count: number }>;
+  fusedCrossEntropy?: boolean;
+}
+
+export interface LayoutFinding { rule: string; severity: 'block' | 'warn' | 'info'; title: string; detail: string; fix: string }
+
+export interface LayoutStage {
+  index: number;
+  layers: { first: number | null; last: number | null; count: number; extras: string[] };
+  params: number;
+  flopsPerToken: number;
+  estMsPerMicrobatch: number | null;
+  msBreakdown: { matmul: number; memoryBound: number } | null;
+  activationGbPerMicrobatch: number;
+  lossLogitsGb: number;
+  inFlightMicrobatches: number;
+  stateGbPerGpu: number;
+  peakGbPerGpu: number;
+  peakGbUpperPerGpu: number;
+  fitsGpu: FitVerdict | null;
+  [key: string]: unknown;
+}
+
+export interface LayoutReport {
+  checked: string[];
+  skipped: Array<{ check: string; reason: string }>;
+  findings: LayoutFinding[];
+  resolved: {
+    gpu: string | null;
+    gpuMemoryGb: number | null;
+    worldSize: number;
+    microbatchesPerStep: number | null;
+    globalBatch: number | null;
+    blocks: number;
+    layersPerStage: number[] | null;
+    schedule: '1f1b' | 'interleaved';
+    virtualStages: number;
+    zeroStage: 0 | 1 | 2 | 3;
+  };
+  stages: LayoutStage[];
+  imbalance: {
+    costBasis: 'time' | 'flops';
+    maxOverMean: number;
+    slowestStage: number;
+    /** Fraction: 0.21 is 21% slower per step than a perfectly balanced split. */
+    estStepSlowdown: number;
+    asymptoticSlowdown: number;
+    step: { microbatches: number | null; formula: string; currentMs: number | null; balancedMs: number | null };
+    rebalanced: { layersPerStage: number[]; maxOverMean: number; estStepSpeedup: number; asymptoticSpeedup: number; stepMs: number | null } | null;
+  } | null;
+  bubble: { fraction: number; microbatches: number; microbatchesForTarget: number | null } | null;
+  dpSeqImbalance?: { expectedMaxOverMean: number; estSlowdown: number; packedEstimate: number; method: 'monte-carlo' | 'normal-approximation' };
+  recommendations: string[];
+  basis: string;
+}
+
+/** A layout from snake_case or camelCase keys, or an error sentence naming the key. */
+export function readLayout(raw: unknown): ParallelLayout | { error: string };
+export function readHistogram(raw: unknown): { histogram: Array<{ len: number; count: number }> } | { error: string };
+export function checkParallelLayout(model: unknown, layout: ParallelLayout): LayoutReport;
+export function renderLayoutText(r: LayoutReport, name?: string): string;
+export const LAYOUT_BASIS: string;
+
+// ── the serving config pre-check (check_serving_config) ─────────────────────
+// The app's src/utils/serveConfigCheck.ts (neurarch-ai/neurarch #322), the
+// code behind `npx neurarch serve-check` and the `serve` field of
+// POST /api/v1/check.
+
+export type ServeEngine = 'vllm' | 'sglang' | 'llamacpp';
+/** Engine flags normalised across the three engines. Only the keys this server reads are named. */
+export interface ServeArgs { model?: string; tp?: number; pp?: number; dp?: number; maxModelLen?: number; maxNumSeqs?: number; [key: string]: unknown }
+export interface SamplerSettings { temperature?: number; top_p?: number; top_k?: number; repetition_penalty?: number }
+
+export interface ServeModelSide {
+  model: unknown;
+  config?: Record<string, unknown> | null;
+  tokenizerConfig?: Record<string, unknown> | null;
+  chatTemplateFile?: string | null;
+  generationConfig?: Record<string, unknown> | null;
+  modelId?: string;
+}
+export interface ServeInput extends ServeModelSide {
+  engine: ServeEngine;
+  args: ServeArgs;
+  gpu?: string;
+  gpus?: number;
+  sampler?: SamplerSettings;
+  against?: ServeModelSide;
+}
+
+export interface ServeFinding {
+  rule: string;
+  area: 'parallel' | 'context' | 'memory' | 'quant' | 'template' | 'sampler' | 'change';
+  severity: 'block' | 'warn' | 'info';
+  title: string;
+  detail: string;
+  fix: string;
+  source?: string;
+}
+export interface ServeMemory {
+  weightsBasis: string;
+  weightsGbTotal: number;
+  weightsGbPerGpu: number;
+  budgetGbPerGpu: number;
+  kvBytesPerTokenPerGpu: number;
+  stateBytesPerSequencePerGpu: number;
+  kvGbPerSequencePerGpu: number;
+  kvCapacityGbPerGpu: number;
+  tokenCapacity: number;
+  maxConcurrentFullLength: number;
+  notCounted: string[];
+}
+export interface ServeReport {
+  engine: ServeEngine;
+  resolved: {
+    gpu: string | null; gpuMemoryGb: number | null; sm: number | null; gpus: number; tp: number; pp: number; dp: number;
+    expertParallel: boolean; dtype: string; quant: string | null; kvCacheDtype: string; servedLen: number | null;
+    servedLenSource: string; derivedMaxLen: number | null; memFraction: number | null; maxNumSeqs: number | null;
+  };
+  checked: string[];
+  skipped: Array<{ check: string; reason: string }>;
+  findings: ServeFinding[];
+  memory: ServeMemory | null;
+  change: { against: string; changed: Array<{ key: string; from: unknown; to: unknown; effect: string }>; numbers: Array<{ what: string; from: string; to: string }> } | null;
+  basis: string;
+}
+
+export function parseServeCommand(cmd: string | string[], engineHint?: ServeEngine): { engine: ServeEngine | null; args: ServeArgs; ignored: string[] };
+/** `{ engine?, command?, args?, gpu?, gpus?, sampler?, tokenizer_config?, chat_template?, generation_config?, model_id? }`, or an error sentence. */
+export function readServeSpec(raw: unknown): {
+  engine: ServeEngine; args: ServeArgs; ignored: string[]; gpu?: string; gpus?: number; sampler?: SamplerSettings;
+  tokenizerConfig?: Record<string, unknown> | null; chatTemplateFile?: string | null; generationConfig?: Record<string, unknown> | null; modelId?: string;
+} | { error: string };
+export function checkServeConfig(input: ServeInput): ServeReport;
+export function renderServeText(r: ServeReport, name?: string): string;
+export const SERVE_BASIS: string;
+export const QUANT_SUPPORT: Array<Record<string, unknown>>;

@@ -6,7 +6,62 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-18
+
 ### Added
+- **`check_parallel_layout`: is this multi-GPU split legal, balanced and worth
+  running, before it takes a reservation.** Inputs: `micro_batch`, `seq_len`,
+  and optionally `tp`, `pp`, `dp`, `cp`, `ep`, `global_batch` or `grad_accum`,
+  `gpu`, `schedule` (`1f1b` / `interleaved`) with `virtual_stages`,
+  `layers_per_stage`, `zero_stage`, `activation_checkpointing` and a
+  `seq_len_histogram`. Returns `legal`, the findings (TP against heads, KV
+  heads, hidden and FFN width; EP against experts; world size; batch
+  arithmetic; stage memory), a per-stage table, and a `predicted` block: the
+  step slowdown against a balanced split through the 1F1B formula
+  `m x slowest + (sum - slowest) / v` at the layout's own microbatch count, the
+  slowest stage, the contiguous split that minimises it, the bubble, and with a
+  histogram the DP sequence imbalance. Every time is predicted from the graph
+  (matmul FLOPs at 40% of peak plus bandwidth-aware memory-bound bytes, fp32
+  logits on the loss stage), never measured, and the result says so. The check
+  is the app's `checkParallelLayout` (neurarch-ai/neurarch #319, #323, #325).
+- **`check_serving_config`: will this vLLM, SGLang or llama.cpp launch start,
+  hold what it was asked to hold, and serve the model as published.** Pass the
+  launch line (`command`) or parsed `args`, with `gpu`, `gpus` and optionally
+  `against` (the model it replaces). It reads `config.json`,
+  `tokenizer_config.json`, `chat_template.jinja` and `generation_config.json`
+  (from a checkpoint directory, or an `hf:` id through the existing `--hf`
+  path, each file cached for a day and served from the cache without `--hf`)
+  and returns findings on parallel legality, served length against the derived
+  context, weights plus KV memory and the concurrent full-length sequences that
+  fit (an upper bound), quantization against the card, and the chat template
+  and sampler defaults. The check is the app's `checkServeConfig`
+  (neurarch-ai/neurarch #322).
+- **The hook pre-checks vLLM and SGLang launches.** `vllm serve`,
+  `python -m vllm.entrypoints...` and `python -m sglang.launch_server` run
+  through the same `checkServeConfig`, and the hook blocks only on a `block`
+  finding read from the model's own `config.json` and the flags (the card is
+  not on a serve line, so memory and quant support never block here). A family
+  template config never blocks, `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` and
+  `SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1` clear the context finding, and
+  `NEURARCH_ALLOW_SERVE=1` lets a launch through. It still fails open.
+- Tests for both tools and the hook on the real Qwen3-8B `config.json`,
+  `tokenizer_config.json` and `generation_config.json`
+  (`src/test/hf/Qwen3-8B`, revision b968826d), served by a `fetch` stub, so the
+  `--hf` path runs end to end with no socket.
+
+### Changed
+- **The vendored plan bundle** is rebuilt from neurarch-ai/neurarch at eea7a68c,
+  adding `checkParallelLayout`, `checkServeConfig` and their readers, and the
+  data-fit fixes of #315. The engine and verifier bundles are unchanged
+  (`npm run check:mcp-vendor` reports all three in sync).
+- **Tool listing kept under its cap, not raised.** The two new tools cost ~460
+  tokens; property descriptions across the read tools were shortened, the
+  output schemas dropped `additionalProperties: true` (the JSON Schema
+  default), and four short descriptions were tightened. The core listing is
+  ~4.72k tokens (cap 4.8k) and the full one ~6.63k (cap 6.7k), both with more
+  headroom than 0.17.3 had.
+
+### Added (unreleased since 0.17.3)
 - **A Claude Code plugin.** `/plugin marketplace add neurarch-ai/neurarch-mcp`
   then `/plugin install neurarch@neurarch-ai` installs the server
   (`npx -y neurarch-mcp --hosted --hf`), the PreToolUse launch hook

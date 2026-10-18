@@ -63,9 +63,9 @@ export const diagnoseOomTool: ToolDef = {
     type: 'object',
     properties: {
       error: { type: 'string', description: 'The OOM text as printed.' },
-      hf_id: { type: 'string', description: 'Hugging Face org/name.' },
+      hf_id: { type: 'string' },
       batch: { type: 'integer', minimum: 1 },
-      seq_len: { type: 'integer', minimum: 1, description: 'Tokens per sample (the prompt, if inference).' },
+      seq_len: { type: 'integer', minimum: 1, description: 'The prompt, if inference.' },
       step: { type: 'integer', minimum: 0 },
       attention: { type: 'string', enum: ['sdpa', 'flash', 'eager'] },
       inference: { type: 'boolean', description: 'Generation, not training.' },

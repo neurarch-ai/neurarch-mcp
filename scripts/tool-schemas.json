@@ -5,16 +5,16 @@
       "batch_size": {
         "type": "integer",
         "minimum": 1,
-        "description": "Global batch size."
+        "description": "Global batch."
       },
       "gpu": {
         "type": "string",
-        "description": "\"A100-40\", \"H100\", \"8xH100\". Omit for the cheapest that fits."
+        "description": "\"A100-40\", \"8xH100\"."
       },
       "seq_len": {
         "type": "integer",
         "minimum": 1,
-        "description": "Tokens per sample (default 2048)."
+        "description": "Default 2048."
       },
       "attention": {
         "type": "string",
@@ -27,21 +27,25 @@
       },
       "hf_id": {
         "type": "string",
-        "description": "Hugging Face org/name to size instead. Needs --hf."
+        "description": "org/name. Needs --hf."
       },
       "epochs": {
         "type": "integer",
         "minimum": 1,
-        "description": "To price. Default 10."
+        "description": "Default 10."
       },
       "samples": {
         "type": "integer",
         "minimum": 1,
-        "description": "Per epoch, to price (default 50,000)."
+        "description": "Per epoch (default 50,000)."
+      },
+      "data": {
+        "type": "object",
+        "description": "seq_len, tokenizer_size, num_classes, image_size, channels"
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -57,8 +61,7 @@
         "description": "The OOM text as printed."
       },
       "hf_id": {
-        "type": "string",
-        "description": "Hugging Face org/name."
+        "type": "string"
       },
       "batch": {
         "type": "integer",
@@ -67,7 +70,7 @@
       "seq_len": {
         "type": "integer",
         "minimum": 1,
-        "description": "Tokens per sample (the prompt, if inference)."
+        "description": "The prompt, if inference."
       },
       "step": {
         "type": "integer",
@@ -92,7 +95,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -105,7 +108,7 @@
     "properties": {
       "base_model_path": {
         "type": "string",
-        "description": "Before the edit: path, zoo:<id> or hf:<org/name>."
+        "description": "The model before the edit."
       },
       "base_config": {
         "description": "config.json before: object, JSON or path."
@@ -143,7 +146,121 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
+      }
+    },
+    "additionalProperties": false
+  },
+  "check_parallel_layout": {
+    "type": "object",
+    "properties": {
+      "tp": {
+        "type": "integer"
+      },
+      "pp": {
+        "type": "integer"
+      },
+      "dp": {
+        "type": "integer"
+      },
+      "cp": {
+        "type": "integer"
+      },
+      "ep": {
+        "type": "integer"
+      },
+      "micro_batch": {
+        "type": "integer"
+      },
+      "global_batch": {
+        "type": "integer"
+      },
+      "grad_accum": {
+        "type": "integer"
+      },
+      "seq_len": {
+        "type": "integer"
+      },
+      "gpu": {
+        "type": "string"
+      },
+      "schedule": {
+        "type": "string",
+        "enum": [
+          "1f1b",
+          "interleaved"
+        ]
+      },
+      "virtual_stages": {
+        "type": "integer"
+      },
+      "layers_per_stage": {
+        "type": "array",
+        "items": {
+          "type": "integer"
+        }
+      },
+      "zero_stage": {
+        "type": "integer",
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "activation_checkpointing": {
+        "type": "boolean"
+      },
+      "seq_len_histogram": {
+        "type": [
+          "array",
+          "string"
+        ]
+      },
+      "model_path": {
+        "type": "string",
+        "description": "File, zoo:<id>, hf:<org/name>"
+      }
+    },
+    "required": [
+      "micro_batch",
+      "seq_len"
+    ],
+    "additionalProperties": false
+  },
+  "check_serving_config": {
+    "type": "object",
+    "properties": {
+      "command": {
+        "type": "string",
+        "description": "The launch line."
+      },
+      "args": {
+        "type": "object",
+        "description": "Parsed flags (camelCase)."
+      },
+      "engine": {
+        "type": "string",
+        "enum": [
+          "vllm",
+          "sglang",
+          "llamacpp"
+        ]
+      },
+      "gpu": {
+        "type": "string"
+      },
+      "gpus": {
+        "type": "integer"
+      },
+      "against": {
+        "type": "string",
+        "description": "Model it replaces."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -153,7 +270,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -163,7 +280,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -177,7 +294,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -190,31 +307,31 @@
     "properties": {
       "type": {
         "type": "string",
-        "description": "Exact type, e.g. \"conv2d\"."
+        "description": "e.g. \"conv2d\"."
       },
       "namePattern": {
         "type": "string",
-        "description": "Regex source matched against layer name."
+        "description": "Regex on name."
       },
       "scope": {
         "type": "string",
-        "description": "Scope prefix, e.g. \"encoder.layer.3\" (nested included)."
+        "description": "Prefix, e.g. \"encoder.layer.3\"."
       },
       "augmentation": {
         "type": "string",
-        "description": "Augmentation overlay, e.g. \"freeze\"."
+        "description": "e.g. \"freeze\"."
       },
       "sortByParams": {
         "type": "boolean",
-        "description": "Rank by parameter count, largest first."
+        "description": "Largest first."
       },
       "limit": {
         "type": "number",
-        "description": "Max results (default 100)."
+        "description": "Default 100."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -232,7 +349,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -249,23 +366,23 @@
         "items": {
           "type": "string"
         },
-        "description": "Layer names or ids to use as targets."
+        "description": "Names or ids."
       },
       "namePattern": {
         "type": "string",
-        "description": "Alternative to names — regex source matching layer names."
+        "description": "Regex on names, instead of names."
       },
       "maxDistance": {
         "type": "number",
-        "description": "Limit BFS depth. Omit for full reachability."
+        "description": "BFS depth limit."
       },
       "includeUpstream": {
         "type": "boolean",
-        "description": "Default true. Set false to only return downstream."
+        "description": "Default true."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -280,11 +397,11 @@
           "scope",
           "type"
         ],
-        "description": "Default \"block\" (collapsed groups). Falls back to scope when no groups exist."
+        "description": "Default \"block\" (scope when no groups)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -302,7 +419,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -312,11 +429,11 @@
     "properties": {
       "maxLayers": {
         "type": "number",
-        "description": "Truncate after N layers (default 60). Returns a note when truncated."
+        "description": "Default 60."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -326,7 +443,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -336,11 +453,11 @@
     "properties": {
       "name": {
         "type": "string",
-        "description": "Group name or id, or a scope prefix (e.g. \"encoder\" matches \"encoder.layer.0\")."
+        "description": "Group name or id, or a scope prefix."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -353,11 +470,11 @@
     "properties": {
       "path": {
         "type": "string",
-        "description": "Path to the other .neurarch.json file to compare against."
+        "description": "The other .neurarch.json."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -370,7 +487,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -385,11 +502,11 @@
           "warn",
           "info"
         ],
-        "description": "Optional minimum severity to report. Defaults to reporting everything."
+        "description": "Minimum. Default: all."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -399,15 +516,23 @@
     "properties": {
       "verbose": {
         "type": "boolean",
-        "description": "Include every stage's machine-readable data (cost breakdown, deploy targets, contract). Default false: verdict, findings, stage headlines and the decision."
+        "description": "Every stage's data."
       },
       "ask_user": {
         "type": "boolean",
-        "description": "If the verdict ends in a decision only the human can make, ask them through the client (MCP elicitation) and include their answer. Default false."
+        "description": "Ask the human (elicitation)."
+      },
+      "data": {
+        "type": "object",
+        "description": "seq_len, tokenizer_size, num_classes, image_size, channels"
+      },
+      "config": {
+        "type": "object",
+        "description": "HF config.json (label count)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -425,7 +550,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -439,19 +564,19 @@
     "properties": {
       "from": {
         "type": "string",
-        "description": "Optional source layer name or id filter."
+        "description": "Source layer."
       },
       "to": {
         "type": "string",
-        "description": "Optional target layer name or id filter."
+        "description": "Target layer."
       },
       "limit": {
         "type": "number",
-        "description": "Max results (default 200)."
+        "description": "Default 200."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -461,7 +586,7 @@
     "properties": {
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -471,11 +596,11 @@
     "properties": {
       "layer": {
         "type": "string",
-        "description": "Optional layer name or id. When set, return only notes affecting that layer."
+        "description": "Only notes on this layer."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -496,7 +621,7 @@
             },
             "model_path": {
               "type": "string",
-              "description": "Path, zoo:<id> or hf:<org/name>."
+              "description": "File, zoo:<id>, hf:<org/name>"
             },
             "model": {
               "type": "object",
@@ -518,11 +643,11 @@
           "cost",
           "params"
         ],
-        "description": "Break a measured tie by cost or params. Never crosses a measured rank."
+        "description": "Break a measured tie only."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -535,11 +660,11 @@
     "properties": {
       "save_to": {
         "type": "string",
-        "description": "Optional path to write the generated .py to. Requires --write."
+        "description": "Write the .py here (--write)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -553,15 +678,15 @@
       },
       "domain": {
         "type": "string",
-        "description": "Exact domain filter, e.g. \"Language models\"."
+        "description": "e.g. \"Language models\"."
       },
       "attention": {
         "type": "string",
-        "description": "Attention type, e.g. \"groupedQueryAttention\"."
+        "description": "e.g. \"groupedQueryAttention\"."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -575,11 +700,11 @@
       },
       "save_to": {
         "type": "string",
-        "description": "Optional path for a .neurarch.json copy. Requires --write."
+        "description": "Write a .neurarch.json copy (--write)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -592,7 +717,7 @@
     "properties": {
       "dir": {
         "type": "string",
-        "description": "Directory to scan. Defaults to the directory of the model this server was started with."
+        "description": "Default: the server model's directory."
       },
       "max_files": {
         "type": "integer",
@@ -602,7 +727,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -616,7 +741,7 @@
       },
       "layer": {
         "type": "string",
-        "description": "Only findings on this layer name."
+        "description": "Only this layer."
       },
       "severity": {
         "type": "string",
@@ -625,15 +750,15 @@
           "warn",
           "info"
         ],
-        "description": "Minimum severity to fix. Default: warn."
+        "description": "Minimum. Default warn."
       },
       "save_to": {
         "type": "string",
-        "description": "Write the patched file here (exact fixes only). Requires --write."
+        "description": "Write the patched file (exact fixes, --write)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -660,25 +785,24 @@
       "depth": {
         "type": "integer",
         "minimum": 1,
-        "description": "Max module depth (default: leaves)."
+        "description": "Default: leaves."
       },
       "name": {
-        "type": "string",
-        "description": "Graph name."
+        "type": "string"
       },
       "save_to": {
         "type": "string",
-        "description": "Also write the traced .neurarch.json here. Requires --write."
+        "description": "Write the graph here (--write)."
       },
       "timeout_s": {
         "type": "integer",
         "minimum": 5,
         "maximum": 600,
-        "description": "Timeout, seconds (default 120)."
+        "description": "Seconds (default 120)."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "required": [
@@ -697,21 +821,21 @@
       },
       "base_path": {
         "type": "string",
-        "description": "A second model to diff against (a path, zoo:<id> or hf:<org/name>)."
+        "description": "A second model to diff against."
       },
       "spec": {
         "type": "object",
-        "description": "A change spec: { base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }. Adds a change section with a spec id and a gate on memory, fit and policy (never on adapter quality).",
+        "description": "{ base?, adapter?: { peft, rank, targets[] }, quant?, serving?, constraints? }: a change section gated on memory, fit and policy.",
         "additionalProperties": true
       },
       "seq_len": {
         "type": "integer",
         "minimum": 1,
-        "description": "Sequence length in tokens used for activation memory; default 2048 when omitted."
+        "description": "Default 2048."
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false
@@ -725,7 +849,7 @@
       },
       "model_path": {
         "type": "string",
-        "description": "Path, zoo:<id> or hf:<org/name>."
+        "description": "File, zoo:<id>, hf:<org/name>"
       }
     },
     "additionalProperties": false

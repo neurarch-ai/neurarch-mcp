@@ -54,9 +54,9 @@ const modifyLayerTool: ToolDef = {
     type: 'object',
     properties: {
       name:   { type: 'string', description: 'Layer name or id to modify.' },
-      params: { type: 'object', description: 'Partial params object, shallow-merged with existing params.' },
-      rename: { type: 'string', description: 'Optional new name. Fails if the new name is already in use elsewhere.' },
-      scope:  { type: 'string', description: 'Optional new scope (dotted module path).' },
+      params: { type: 'object', description: 'Shallow-merged into params.' },
+      rename: { type: 'string', description: 'New unique name.' },
+      scope:  { type: 'string', description: 'New dotted module path.' },
     },
     required: ['name'],
     additionalProperties: false,
@@ -131,7 +131,7 @@ const saveModelTool: ToolDef = {
     properties: {
       path: {
         type: 'string',
-        description: 'Optional override path. Defaults to the file loaded at startup.',
+        description: 'Default: the startup file.',
       },
     },
     additionalProperties: false,

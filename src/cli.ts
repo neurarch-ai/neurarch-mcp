@@ -65,6 +65,8 @@ export const CORE_TOOLS: readonly string[] = [
   'history',
   'diagnose_oom',
   'check_edit',
+  'check_parallel_layout',
+  'check_serving_config',
   'check_design',
   'lint_model',
   'describe_architecture',
@@ -144,7 +146,7 @@ const MODEL_PATH_PROPERTY = {
   type: 'string',
   // Short on purpose: it rides on every read tool's schema in every ListTools,
   // so each character here is paid ~30 times a turn (check_edit paid for itself here).
-  description: 'Path, zoo:<id> or hf:<org/name>.',
+  description: 'File, zoo:<id>, hf:<org/name>',
 };
 
 /**
@@ -187,25 +189,26 @@ export interface ListedTool {
 /**
  * Output schemas, declared loosely on purpose. A client validates
  * structuredContent against these and fails the call on a mismatch, so each
- * one names the keys an agent should rely on and leaves the rest open
- * (additionalProperties: true). A drift between handler and schema then
+ * one names the keys an agent should rely on and leaves the rest open (no
+ * additionalProperties, whose JSON Schema default is true: spelling it out
+ * cost ~100 listing tokens and said nothing the default does not). A drift between handler and schema then
  * costs a missing hint, not a broken tool.
  */
 const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
-  size_training_job: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, fits: { type: ['boolean', 'null'] } } },
-  diagnose_oom: { type: 'object', additionalProperties: true, properties: { cause: { type: 'string' }, summary: { type: 'string' }, fixes: { type: 'array' } } },
-  plan: { type: 'object', additionalProperties: true, properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
-  history: { type: 'object', additionalProperties: true, properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
-  check_design: { type: 'object', additionalProperties: true, properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },
-  lint_model: { type: 'object', additionalProperties: true, properties: { clean: { type: 'boolean' }, counts: { type: 'object' }, findings: { type: 'array' } } },
-  validate_model: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' } } },
-  rank_designs: { type: 'object', additionalProperties: true, properties: { ranked: { type: 'array' }, recommended: { type: ['string', 'null'] }, recommendation: { type: 'string' }, calibration: { type: 'object' } } },
-  suggest_fix: { type: 'object', additionalProperties: true, properties: { fixes: { type: 'array' }, notFixable: { type: 'array' } } },
-  describe_architecture: { type: 'object', additionalProperties: true, properties: { pipeline: { type: 'array' }, layerCount: { type: 'number' } } },
+  size_training_job: { type: 'object', properties: { verdict: { type: 'string' }, fits: { type: ['boolean', 'null'] } } },
+  diagnose_oom: { type: 'object', properties: { cause: { type: 'string' }, summary: { type: 'string' }, fixes: { type: 'array' } } },
+  plan: { type: 'object', properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
+  history: { type: 'object', properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
+  check_design: { type: 'object', properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },
+  lint_model: { type: 'object', properties: { clean: { type: 'boolean' }, counts: { type: 'object' }, findings: { type: 'array' } } },
+  validate_model: { type: 'object', properties: { ok: { type: 'boolean' } } },
+  rank_designs: { type: 'object', properties: { ranked: { type: 'array' }, recommended: { type: ['string', 'null'] }, recommendation: { type: 'string' }, calibration: { type: 'object' } } },
+  suggest_fix: { type: 'object', properties: { fixes: { type: 'array' }, notFixable: { type: 'array' } } },
+  describe_architecture: { type: 'object', properties: { pipeline: { type: 'array' }, layerCount: { type: 'number' } } },
   layer_impact: { type: 'object', additionalProperties: true },
-  export_pytorch: { type: 'object', additionalProperties: true, properties: { code: { type: 'string' }, language: { type: 'string' } } },
-  list_architectures: { type: 'object', additionalProperties: true, properties: { architectures: { type: 'array' } } },
-  find_models: { type: 'object', additionalProperties: true, properties: { models: { type: 'array' } } },
+  export_pytorch: { type: 'object', properties: { code: { type: 'string' }, language: { type: 'string' } } },
+  list_architectures: { type: 'object', properties: { architectures: { type: 'array' } } },
+  find_models: { type: 'object', properties: { models: { type: 'array' } } },
 };
 
 /**

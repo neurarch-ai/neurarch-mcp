@@ -178,6 +178,64 @@ export async function loadHFModel(modelId: string): Promise<HFLoadResult> {
   return result;
 }
 
+/**
+ * The three optional files a serving launch reads besides config.json:
+ * tokenizer_config.json, chat_template.jinja (newer repos ship the template as
+ * its own file) and generation_config.json. A file the repo does not have is
+ * null, never an error: plenty of base models have no template.
+ */
+export interface HFServeFiles {
+  tokenizerConfig: Record<string, unknown> | null;
+  chatTemplateFile: string | null;
+  generationConfig: Record<string, unknown> | null;
+}
+
+/**
+ * The serving files for one repo, by the same rule as loadHFModel: a copy this
+ * machine already fetched is served at any age without --hf, and only a fetch
+ * needs the flag. Without either, null, and the caller says the template and
+ * sampler checks did not run rather than guessing. The same HF_TOKEN the
+ * config fetch sends is sent here, so a gated repo reads the same way.
+ */
+export async function loadHFServeFiles(modelId: string): Promise<HFServeFiles | null> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(modelId)) return null;
+  const cacheFile = join(hfCacheDir(), `${modelId.replace('/', '__')}.serve.json`);
+  const st = await stat(cacheFile).catch(() => null);
+  let cached: HFServeFiles | null = null;
+  if (st) {
+    try { cached = JSON.parse(await readFile(cacheFile, 'utf-8')) as HFServeFiles; } catch { cached = null; }
+  }
+  if (!hfEnabled) return cached;
+  if (cached && st && Date.now() - st.mtimeMs < HF_CACHE_TTL_MS) return cached;
+  const token = process.env.HF_TOKEN?.trim();
+  const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  let reached = false;
+  const get = async (file: string, json: boolean): Promise<unknown> => {
+    try {
+      const res = await fetch(`https://huggingface.co/${modelId}/resolve/main/${file}`, { headers, signal: AbortSignal.timeout(20_000) });
+      reached = true;
+      if (!res.ok) return null;
+      return json ? await res.json() : await res.text();
+    } catch {
+      return null;
+    }
+  };
+  const [tok, tmpl, gen] = await Promise.all([
+    get('tokenizer_config.json', true), get('chat_template.jinja', false), get('generation_config.json', true),
+  ]);
+  // Nothing answered at all: a stale copy beats three nulls that only mean "offline".
+  if (!reached) return cached;
+  const obj = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+  const files: HFServeFiles = {
+    tokenizerConfig: obj(tok),
+    chatTemplateFile: typeof tmpl === 'string' && tmpl.trim() ? tmpl : null,
+    generationConfig: obj(gen),
+  };
+  await mkdir(hfCacheDir(), { recursive: true }).catch(() => undefined);
+  await writeFile(cacheFile, JSON.stringify(files)).catch(() => undefined);
+  return files;
+}
+
 // ── inline text ──────────────────────────────────────────────────────────────
 
 /**

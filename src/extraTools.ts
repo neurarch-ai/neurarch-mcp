@@ -61,7 +61,7 @@ export const rankDesignsTool: ToolDef = {
           type: 'object',
           properties: {
             id: { type: 'string', description: 'Label in the result.' },
-            model_path: { type: 'string', description: 'Path, zoo:<id> or hf:<org/name>.' },
+            model_path: { type: 'string', description: 'File, zoo:<id>, hf:<org/name>' },
             model: { type: 'object', description: 'Inline graph instead of a path.' },
           },
           additionalProperties: false,
@@ -72,7 +72,7 @@ export const rankDesignsTool: ToolDef = {
       tie_break: {
         type: 'string',
         enum: ['none', 'cost', 'params'],
-        description: 'Break a measured tie by cost or params. Never crosses a measured rank.',
+        description: 'Break a measured tie only.',
       },
     },
     required: ['candidates'],
@@ -107,7 +107,7 @@ export const exportPytorchTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      save_to: { type: 'string', description: 'Optional path to write the generated .py to. Requires --write.' },
+      save_to: { type: 'string', description: 'Write the .py here (--write).' },
     },
     additionalProperties: false,
   },
@@ -140,8 +140,8 @@ export const listArchitecturesTool: ToolDef = {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Substring of id, title, type or domain.' },
-      domain: { type: 'string', description: 'Exact domain filter, e.g. "Language models".' },
-      attention: { type: 'string', description: 'Attention type, e.g. "groupedQueryAttention".' },
+      domain: { type: 'string', description: 'e.g. "Language models".' },
+      attention: { type: 'string', description: 'e.g. "groupedQueryAttention".' },
     },
     additionalProperties: false,
   },
@@ -178,7 +178,7 @@ export const loadArchitectureTool: ToolDef = {
     type: 'object',
     properties: {
       id: { type: 'string', description: 'Entry id from list_architectures, e.g. "qwen2.5-7b".' },
-      save_to: { type: 'string', description: 'Optional path for a .neurarch.json copy. Requires --write.' },
+      save_to: { type: 'string', description: 'Write a .neurarch.json copy (--write).' },
     },
     required: ['id'],
     additionalProperties: false,
@@ -213,7 +213,7 @@ export const loadHfModelTool: ToolDef = {
     type: 'object',
     properties: {
       model_id: { type: 'string', description: 'Repo id, e.g. "Qwen/Qwen2.5-7B" or "meta-llama/Llama-3.1-8B".' },
-      save_to: { type: 'string', description: 'Optional path for a .neurarch.json copy. Requires --write.' },
+      save_to: { type: 'string', description: 'Write a .neurarch.json copy (--write).' },
     },
     required: ['model_id'],
     additionalProperties: false,
@@ -243,7 +243,7 @@ export const findModelsTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      dir: { type: 'string', description: 'Directory to scan. Defaults to the directory of the model this server was started with.' },
+      dir: { type: 'string', description: 'Default: the server model\'s directory.' },
       max_files: { type: 'integer', minimum: 1, maximum: 5000, description: 'Cap on files opened (default 400).' },
     },
     additionalProperties: false,
@@ -282,9 +282,9 @@ export const suggestFixTool: ToolDef = {
     type: 'object',
     properties: {
       rule: { type: 'string', description: 'Only this rule id.' },
-      layer: { type: 'string', description: 'Only findings on this layer name.' },
-      severity: { type: 'string', enum: ['block', 'warn', 'info'], description: 'Minimum severity to fix. Default: warn.' },
-      save_to: { type: 'string', description: 'Write the patched file here (exact fixes only). Requires --write.' },
+      layer: { type: 'string', description: 'Only this layer.' },
+      severity: { type: 'string', enum: ['block', 'warn', 'info'], description: 'Minimum. Default warn.' },
+      save_to: { type: 'string', description: 'Write the patched file (exact fixes, --write).' },
     },
     additionalProperties: false,
   },
@@ -333,10 +333,10 @@ export const traceModelTool: ToolDef = {
       target: { type: 'string', description: '"path/to/model.py:ClassName", "pkg.module:factory", or "hf:org/name".' },
       input: { type: 'array', items: { type: 'string' }, minItems: 1, description: 'Input dims, batch first, one per input: ["1,3,224,224"]. ":long" for token ids.' },
       dtype: { type: 'string', description: 'Input dtype (float32; long for hf:).' },
-      depth: { type: 'integer', minimum: 1, description: 'Max module depth (default: leaves).' },
-      name: { type: 'string', description: 'Graph name.' },
-      save_to: { type: 'string', description: 'Also write the traced .neurarch.json here. Requires --write.' },
-      timeout_s: { type: 'integer', minimum: 5, maximum: 600, description: 'Timeout, seconds (default 120).' },
+      depth: { type: 'integer', minimum: 1, description: 'Default: leaves.' },
+      name: { type: 'string' },
+      save_to: { type: 'string', description: 'Write the graph here (--write).' },
+      timeout_s: { type: 'integer', minimum: 5, maximum: 600, description: 'Seconds (default 120).' },
     },
     required: ['target', 'input'],
     additionalProperties: false,

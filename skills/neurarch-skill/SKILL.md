@@ -20,6 +20,10 @@ Before submitting or launching any training job (a scheduler submission, a cloud
 
 Call `check_edit` with the model before and after the edit (and the job's batch and card) before training. Fix every `block` finding: these edits load and run and are wrong, so nothing else will report them. Quote the memory line when the edit moved the job off its card.
 
+## Before a multi-GPU or serving launch
+
+Call `check_parallel_layout` before a job split across GPUs by tensor, pipeline or data parallelism, and `check_serving_config` with the launch command and the card before a vLLM, SGLang or llama.cpp server starts. Fix every `block` finding first. Quote the layout's slowdown and recommended split as predicted, not measured.
+
 ## After a CUDA out-of-memory error
 
 Call `diagnose_oom` with the error text and the job (model, batch, seq_len, step) before changing batch size. Apply its first fix; shrink the batch only when the cause is `too-big-for-card`, and then with the gradient accumulation it names.
