@@ -11172,6 +11172,10 @@ function normalizeAndAugmentConfig(config, modelId) {
           }
         }
         if (sub.model_type) config._textModelType = sub.model_type;
+        if (sub.model_type === "gemma3_text") {
+          if (config.vocab_size == null) config.vocab_size = 262208;
+          if (config.head_dim == null) config.head_dim = 256;
+        }
         break;
       }
     }
