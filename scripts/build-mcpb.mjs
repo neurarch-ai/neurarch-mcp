@@ -27,7 +27,7 @@ if (!existsSync(join(root, 'dist', 'index.js'))) {
 }
 
 const stage = mkdtempSync(join(tmpdir(), 'neurarch-mcpb-'));
-for (const f of ['manifest.json', 'package.json', 'README.md', 'LICENSE', 'dist', 'zoo']) {
+for (const f of ['manifest.json', 'package.json', 'README.md', 'LICENSE', 'icon.png', 'dist', 'zoo']) {
   cpSync(join(root, f), join(stage, f), { recursive: true });
 }
 // The bundle carries its own node_modules: Claude Desktop does not npm install.

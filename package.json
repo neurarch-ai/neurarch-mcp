@@ -14,7 +14,8 @@
     "LICENSE",
     "CHANGELOG.md",
     "examples",
-    "manifest.json"
+    "manifest.json",
+    "icon.png"
   ],
   "scripts": {
     "build": "tsup",

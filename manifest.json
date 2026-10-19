@@ -10,6 +10,7 @@
     "url": "https://neurarch.com"
   },
   "homepage": "https://www.neurarch.com/mcp",
+  "icon": "icon.png",
   "documentation": "https://github.com/neurarch-ai/neurarch-mcp#readme",
   "support": "https://github.com/neurarch-ai/neurarch-mcp/issues",
   "repository": {

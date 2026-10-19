@@ -48,6 +48,7 @@ import { RULE_PROVENANCE } from './vendor/verifier.bundle.mjs';
 import { PROMPTS, renderPrompt } from './prompts.js';
 import { ruleCatalogue } from './ruleCatalogue.js';
 import { validateArgs } from './argCheck.js';
+import { SERVER_ICONS } from './icon.js';
 
 /**
  * The tools that grade a graph rather than describe one.
@@ -92,7 +93,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
   const callable = new Map(listedTools(writeEnabled, 'full').map(withSource).map(t => [t.name, t]));
 
   const server = new Server(
-    { name: 'neurarch-mcp', title: 'Neurarch', version, websiteUrl: 'https://www.neurarch.com/mcp' },
+    { name: 'neurarch-mcp', title: 'Neurarch', version, websiteUrl: 'https://www.neurarch.com/mcp', icons: SERVER_ICONS },
     { capabilities: { tools: {}, prompts: {}, resources: {}, completions: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
