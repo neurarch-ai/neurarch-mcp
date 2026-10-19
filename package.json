@@ -1,6 +1,6 @@
 {
   "name": "neurarch-mcp",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "MCP server that tells Claude Code, Cursor, Claude Desktop, VS Code and other MCP-aware agents what a training job needs before it takes a GPU: size_training_job returns the calibrated training peak at your batch, the smallest card that holds it, max batch per card, a two-card split and one run's cost (fitted on 178 measured runs across 41 architectures; held out, median error 7% and it flagged 113 of the 131 jobs that did not fit their card, accelerate estimate-memory at most 8; 14% median miss on 25 runs measured after the fit). Then whether the model forward-passes: the design linter (lint_model) and full verdict (check_design), offline. Point it at a PyTorch .py, a traced .neurarch.json or a Hugging Face repo; plan posts the same card as the CI bot, history reads what this structure measured the last time it trained in your organisation, diagnose_oom explains a CUDA out-of-memory error and the least invasive fix, and with --write the agent can edit the graph. check_parallel_layout and check_serving_config pre-check a TP / PP / DP split and a vLLM, SGLang or llama.cpp launch. check_pins finds Hugging Face downloads not pinned to a commit, and model_changes reads what changed upstream between revisions. Also a CLI: neurarch-mcp lint model.py.",
   "type": "module",
   "bin": {
@@ -14,7 +14,8 @@
     "LICENSE",
     "CHANGELOG.md",
     "examples",
-    "manifest.json"
+    "manifest.json",
+    "icon.png"
   ],
   "scripts": {
     "build": "tsup",
@@ -25,7 +26,8 @@
     "typecheck": "tsc --noEmit",
     "build:mcpb": "npx tsx scripts/tool-schemas.mjs && node scripts/build-mcpb.mjs",
     "sync:zoo": "node scripts/sync-zoo.mjs",
-    "eval:tools": "node scripts/eval-tool-selection.mjs"
+    "eval:tools": "node scripts/eval-first-tool.mjs",
+    "eval:tools:agent": "node scripts/eval-tool-selection.mjs"
   },
   "keywords": [
     "architecture-search",
@@ -61,14 +63,17 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
-  },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
+    "@modelcontextprotocol/client": "^2.3.1",
     "@types/node": "^22.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.5.0",
     "vitest": "^2.1.9"
   },
-  "mcpName": "io.github.neurarch-ai/neurarch-mcp"
+  "mcpName": "io.github.neurarch-ai/neurarch-mcp",
+  "dependencies": {
+    "@modelcontextprotocol/node": "^2.1.1",
+    "@modelcontextprotocol/server": "^2.3.1"
+  }
 }

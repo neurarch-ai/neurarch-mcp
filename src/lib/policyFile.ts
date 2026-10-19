@@ -10,8 +10,8 @@
  * disagree on the same graph, which is worse than having no policy at all.
  *
  * ── Why a parser and not a dependency ──────────────────────────────────────
- * `@modelcontextprotocol/sdk` is this package's only runtime dependency and is
- * meant to stay that way. So this reads the subset of YAML that `.neurarch.yml`
+ * The MCP SDK (`@modelcontextprotocol/server` and its Node adapter) is this
+ * package's only runtime dependency and is meant to stay that way. So this reads the subset of YAML that `.neurarch.yml`
  * actually is: mappings, indentation, block and flow sequences of scalars,
  * sequences of mappings, `#` comments, quoted strings. Anchors, block scalars,
  * flow mappings and multi-document files are refused BY NAME rather than

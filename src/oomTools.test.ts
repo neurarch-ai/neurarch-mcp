@@ -8,8 +8,8 @@ import { setHfEnabled } from './sources.js';
 import { convertHFConfigToModel } from './vendor/engine.bundle.mjs';
 import { diagnoseOom, oomFactsForModel } from './vendor/plan.bundle.mjs';
 import type { ModelArchitecture } from './lib/types.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer } from './server.js';
 
 const tool = TOOLS.find(t => t.name === 'diagnose_oom')!;

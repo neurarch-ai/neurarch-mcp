@@ -1,8 +1,8 @@
 // End-to-end: feed a traced graph to the built MCP server and call two tools.
 //   node python/neurarch-trace/scripts/e2e.mjs path/to/traced.neurarch.json
 // Run from the neurarch-mcp repo root after `npm run build`.
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 

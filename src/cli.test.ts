@@ -135,3 +135,35 @@ describe('0.13 flags and subcommands', () => {
     expect(resolveToolCall('load_hf_model', false).errorText).toMatch(/--hf/);
   });
 });
+
+describe('0.21 --toolsets and --read-only', () => {
+  it('advertises only the named groups, core order first, and leaves the default alone', () => {
+    const f = parseFlags(['m.json', '--toolsets=sizing,serving']);
+    expect(f.toolSet).toEqual({ groups: ['sizing', 'serving'] });
+    const names = selectTools(false, f.toolSet).map(t => t.name);
+    expect(names[0]).toBe('size_training_job');
+    expect(names).toContain('check_serving_config');
+    expect(names).not.toContain('check_design');
+    expect(new Set(names).size).toBe(names.length);
+    expect(parseFlags(['m.json']).toolSet).toBe('core');
+    expect(parseFlags(['m.json', '--toolsets=sizing']).unknownFlags).toEqual([]);
+  });
+  it('names every group member as a real tool', async () => {
+    const { TOOL_GROUPS } = await import('./cli.js');
+    const { HF_TOOLS } = await import('./extraTools.js');
+    const all = new Set([...TOOLS, ...HF_TOOLS].map(t => t.name));
+    for (const [g, names] of Object.entries(TOOL_GROUPS)) for (const n of names) expect(all.has(n), `${g}: ${n}`).toBe(true);
+  });
+  it('treats write as --write, and --read-only beats both', () => {
+    expect(parseFlags(['m.json', '--toolsets=design,write']).writeEnabled).toBe(true);
+    expect(parseFlags(['m.json', '--toolsets=design,write', '--read-only']).writeEnabled).toBe(false);
+    expect(parseFlags(['m.json', '--write', '--read-only']).writeEnabled).toBe(false);
+    const f = parseFlags(['m.json', '--write', '--read-only', '--toolsets=write']);
+    expect(selectTools(f.writeEnabled, f.toolSet).some(t => WRITE_TOOLS.includes(t))).toBe(false);
+  });
+  it('reports a group name it does not know', () => {
+    const f = parseFlags(['m.json', '--toolsets=sizing,bogus']);
+    expect(f.unknownToolsets).toEqual(['bogus']);
+    expect(f.toolSet).toEqual({ groups: ['sizing'] });
+  });
+});

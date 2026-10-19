@@ -6,6 +6,61 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **On the v2 MCP SDK** (`@modelcontextprotocol/server` and `client` 2.3.1, plus
+  `@modelcontextprotocol/node` 2.1.1 for the HTTP adapter), so the server speaks
+  protocol revision **2026-07-28** as well as the 2025 revisions it already
+  spoke. v1 (`@modelcontextprotocol/sdk`) only implements up to 2025-11-25 and
+  is maintained until about 2027-01.
+- **stdio** is `serveStdio`: the revision is negotiated per connection, from
+  the same factory for both eras.
+- **HTTP** routes by era with the SDK's own classifier. 2026-07-28 requests are
+  stateless, one server instance per request (`createMcpHandler`). 2025-era
+  requests keep the session flow they had (`Mcp-Session-Id`, GET for the SSE
+  stream, DELETE to close), because a per-request instance cannot know that a
+  2025 client declared elicitation at initialize. The bearer-token and Host
+  checks sit in front of both paths, unchanged.
+- **Elicitation** (`check_design` with `ask_user`): a 2025 connection gets the
+  pushed `elicitation/create` as before; a 2026-07-28 request gets
+  `input_required`, and the client retries the call with the answer. No
+  `requestState` is minted, because the retry recomputes the same decision from
+  the graph and nothing from the first round is carried.
+
+### Added
+- `src/eras.test.ts`: the same calls through the real HTTP server under a
+  2025 client and a client pinned to 2026-07-28, compared result for result,
+  plus elicitation (accept and decline), progress and cancellation on 2026.
+
+## [0.21.0] - 2026-10-19
+
+### Added
+- **`--toolsets=GROUP[,GROUP]`** advertises only the named groups: `sizing`,
+  `parallel`, `serving`, `changes`, `design`, `models`, `write`. `--toolsets=sizing`
+  lists six tools (about 1.6k tokens a turn against 5.5k for the core set).
+  `write` is the same as `--write`, with the same startup refusals; an unknown
+  group name stops the server at startup. Every read tool stays callable by
+  name. The default (`--tools=core`) is unchanged.
+- **`--read-only`**: no write tools, whatever `--write` or `--toolsets=write` asked for.
+- **`response_format: "concise" | "detailed"`** on `lint_model`, `find_layers`,
+  `layer_impact`, `describe_architecture` and `check_design` (where `detailed`
+  is the old `verbose: true`, which still works). Concise is the default. It
+  always says what it left out: `omitted.count` with what and how to get it,
+  or `fields` for find_layers. On qwen2.5-7b, `lint_model` goes from 10.6 KB to
+  1.4 KB: info findings are counted per rule in `infoByRule` instead of
+  listed, and `counts` still counts every finding.
+- **Server icon**: the Neurarch mark as a 64 px PNG data URI in
+  `serverInfo.icons`, rasterised from the site's `icon-n.svg`; `icon.png` in
+  the MCPB bundle.
+- **`npm run eval:tools`** is now a first-call tool-selection eval: 42 asks that
+  never name a tool, graded on the first tool a model calls against the
+  listing the built server actually sends. It estimates the cost before
+  spending and refuses above `--max-usd` (default $2). The multi-turn Claude
+  Code eval moved to `eval:tools:agent`.
+
+### Changed
+- The core listing is about 5.5k tokens a turn (was 5.4k) and the full one 7.8k
+  (was 7.7k): the new `response_format` argument on five tools.
+
 ## [0.20.0] - 2026-10-19
 
 ### Added

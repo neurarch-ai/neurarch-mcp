@@ -401,7 +401,10 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.3k tokens per turn, the full one 7.6k, output schemas included.
+- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.5k tokens per turn, the full one 7.8k, output schemas included.
+- `--toolsets=sizing,serving,...`: advertise only these groups (`sizing`, `parallel`, `serving`, `changes`, `design`, `models`, `write`). A team that only sizes training jobs loads six tools (about 1.6k tokens a turn). `write` is the same as `--write`, with the same startup refusals; an unknown group name stops the server at startup. Overrides `--tools`.
+- `--read-only`: never expose write tools, even with `--write` or `--toolsets=write`.
+- `response_format: "concise" | "detailed"` on `lint_model`, `find_layers`, `layer_impact`, `describe_architecture` and `check_design`. Concise is the default and says what it left out (`omitted.count`, or `fields` for find_layers); on qwen2.5-7b it cuts `lint_model` from 10.6 KB to 1.4 KB by counting info findings per rule instead of listing them.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
@@ -456,7 +459,7 @@ node dist/index.js --help
 npm run build:mcpb                                 # the Claude Desktop bundle
 ```
 
-CI runs typecheck, build and test on Node 20 and 22. The package vendors from the main Neurarch repo so that it works with no network, no key and no second install: `src/vendor/engine.bundle.mjs` (registry, PyTorch parser, rule set, code generator, HF config converter) and `src/vendor/verifier.bundle.mjs` (five pipeline stages, provenance table, ranker). Both are generated, contract-tested, and asserted to contain no `import` (and, for the verifier, no `fetch`). `@modelcontextprotocol/sdk` is the only runtime dependency. `zoo/` is synced from [awesome-llm-model-zoo](https://github.com/neurarch-ai/awesome-llm-model-zoo) with `npm run sync:zoo`.
+CI runs typecheck, build and test on Node 20 and 22. The package vendors from the main Neurarch repo so that it works with no network, no key and no second install: `src/vendor/engine.bundle.mjs` (registry, PyTorch parser, rule set, code generator, HF config converter) and `src/vendor/verifier.bundle.mjs` (five pipeline stages, provenance table, ranker). Both are generated, contract-tested, and asserted to contain no `import` (and, for the verifier, no `fetch`). The MCP SDK (`@modelcontextprotocol/server`, with `@modelcontextprotocol/node` for the HTTP adapter) is the only runtime dependency. `zoo/` is synced from [awesome-llm-model-zoo](https://github.com/neurarch-ai/awesome-llm-model-zoo) with `npm run sync:zoo`.
 
 A new tool is a small, self-contained PR: see [CONTRIBUTING.md](./CONTRIBUTING.md). The agent skill that teaches an evidence-gated edit loop over these tools lives in [`skills/`](./skills/neurarch-skill) (`npx skills add neurarch-ai/neurarch-mcp`).
 
@@ -519,7 +522,7 @@ The package vendors from the main Neurarch repo, and everything is vendored for 
 - `src/vendor/engine.bundle.mjs`: the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
 - `src/vendor/verifier.bundle.mjs`: the compiled Neurarch verifier behind `check_design`: the five pipeline stages, plus the rule-provenance table. Same code path as the app and the hosted endpoint, so an agent here and a person in the app get the same answer. Same rules: generated, contract-tested (`verifier.contract.test.ts`), and asserted to contain no import and no `fetch`.
 
-Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
+Neither adds a runtime dependency: the MCP SDK is still the only one.
 
 ## Privacy Policy
 

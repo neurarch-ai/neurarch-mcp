@@ -22,8 +22,12 @@ export interface ParsedFlags {
   httpHost?: string;
   /** Allow hf:<org/name> model refs and list load_hf_model: the one network switch. */
   hfEnabled: boolean;
-  /** Which read tools to advertise: the 'core' dozen (default) or 'full'. */
+  /** Which read tools to advertise: the 'core' dozen (default), 'full', or named groups from `--toolsets`. */
   toolSet: ToolSetName;
+  /** `--read-only`: no write tools, whatever --write or --toolsets=write asked for. */
+  readOnly: boolean;
+  /** Names given to `--toolsets` that are not a group; the server refuses to start on any. */
+  unknownToolsets: string[];
   /** Serve with no model on stdio too (a container with nothing mounted); every call names its model. */
   hostedRequested: boolean;
   /** A subcommand (`lint`, `check`, `hook`) instead of serving, when the first token is one. */
@@ -38,9 +42,34 @@ export interface ParsedFlags {
   unknownFlags: string[];
 }
 
-const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--json', '--hosted']);
+const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--toolsets', '--read-only', '--json', '--hosted']);
 
-export type ToolSetName = 'core' | 'full';
+/**
+ * Groups `--toolsets=` can name, the way the GitHub and Sentry servers split
+ * theirs: a team that only sizes training jobs loads six tools, not nineteen.
+ * A tool may sit in more than one group (trace_model feeds every one of them).
+ * `write` is the mutation tools, and asking for it is the same as --write,
+ * including every startup refusal --write carries; --read-only beats both.
+ * Group membership narrows what is ADVERTISED, like --tools=core: every read
+ * tool stays callable by name.
+ */
+export const TOOL_GROUPS = {
+  sizing: ['size_training_job', 'diagnose_oom', 'check_edit', 'trace_model', 'plan', 'history'],
+  parallel: ['check_parallel_layout', 'size_training_job', 'trace_model'],
+  serving: ['check_serving_config', 'trace_model'],
+  changes: ['model_changes', 'check_pins', 'diff_models', 'check_edit', 'plan', 'history'],
+  design: [
+    'check_design', 'lint_model', 'validate_model', 'suggest_fix', 'rank_designs', 'trace_model',
+    'describe_architecture', 'get_model_summary', 'get_layer', 'find_layers', 'layer_impact',
+    'param_count_by_block', 'flops_by_block', 'list_blocks', 'get_block', 'compare_layers', 'find_path',
+    'list_connections', 'list_hyperparams', 'get_design_notes', 'mermaid_diagram', 'export_pytorch',
+  ],
+  models: ['list_architectures', 'load_architecture', 'find_models', 'load_hf_model'],
+  write: [] as string[],
+} as const satisfies Record<string, readonly string[]>;
+export type ToolGroup = keyof typeof TOOL_GROUPS;
+
+export type ToolSetName = 'core' | 'full' | { groups: readonly ToolGroup[] };
 export type Command = 'lint' | 'check' | 'hook';
 const COMMANDS = new Set<Command>(['lint', 'check', 'hook']);
 
@@ -107,17 +136,24 @@ export function parseFlags(argv: string[]): ParsedFlags {
   const command = COMMANDS.has(positionalAll[0] as Command) ? (positionalAll[0] as Command) : undefined;
   const positional = command ? positionalAll.slice(1) : positionalAll;
   const toolsRaw = valueOf('--tools');
+  const groupsRaw = valueOf('--toolsets');
+  const named = groupsRaw === undefined ? [] : groupsRaw.split(',').map(g => g.trim()).filter(Boolean);
+  const groups = named.filter((g): g is ToolGroup => g in TOOL_GROUPS);
+  const readOnly = has('--read-only');
 
   return {
     hfEnabled: has('--hf'),
     hostedRequested: has('--hosted'),
-    toolSet: toolsRaw === 'full' ? 'full' : 'core',
+    // --toolsets wins over --tools when both are given: it is the narrower ask.
+    toolSet: groups.length > 0 ? { groups } : toolsRaw === 'full' ? 'full' : 'core',
+    readOnly,
+    unknownToolsets: named.filter(g => !(g in TOOL_GROUPS)),
     command,
     json: has('--json'),
     positional,
     versionRequested: has('--version', '-v'),
     helpRequested: has('--help', '-h'),
-    writeEnabled: has('--write'),
+    writeEnabled: !readOnly && (has('--write') || groups.includes('write')),
     watchEnabled: has('--watch'),
     httpEnabled: has('--http'),
     httpPort: port !== undefined && Number.isInteger(port) && port > 0 && port < 65536 ? port : undefined,
@@ -139,9 +175,17 @@ export function selectTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'
   // what an agent scans, so it carries the recommendation. A name in
   // CORE_TOOLS with no tool behind it is skipped rather than crashing the
   // listing, since the two lists are maintained by hand.
-  const advertised = toolSet === 'core'
-    ? CORE_TOOLS.map(name => reads.find(t => t.name === name)).filter((t): t is ToolDef => !!t)
-    : reads;
+  let advertised: ToolDef[];
+  if (toolSet === 'core') {
+    advertised = CORE_TOOLS.map(name => reads.find(t => t.name === name)).filter((t): t is ToolDef => !!t);
+  } else if (toolSet === 'full') {
+    advertised = reads;
+  } else {
+    // Core order first (it is the recommendation), then the rest in registry order.
+    const wanted = new Set<string>(toolSet.groups.flatMap(g => TOOL_GROUPS[g]));
+    const order = (name: string) => { const i = CORE_TOOLS.indexOf(name); return i === -1 ? CORE_TOOLS.length : i; };
+    advertised = reads.filter(t => wanted.has(t.name)).sort((a, b) => order(a.name) - order(b.name));
+  }
   return writeEnabled ? [...advertised, ...WRITE_TOOLS] : advertised;
 }
 

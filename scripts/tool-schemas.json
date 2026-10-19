@@ -354,6 +354,14 @@
   "describe_architecture": {
     "type": "object",
     "properties": {
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "description": "Default concise."
+      },
       "model_path": {
         "type": "string",
         "description": "File, zoo:<id>, hf:<org/name>"
@@ -409,6 +417,14 @@
         "type": "string",
         "description": "Previous nextCursor."
       },
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "description": "Default concise."
+      },
       "model_path": {
         "type": "string",
         "description": "File, zoo:<id>, hf:<org/name>"
@@ -459,6 +475,14 @@
       "includeUpstream": {
         "type": "boolean",
         "description": "Default true."
+      },
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "description": "Default concise."
       },
       "model_path": {
         "type": "string",
@@ -584,6 +608,14 @@
         ],
         "description": "Minimum. Default: all."
       },
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "description": "Default concise."
+      },
       "model_path": {
         "type": "string",
         "description": "File, zoo:<id>, hf:<org/name>"
@@ -596,7 +628,15 @@
     "properties": {
       "verbose": {
         "type": "boolean",
-        "description": "Every stage's data."
+        "description": "Same as response_format detailed."
+      },
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "detailed"
+        ],
+        "description": "Default concise."
       },
       "ask_user": {
         "type": "boolean",

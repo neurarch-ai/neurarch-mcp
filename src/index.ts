@@ -1,11 +1,11 @@
 import { resolve } from 'node:path';
 import { unwatchFile, watchFile } from 'node:fs';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { loadModelFile, sourceKindFor } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
-import { parseFlags, CORE_TOOLS } from './cli.js';
+import { parseFlags, CORE_TOOLS, TOOL_GROUPS } from './cli.js';
 import { createMcpServer } from './server.js';
 import { setHfEnabled } from './sources.js';
 import { EXTRA_TOOLS, HF_TOOLS } from './extraTools.js';
@@ -69,6 +69,11 @@ Flags:
             one switch that lets a tool open a socket on your behalf
             (huggingface.co, to read config.json). HF_TOKEN is sent for gated
             repos. Results are cached for a day under ~/.cache/neurarch-mcp.
+  --toolsets=GROUP[,GROUP]
+            Advertise only these groups: ${Object.keys(TOOL_GROUPS).join(', ')}.
+            'write' is the same as --write. Overrides --tools.
+  --read-only
+            Never expose write tools, even with --write or --toolsets=write.
   --tools=full
             Advertise every read tool. The default is the core set
             (${CORE_TOOLS.length}: ${CORE_TOOLS.join(', ')});
@@ -144,6 +149,7 @@ async function main(): Promise<void> {
   const {
     versionRequested, helpRequested, writeEnabled, watchEnabled,
     httpEnabled, httpPort, httpHost, modelArg, hfEnabled, toolSet, command, json, positional, hostedRequested,
+    unknownToolsets,
   } = parseFlags(process.argv.slice(2));
 
   if (versionRequested) {
@@ -151,6 +157,12 @@ async function main(): Promise<void> {
     process.exit(0);
   }
   setHfEnabled(hfEnabled);
+  if (unknownToolsets.length > 0) {
+    process.stderr.write(
+      `neurarch-mcp: unknown --toolsets group ${unknownToolsets.join(', ')}. Groups: ${Object.keys(TOOL_GROUPS).join(', ')}.\n`,
+    );
+    process.exit(1);
+  }
 
   if (command === 'hook') {
     // A Claude Code PreToolUse hook: silent unless it blocks. Nothing the
@@ -301,9 +313,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const server = createMcpServer({ getModel, ctx, writeEnabled, version: VERSION, toolSet });
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // serveStdio, not a hand-wired transport: it negotiates the protocol
+  // revision per connection, so a 2026-07-28 client and a 2025-era client are
+  // both served from this one factory.
+  serveStdio(() => createMcpServer({ getModel, ctx, writeEnabled, version: VERSION, toolSet }));
 }
 
 /**
