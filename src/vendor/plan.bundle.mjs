@@ -13994,6 +13994,39 @@ function renderServeText(r, name = "model") {
   L.push("");
   return L.join("\n");
 }
+
+// src/utils/checkVerdict.ts
+var VERDICT_PARTS = ["design", "serve", "layout", "data", "change"];
+var RANK = { block: 3, ask: 2, warn: 1, ok: 0 };
+function toneOfFindings(findings) {
+  if (!Array.isArray(findings)) return "ok";
+  let tone = "ok";
+  for (const f of findings) {
+    if (f?.severity === "block") return "block";
+    if (f?.severity === "warn") tone = "warn";
+  }
+  return tone;
+}
+function toneOfChange(change) {
+  const gate = change?.gate;
+  if (!gate) return "ok";
+  if (gate.ok === false || Array.isArray(gate.blockers) && gate.blockers.length > 0) return "block";
+  return Array.isArray(gate.warnings) && gate.warnings.length > 0 ? "warn" : "ok";
+}
+function foldCheckVerdict(designVerdict, blocks) {
+  const parts = { design: designVerdict };
+  if (blocks.serve != null) parts.serve = toneOfFindings(blocks.serve.findings);
+  if (blocks.layout != null) parts.layout = toneOfFindings(blocks.layout.findings);
+  if (blocks.dataFit != null) parts.data = toneOfFindings(blocks.dataFit.findings);
+  if (blocks.change != null) parts.change = toneOfChange(blocks.change);
+  let verdict = designVerdict;
+  for (const p of VERDICT_PARTS) {
+    const t = parts[p];
+    if (t != null && RANK[t] > RANK[verdict]) verdict = t;
+  }
+  const verdictSources = VERDICT_PARTS.filter((p) => parts[p] === verdict);
+  return { verdict, designVerdict, verdictSources, verdictParts: parts };
+}
 export {
   ACTIVATION_K,
   ATTENTION_K,
@@ -14021,6 +14054,7 @@ export {
   UPPER_COVERAGE,
   UPPER_FLOOR_GB,
   UPPER_K,
+  VERDICT_PARTS,
   activationGbFor,
   adapterParamsFor,
   attentionPhrase,
@@ -14041,6 +14075,7 @@ export {
   factsFor2 as factsFor,
   fitVerdict,
   fmtParamCount,
+  foldCheckVerdict,
   historySentence,
   inferenceFactsFor,
   inferencePeakFor,
