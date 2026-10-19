@@ -21,6 +21,7 @@ import { LAUNCH_TOOLS } from './launchTools.js';
 import { PIN_TOOLS } from './pinTools.js';
 import { CHANGE_TOOLS } from './changeTools.js';
 import { pageOf, PAGE_PARAMS } from './paging.js';
+import { RESPONSE_FORMAT_PARAM, isDetailed, omitted } from './responseFormat.js';
 import { DATA_SCHEMA, parseDataArg, hfConfigOf, dataFitFor } from './lib/dataFit.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
@@ -127,10 +128,20 @@ const getModelSummary: ToolDef = {
 const describeArchitectureTool: ToolDef = {
   name: 'describe_architecture',
   description: 'One-call orientation: topologically-ordered layer pipeline, model depth (longest path), input/output shapes, total params and MACs, the top-5 heaviest layers by parameters AND by compute, and a validation rollup. Use this instead of chaining get_model_summary + param_count_by_block + flops_by_block + validate_model: it answers "what is this model and where is the budget" in a single call.',
-  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-  handler: (_args, model) => {
+  inputSchema: { type: 'object', properties: { ...RESPONSE_FORMAT_PARAM }, additionalProperties: false },
+  handler: (args: { response_format?: string }, model) => {
     const quality = parseQuality(model);
-    return { ...describeArchitecture(model), ...(quality.grade !== 'full' ? { parseQuality: quality } : {}) };
+    const full = describeArchitecture(model);
+    // Concise keeps the top 3 of each hotspot list; the pipeline is already capped.
+    const keep = isDetailed(args) ? Infinity : 3;
+    const dropped = Math.max(0, full.paramHotspots.length - keep) + Math.max(0, full.computeHotspots.length - keep);
+    return {
+      ...full,
+      paramHotspots: full.paramHotspots.slice(0, keep),
+      computeHotspots: full.computeHotspots.slice(0, keep),
+      ...omitted(dropped, 'hotspot entries past the top 3'),
+      ...(quality.grade !== 'full' ? { parseQuality: quality } : {}),
+    };
   },
 };
 
@@ -181,12 +192,13 @@ const findLayers: ToolDef = {
       augmentation: { type: 'string', description: 'e.g. "freeze".' },
       sortByParams: { type: 'boolean', description: 'Largest first.' },
       ...PAGE_PARAMS,
+      ...RESPONSE_FORMAT_PARAM,
     },
     additionalProperties: false,
   },
   handler: (
-    { type, namePattern, scope, augmentation, sortByParams, limit, cursor }:
-      { type?: string; namePattern?: string; scope?: string; augmentation?: string; sortByParams?: boolean; limit?: number; cursor?: string },
+    { type, namePattern, scope, augmentation, sortByParams, limit, cursor, response_format }:
+      { type?: string; namePattern?: string; scope?: string; augmentation?: string; sortByParams?: boolean; limit?: number; cursor?: string; response_format?: string },
     model,
   ) => {
     let matches: MLComponent[] = model.components;
@@ -207,11 +219,15 @@ const findLayers: ToolDef = {
     }));
     if (sortByParams) withParams.sort((a, b) => b.params - a.params);
     const page = pageOf(withParams, { limit, cursor }, 50);
+    const detailed = isDetailed({ response_format });
     return {
       count: withParams.length,
       truncated: page.nextCursor !== null,
       nextCursor: page.nextCursor,
-      layers: page.items.map(({ c, params }) => ({
+      // Concise drops the fields an agent rarely needs per row (shape, the
+      // formatted duplicate of paramCount) and the empty ones; get_layer has
+      // everything about any one of them.
+      layers: page.items.map(({ c, params }) => detailed ? {
         name: c.name,
         type: c.type,
         scope: c.scope ?? null,
@@ -219,7 +235,14 @@ const findLayers: ToolDef = {
         paramCount: params,
         paramCountFormatted: fmtParams(params),
         augmentations: c.augmentations ?? [],
-      })),
+      } : {
+        name: c.name,
+        type: c.type,
+        paramCount: params,
+        ...(c.scope ? { scope: c.scope } : {}),
+        ...(c.augmentations?.length ? { augmentations: c.augmentations } : {}),
+      }),
+      ...(detailed || page.items.length === 0 ? {} : { fields: 'concise: outputShape and paramCountFormatted left out; pass response_format: "detailed" for them.' }),
     };
   },
 };
@@ -235,11 +258,12 @@ const layerImpact: ToolDef = {
       namePattern:  { type: 'string', description: 'Regex on names, instead of names.' },
       maxDistance:  { type: 'number', description: 'BFS depth limit.' },
       includeUpstream: { type: 'boolean', description: 'Default true.' },
+      ...RESPONSE_FORMAT_PARAM,
     },
     additionalProperties: false,
   },
   handler: (
-    { names, namePattern, maxDistance, includeUpstream }: { names?: string[]; namePattern?: string; maxDistance?: number; includeUpstream?: boolean },
+    { names, namePattern, maxDistance, includeUpstream, response_format }: { names?: string[]; namePattern?: string; maxDistance?: number; includeUpstream?: boolean; response_format?: string },
     model,
   ) => {
     let targets: MLComponent[] = [];
@@ -256,12 +280,19 @@ const layerImpact: ToolDef = {
       return { error: 'Provide either "names" or "namePattern".' };
     }
     const report = analyzeImpact(model, targets, { maxDistance, includeUpstream });
+    const cap = isDetailed({ response_format }) ? Infinity : 25;
     return {
       targets:    report.targets.map(t => ({ name: t.name, type: t.type })),
-      downstream: report.downstream.map(n => ({ name: n.name, type: n.type, distance: n.distance, shapeSensitive: n.shapeSensitive })),
-      upstream:   report.upstream.map(n => ({ name: n.name, type: n.type, distance: n.distance })),
+      // Concise lists the nearest 25 each way (BFS order is nearest first);
+      // totals and summary always count everything.
+      downstream: report.downstream.slice(0, cap).map(n => ({ name: n.name, type: n.type, distance: n.distance, shapeSensitive: n.shapeSensitive })),
+      upstream:   report.upstream.slice(0, cap).map(n => ({ name: n.name, type: n.type, distance: n.distance })),
       totals:     report.totals,
       summary:    report.summary,
+      ...omitted(
+        Math.max(0, report.downstream.length - cap) + Math.max(0, report.upstream.length - cap),
+        'reachable layers past the nearest 25 in each direction',
+      ),
     };
   },
 };
@@ -481,14 +512,16 @@ const checkDesignTool: ToolDef = {
   inputSchema: {
     type: 'object',
     properties: {
-      verbose: { type: 'boolean', description: 'Every stage\'s data.' },
+      verbose: { type: 'boolean', description: 'Same as response_format detailed.' },
+      ...RESPONSE_FORMAT_PARAM,
       ask_user: { type: 'boolean', description: 'Ask the human (elicitation).' },
       data: DATA_SCHEMA,
       config: { type: 'object', description: 'HF config.json (label count).' },
     },
     additionalProperties: false,
   },
-  handler: async ({ verbose, ask_user, data, config }: { verbose?: boolean; ask_user?: boolean; data?: unknown; config?: Record<string, unknown> }, model, ctx) => {
+  handler: async ({ verbose: verboseArg, ask_user, data, config, response_format }: { verbose?: boolean; ask_user?: boolean; data?: unknown; config?: Record<string, unknown>; response_format?: string }, model, ctx) => {
+    const verbose = verboseArg === true || isDetailed({ response_format });
     const dataSpec = data != null ? parseDataArg('check_design', data) : null;
     if (config != null && (typeof config !== 'object' || Array.isArray(config))) throw new Error('check_design: config must be a config.json object.');
     const full = checkDesign(model);
@@ -499,7 +532,7 @@ const checkDesignTool: ToolDef = {
     const out: Record<string, unknown> = verbose ? { ...full } : {
       ...full,
       stages: full.stages.map(s => ({ stage: s.stage, status: s.status, headline: s.headline })),
-      note: 'Stage data omitted; pass verbose:true for cost breakdown, deploy targets and the data contract.',
+      note: 'Stage data omitted; pass response_format: "detailed" for cost breakdown, deploy targets and the data contract.',
     };
     if (ask_user && full.decision && ctx.elicit) {
       const answer = await ctx.elicit({
@@ -547,10 +580,11 @@ const lintModelTool: ToolDef = {
         enum: ['block', 'warn', 'info'],
         description: 'Minimum. Default: all.',
       },
+      ...RESPONSE_FORMAT_PARAM,
     },
     additionalProperties: false,
   },
-  handler: ({ severity }: { severity?: EngineFinding['severity'] }, model) => {
+  handler: ({ severity, response_format }: { severity?: EngineFinding['severity']; response_format?: string }, model) => {
     const order = { block: 0, warn: 1, info: 2 } as const;
     const floor = severity ? order[severity] : 2;
     const all = lintModelGraph(model);
@@ -565,12 +599,21 @@ const lintModelTool: ToolDef = {
     for (const f of findings) counts[f.severity]++;
     const quality = parseQuality(model);
     const edges = edgeProvenance(model);
+    // Concise: block and warn findings in full, info findings counted per rule.
+    // Info is most of the volume (29 of 31 findings on qwen2.5-7b) and none of
+    // the verdict; `counts` below still counts every one of them.
+    const detailed = isDetailed({ response_format });
+    const shown = detailed ? findings : findings.filter(f => f.severity !== 'info');
+    const infoByRule = new Map<string, number>();
+    if (!detailed) for (const f of findings) if (f.severity === 'info') infoByRule.set(f.rule, (infoByRule.get(f.rule) ?? 0) + 1);
     return {
       // The headline an agent should act on before reading the list: a block is
       // a design that will not run or will not train, not a style note.
       clean: counts.block === 0 && counts.warn === 0,
       counts,
-      findings,
+      findings: shown,
+      ...(infoByRule.size > 0 ? { infoByRule: Object.fromEntries(infoByRule) } : {}),
+      ...omitted(findings.length - shown.length, 'info findings (counted per rule in infoByRule)'),
       // The measured evidence behind the rules that fired, for the ones that
       // have any. An agent told "head-dim divisibility" can quote the study
       // rather than assert a rule, and a rule with no measurement behind it is

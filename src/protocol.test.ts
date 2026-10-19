@@ -62,7 +62,7 @@ describe('argument errors', () => {
   it('names an unknown argument and lists the accepted ones', async () => {
     const r = await (await connect()).callTool({ name: 'lint_model', arguments: { severty: 'warn' } });
     expect(r.isError).toBe(true);
-    expect(text(r)).toMatch(/unknown argument "severty".*Accepted: severity, model_path/s);
+    expect(text(r)).toMatch(/unknown argument "severty".*Accepted: severity, response_format, model_path/s);
   });
 
   it('names a wrong type and an out-of-set value', async () => {

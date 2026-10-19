@@ -401,7 +401,10 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.3k tokens per turn, the full one 7.6k, output schemas included.
+- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.5k tokens per turn, the full one 7.8k, output schemas included.
+- `--toolsets=sizing,serving,...`: advertise only these groups (`sizing`, `parallel`, `serving`, `changes`, `design`, `models`, `write`). A team that only sizes training jobs loads six tools (about 1.6k tokens a turn). `write` is the same as `--write`, with the same startup refusals; an unknown group name stops the server at startup. Overrides `--tools`.
+- `--read-only`: never expose write tools, even with `--write` or `--toolsets=write`.
+- `response_format: "concise" | "detailed"` on `lint_model`, `find_layers`, `layer_impact`, `describe_architecture` and `check_design`. Concise is the default and says what it left out (`omitted.count`, or `fields` for find_layers); on qwen2.5-7b it cuts `lint_model` from 10.6 KB to 1.4 KB by counting info findings per rule instead of listing them.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
