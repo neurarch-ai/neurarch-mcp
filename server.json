@@ -8,12 +8,12 @@
     "url": "https://github.com/neurarch-ai/neurarch-mcp",
     "source": "github"
   },
-  "version": "0.20.0",
+  "version": "0.21.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "neurarch-mcp",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "transport": {
         "type": "stdio"
       },
