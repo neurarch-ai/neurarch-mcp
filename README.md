@@ -152,7 +152,7 @@ check_parallel_layout { model_path: "hf:Qwen/Qwen3-8B", tp: 4, pp: 4, micro_batc
 ```text
 check_serving_config { command: "vllm serve Qwen/Qwen3-8B -tp 4 --max-model-len 131072 --max-num-seqs 64", gpu: "l4", gpus: 4 }
 -> blocked: Served length 131072 is past the model's 40960-token context
-   (+ warn: --max-num-seqs 64, but at most 3 sequences fit at the full 131072 tokens; info: no --reasoning-parser)
+   (+ warn: --max-num-seqs 64, but at most 3 requests fit at the full 131072 tokens; info: no --reasoning-parser)
 ```
 
 Both are the app's own checks (`npx neurarch layout`, `npx neurarch serve-check`), vendored in the plan bundle and offline; an `hf:` model needs `--hf` the first time.

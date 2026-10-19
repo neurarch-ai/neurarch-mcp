@@ -24,6 +24,21 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   tables. On 21 public vLLM startup logs (out of sample) the KV token count is
   within 1.07% (neurarch-ai/neurarch #337). `basis` now starts "Predicted from
   config.json" rather than "Derived from config.json".
+- **`check_serving_config` prices the startup terms vLLM measures**: the CUDA
+  graph pool from vLLM's own capture-size list and estimate (against the
+  figure vLLM printed on 10 held-out public logs, mean absolute error 0.38
+  GiB), and the vision encoder's profiling pass for gemma-3 and Qwen-VL
+  (vision-language launches end to end on 10 public logs, median 5.96%)
+  (neurarch-ai/neurarch #344).
+
+### Fixed
+- Multimodal configs are read as their language model: the vision tower's
+  position table, head count and FFN no longer block TP or context checks
+  (InternVL, gemma-3, Qwen-Omni). fp32 configs follow each engine's own
+  dtype default. Derived weights are checked against the checkpoint's
+  published `total_size` and the published size is used past a 10% gap
+  (MXFP4, 4-bit and MLA checkpoints). New cards: A40, GH200 96/144 GB, RTX
+  PRO 6000 Blackwell, Ascend 910B (memory only) (neurarch-ai/neurarch #348).
 
 ## [0.18.0] - 2026-10-18
 
