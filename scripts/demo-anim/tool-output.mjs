@@ -4,8 +4,8 @@
 //   node scripts/demo-anim/tool-output.mjs <model> <tool> '<json args>'
 //
 // An hf:<org/name> model starts the server with --hf, the one network switch.
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
 const [model, tool, args = '{}'] = process.argv.slice(2);
 if (!model || !tool) {

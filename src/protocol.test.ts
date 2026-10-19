@@ -5,8 +5,8 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer, SERVER_INSTRUCTIONS, GPU_HINTS } from './server.js';
 import { TOOLS } from './tools.js';
 import { makeModel } from './test/fixtures.js';
@@ -142,7 +142,6 @@ describe('progress and cancellation', () => {
     const seen: Array<{ progress: number; total?: number }> = [];
     const r = await (await connect()).callTool(
       { name: 'model_changes', arguments: { hf_id: 'Qwen/Qwen3-8B' } },
-      undefined,
       { onprogress: (p) => { seen.push({ progress: p.progress, total: p.total }); } },
     );
     expect(r.isError).toBeFalsy();
@@ -155,7 +154,7 @@ describe('progress and cancellation', () => {
     vi.stubGlobal('fetch', f);
     const c = await connect();
     const ctrl = new AbortController();
-    const pending = c.callTool({ name: 'model_changes', arguments: { hf_id: 'Qwen/Qwen3-8B' } }, undefined, { signal: ctrl.signal });
+    const pending = c.callTool({ name: 'model_changes', arguments: { hf_id: 'Qwen/Qwen3-8B' } }, { signal: ctrl.signal });
     await new Promise(r => setTimeout(r, 50));
     ctrl.abort('user pressed stop');
     await expect(pending).rejects.toThrow();

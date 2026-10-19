@@ -4,11 +4,19 @@
  * your machine — e.g. run the server locally, expose it through a Cloudflare or
  * Tailscale tunnel, and drive it from a phone or a cloud agent.
  *
- * Stateful sessions: a client POSTs `initialize`, gets an `Mcp-Session-Id`
- * header back, and carries it on every later request — the standard Streamable
- * HTTP flow every real MCP client (Claude Code, Cursor, ...) speaks. GET /mcp
- * opens the server->client SSE stream; DELETE /mcp tears a session down.
- * Zero runtime deps beyond the MCP SDK — Node's built-in http.
+ * Two eras behind one URL, routed by the SDK's own classifier
+ * (`isLegacyRequest`, the step `createMcpHandler` itself runs):
+ *   - 2026-07-28 requests are stateless. Every one is served by a fresh server
+ *     instance from the same factory stdio uses (`createMcpHandler`, strict),
+ *     because that revision has no sessions and carries the client's
+ *     capabilities on every request.
+ *   - 2025-era requests keep the v1 session flow: initialize mints an
+ *     `Mcp-Session-Id`, later requests carry it, GET opens the SSE stream,
+ *     DELETE tears the session down. Not the SDK's stateless legacy fallback,
+ *     because a per-request instance never sees the initialize that declared
+ *     the client's capabilities, so it cannot know the client can answer an
+ *     elicitation. A session keeps that, exactly as 0.21 did.
+ * Zero runtime deps beyond the MCP SDK and its Node adapter, on Node's http.
  *
  * Security posture (this exposes tools, including --write mutations, over a
  * socket):
@@ -21,8 +29,8 @@
  */
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { NodeStreamableHTTPServerTransport, toNodeHandler, toWebRequest } from '@modelcontextprotocol/node';
+import { createMcpHandler, isInitializeRequest, isLegacyRequest, type McpHttpHandler } from '@modelcontextprotocol/server';
 import type { ModelArchitecture } from './lib/types.js';
 import { type ToolContext } from './tools.js';
 import { SOURCE_TAG } from './lib/neurarchApi.js';
@@ -82,10 +90,14 @@ export interface HttpServerOptions {
 }
 
 let liveServer: import('node:http').Server | null = null;
+let liveHandler: McpHttpHandler | null = null;
 
-/** Close the listener and every live session. A test seam; production exits by signal. */
-export function stopHttpServer(): Promise<void> {
-  return new Promise((res) => {
+/** Close the listener and every in-flight exchange. A test seam; production exits by signal. */
+export async function stopHttpServer(): Promise<void> {
+  const h = liveHandler;
+  liveHandler = null;
+  await h?.close();
+  await new Promise<void>((res) => {
     const s = liveServer;
     liveServer = null;
     if (!s) return res();
@@ -113,13 +125,21 @@ export function startHttpServer(opts: HttpServerOptions): void {
     .flatMap(h => (h.includes(':') ? [h] : [h, `${h}:443`, `${h}:${port}`]));
   const allowedHosts = [`${host}:${port}`, `127.0.0.1:${port}`, `localhost:${port}`, ...publicHosts];
 
-  // One transport per live session, keyed by the id the SDK mints on initialize.
-  const sessions = new Map<string, StreamableHTTPServerTransport>();
+  const factory = () => createMcpServer({ getModel, ctx, writeEnabled, version, toolSet });
 
-  async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // 2026-07-28: one instance per request. The handler checks no Host header
+  // and no token itself; both checks stay in front of it, below.
+  const mcp = createMcpHandler(factory, { legacy: 'reject' });
+  liveHandler = mcp;
+  const handleModern = toNodeHandler(mcp);
+
+  // 2025 era: one transport per live session, keyed by the id the SDK mints on initialize.
+  const sessions = new Map<string, NodeStreamableHTTPServerTransport>();
+
+  async function handleLegacy(req: IncomingMessage, res: ServerResponse, body: unknown): Promise<void> {
     const sid = sessionHeader(req);
 
-    // GET opens the SSE stream, DELETE tears the session down — both need an
+    // GET opens the SSE stream, DELETE tears the session down: both need an
     // existing session; the transport does the rest.
     if (req.method === 'GET' || req.method === 'DELETE') {
       const transport = sid ? sessions.get(sid) : undefined;
@@ -133,14 +153,6 @@ export function startHttpServer(opts: HttpServerOptions): void {
 
     if (req.method !== 'POST') {
       jsonRpcError(res, 405, -32000, 'Method not allowed.', { allow: 'POST, GET, DELETE' });
-      return;
-    }
-
-    let body: unknown;
-    try {
-      body = await readJsonBody(req);
-    } catch {
-      jsonRpcError(res, 400, -32700, 'Parse error: request body is not valid JSON.');
       return;
     }
 
@@ -161,19 +173,40 @@ export function startHttpServer(opts: HttpServerOptions): void {
       return;
     }
 
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
-      enableDnsRebindingProtection: protectDns,
-      ...(protectDns ? { allowedHosts } : {}),
       onsessioninitialized: (id: string) => { sessions.set(id, transport); },
       onsessionclosed: (id: string) => { sessions.delete(id); },
     });
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
-    const server = createMcpServer({ getModel, ctx, writeEnabled, version, toolSet });
-    await server.connect(transport);
+    await factory().connect(transport);
     await transport.handleRequest(req, res, body);
+  }
+
+  async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    let body: unknown;
+    if (req.method === 'POST') {
+      try {
+        body = await readJsonBody(req);
+      } catch {
+        jsonRpcError(res, 400, -32700, 'Parse error: request body is not valid JSON.');
+        return;
+      }
+    }
+    if (await isLegacyRequest(await toWebRequest(req, req.method === 'POST' ? body : undefined), body)) {
+      await handleLegacy(req, res, body);
+      return;
+    }
+    await handleModern(req, res, body);
+  }
+
+  /** DNS-rebinding protection without a token: the Host header must name this server. */
+  function hostAllowed(req: IncomingMessage): boolean {
+    if (!protectDns) return true;
+    const h = req.headers.host;
+    return typeof h === 'string' && allowedHosts.includes(h);
   }
 
   const httpServer = createHttpServer((req, res) => {
@@ -214,6 +247,11 @@ export function startHttpServer(opts: HttpServerOptions): void {
       return;
     }
 
+    if (!hostAllowed(req)) {
+      jsonRpcError(res, 403, -32000, `Invalid Host header: ${String(req.headers.host ?? '')}`);
+      return;
+    }
+
     handleMcp(req, res).catch((e) => {
       if (!res.headersSent) jsonRpcError(res, 500, -32603, (e as Error).message);
     });
@@ -230,7 +268,7 @@ export function startHttpServer(opts: HttpServerOptions): void {
     process.stderr.write(`neurarch-mcp: HTTP transport on http://${host}:${port}/mcp${auth}\n`);
   });
 
-  const stop = () => { httpServer.close(); process.exit(0); };
+  const stop = () => { void mcp.close().finally(() => { httpServer.close(); process.exit(0); }); };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
 }

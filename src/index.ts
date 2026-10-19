@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { unwatchFile, watchFile } from 'node:fs';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { loadModelFile, sourceKindFor } from './loader.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { TOOLS, type ToolContext } from './tools.js';
@@ -313,9 +313,10 @@ async function main(): Promise<void> {
     return;
   }
 
-  const server = createMcpServer({ getModel, ctx, writeEnabled, version: VERSION, toolSet });
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  // serveStdio, not a hand-wired transport: it negotiates the protocol
+  // revision per connection, so a 2026-07-28 client and a 2025-era client are
+  // both served from this one factory.
+  serveStdio(() => createMcpServer({ getModel, ctx, writeEnabled, version: VERSION, toolSet }));
 }
 
 /**

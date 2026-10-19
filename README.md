@@ -459,7 +459,7 @@ node dist/index.js --help
 npm run build:mcpb                                 # the Claude Desktop bundle
 ```
 
-CI runs typecheck, build and test on Node 20 and 22. The package vendors from the main Neurarch repo so that it works with no network, no key and no second install: `src/vendor/engine.bundle.mjs` (registry, PyTorch parser, rule set, code generator, HF config converter) and `src/vendor/verifier.bundle.mjs` (five pipeline stages, provenance table, ranker). Both are generated, contract-tested, and asserted to contain no `import` (and, for the verifier, no `fetch`). `@modelcontextprotocol/sdk` is the only runtime dependency. `zoo/` is synced from [awesome-llm-model-zoo](https://github.com/neurarch-ai/awesome-llm-model-zoo) with `npm run sync:zoo`.
+CI runs typecheck, build and test on Node 20 and 22. The package vendors from the main Neurarch repo so that it works with no network, no key and no second install: `src/vendor/engine.bundle.mjs` (registry, PyTorch parser, rule set, code generator, HF config converter) and `src/vendor/verifier.bundle.mjs` (five pipeline stages, provenance table, ranker). Both are generated, contract-tested, and asserted to contain no `import` (and, for the verifier, no `fetch`). The MCP SDK (`@modelcontextprotocol/server`, with `@modelcontextprotocol/node` for the HTTP adapter) is the only runtime dependency. `zoo/` is synced from [awesome-llm-model-zoo](https://github.com/neurarch-ai/awesome-llm-model-zoo) with `npm run sync:zoo`.
 
 A new tool is a small, self-contained PR: see [CONTRIBUTING.md](./CONTRIBUTING.md). The agent skill that teaches an evidence-gated edit loop over these tools lives in [`skills/`](./skills/neurarch-skill) (`npx skills add neurarch-ai/neurarch-mcp`).
 
@@ -522,7 +522,7 @@ The package vendors from the main Neurarch repo, and everything is vendored for 
 - `src/vendor/engine.bundle.mjs`: the compiled Neurarch engine: the component registry, the PyTorch parser behind `.py` support, and the rule set behind `lint_model`. Generated, never hand-edited; the header says how to regenerate it, and `src/vendor/engine.contract.test.ts` fails if its exports drift or it ever acquires an import.
 - `src/vendor/verifier.bundle.mjs`: the compiled Neurarch verifier behind `check_design`: the five pipeline stages, plus the rule-provenance table. Same code path as the app and the hosted endpoint, so an agent here and a person in the app get the same answer. Same rules: generated, contract-tested (`verifier.contract.test.ts`), and asserted to contain no import and no `fetch`.
 
-Neither adds a runtime dependency: `@modelcontextprotocol/sdk` is still the only one.
+Neither adds a runtime dependency: the MCP SDK is still the only one.
 
 ## Privacy Policy
 
