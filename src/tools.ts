@@ -18,6 +18,9 @@ import { SIZING_TOOLS } from './sizingTools.js';
 import { OOM_TOOLS } from './oomTools.js';
 import { EDIT_TOOLS } from './editTools.js';
 import { LAUNCH_TOOLS } from './launchTools.js';
+import { PIN_TOOLS } from './pinTools.js';
+import { CHANGE_TOOLS } from './changeTools.js';
+import { pageOf, PAGE_PARAMS } from './paging.js';
 import { DATA_SCHEMA, parseDataArg, hfConfigOf, dataFitFor } from './lib/dataFit.js';
 import { parseQuality, unresolvedParamsOf, DIMENSION_RULES } from './lib/parseQuality.js';
 
@@ -33,6 +36,18 @@ export interface ToolContext {
    * answer and finds this undefined puts the question in its result instead.
    */
   elicit?: (q: { message: string; options: Array<{ value: string; label: string; hint?: string }> }) => Promise<{ action: 'accept' | 'decline' | 'cancel'; value?: string }>;
+  /**
+   * Aborted when the client cancels the request (notifications/cancelled).
+   * A tool that waits on something slow (a Python trace, a fetch) passes it on
+   * so a cancelled call stops the work rather than only discarding the answer.
+   */
+  signal?: AbortSignal;
+  /**
+   * Report progress (notifications/progress). Present only when the client
+   * sent a progressToken with the call. `progress` must increase from one
+   * report to the next; `total` is omitted when the end is not known.
+   */
+  progress?: (progress: number, total?: number, message?: string) => Promise<void>;
 }
 
 /**
@@ -67,6 +82,12 @@ export interface ToolDef {
    * guessing at.
    */
   annotations?: ToolAnnotations;
+  /**
+   * Resources this result points at, sent as `resource_link` content blocks
+   * after the JSON (spec 2025-06-18). A client can fetch or pin one without
+   * the agent copying a URI out of the text.
+   */
+  links?: (result: any) => Array<{ uri: string; name: string; title?: string; description?: string; mimeType?: string }>;
   handler: (args: any, model: ModelArchitecture, ctx: ToolContext) => unknown | Promise<unknown>;
 }
 
@@ -105,7 +126,7 @@ const getModelSummary: ToolDef = {
 // ── describe_architecture ────────────────────────────────────────────────────
 const describeArchitectureTool: ToolDef = {
   name: 'describe_architecture',
-  description: 'One-call orientation: topologically-ordered layer pipeline, model depth (longest path), input/output shapes, total params and MACs, the top-5 heaviest layers by parameters AND by compute, and a validation rollup. Use this instead of chaining get_model_summary + param_count_by_block + flops_by_block + validate_model — it answers "what is this model and where is the budget" in a single call.',
+  description: 'One-call orientation: topologically-ordered layer pipeline, model depth (longest path), input/output shapes, total params and MACs, the top-5 heaviest layers by parameters AND by compute, and a validation rollup. Use this instead of chaining get_model_summary + param_count_by_block + flops_by_block + validate_model: it answers "what is this model and where is the budget" in a single call.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   handler: (_args, model) => {
     const quality = parseQuality(model);
@@ -116,7 +137,7 @@ const describeArchitectureTool: ToolDef = {
 // ── get_layer ────────────────────────────────────────────────────────────────
 const getLayer: ToolDef = {
   name: 'get_layer',
-  description: 'Return the full definition of a single layer (params, shapes, notes, connections). Looks up by exact name first, then by id, then by case-insensitive substring. Returns null when no match.',
+  description: 'Return the full definition of a single layer (params, shapes, notes, connections). Looks up by exact name first, then by id, then by case-insensitive substring. When nothing matches, the error names the closest layer names.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -128,7 +149,7 @@ const getLayer: ToolDef = {
   handler: ({ name }: { name: string }, model) => {
     const { resolved } = resolveTargets(model, [name]);
     const comp = resolved[0];
-    if (!comp) return null;
+    if (!comp) throw new Error(notFound(model, name));
     const params = estimateLayerParams(comp.type, comp.params, comp.inputShape ?? []);
     return {
       id: comp.id,
@@ -150,7 +171,7 @@ const getLayer: ToolDef = {
 // ── find_layers ──────────────────────────────────────────────────────────────
 const findLayers: ToolDef = {
   name: 'find_layers',
-  description: 'Search layers by type, name regex, scope prefix, and/or applied augmentation, then optionally rank by parameter count. Answers "where are all the convolutions?", "which layers under encoder.layer.3 are frozen?", or "what are the 5 biggest layers?". Returns name, type, scope, param count, and any augmentations — call get_layer for full detail.',
+  description: 'Search layers by type, name regex, scope prefix, and/or applied augmentation, then optionally rank by parameter count. Answers "where are all the convolutions?", "which layers under encoder.layer.3 are frozen?", or "what are the 5 biggest layers?". Returns name, type, scope, param count, and any augmentations, and call get_layer for full detail.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -159,13 +180,13 @@ const findLayers: ToolDef = {
       scope:        { type: 'string', description: 'Prefix, e.g. "encoder.layer.3".' },
       augmentation: { type: 'string', description: 'e.g. "freeze".' },
       sortByParams: { type: 'boolean', description: 'Largest first.' },
-      limit:        { type: 'number', description: 'Default 100.' },
+      ...PAGE_PARAMS,
     },
     additionalProperties: false,
   },
   handler: (
-    { type, namePattern, scope, augmentation, sortByParams, limit }:
-      { type?: string; namePattern?: string; scope?: string; augmentation?: string; sortByParams?: boolean; limit?: number },
+    { type, namePattern, scope, augmentation, sortByParams, limit, cursor }:
+      { type?: string; namePattern?: string; scope?: string; augmentation?: string; sortByParams?: boolean; limit?: number; cursor?: string },
     model,
   ) => {
     let matches: MLComponent[] = model.components;
@@ -177,7 +198,7 @@ const findLayers: ToolDef = {
         const re = compileUserRegExp(namePattern);
         matches = matches.filter(c => re.test(c.name));
       } catch (e) {
-        return { error: `Invalid regex: ${(e as Error).message}` };
+        return { error: `Invalid regex in namePattern: ${(e as Error).message}. Pass a JavaScript regular expression, e.g. "attn|attention".` };
       }
     }
     const withParams = matches.map(c => ({
@@ -185,11 +206,12 @@ const findLayers: ToolDef = {
       params: estimateLayerParams(c.type, c.params, c.inputShape ?? []),
     }));
     if (sortByParams) withParams.sort((a, b) => b.params - a.params);
-    const cap = typeof limit === 'number' && limit > 0 ? limit : 100;
+    const page = pageOf(withParams, { limit, cursor }, 50);
     return {
       count: withParams.length,
-      truncated: withParams.length > cap,
-      layers: withParams.slice(0, cap).map(({ c, params }) => ({
+      truncated: page.nextCursor !== null,
+      nextCursor: page.nextCursor,
+      layers: page.items.map(({ c, params }) => ({
         name: c.name,
         type: c.type,
         scope: c.scope ?? null,
@@ -247,7 +269,7 @@ const layerImpact: ToolDef = {
 // ── param_count_by_block ─────────────────────────────────────────────────────
 const paramCountByBlock: ToolDef = {
   name: 'param_count_by_block',
-  description: 'Group parameter counts by block (named group), scope (dotted module path), or layer type. Answers "where do my parameters live?" — useful for finding bloated subnets.',
+  description: 'Group parameter counts by block (named group), scope (dotted module path), or layer type. Answers "where do my parameters live?", useful for finding bloated subnets.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -264,7 +286,7 @@ const paramCountByBlock: ToolDef = {
 // ── flops_by_block ───────────────────────────────────────────────────────────
 const flopsByBlock: ToolDef = {
   name: 'flops_by_block',
-  description: 'Group MAC counts (FLOPs ÷ 2) by block, scope, or type. Answers "where is compute spent?" — pairs with param_count_by_block to find parameter-light but compute-heavy regions (attention) versus the inverse (large MLPs).',
+  description: 'Group MAC counts (FLOPs ÷ 2) by block, scope, or type. Answers "where is compute spent?"; pairs with param_count_by_block to find parameter-light but compute-heavy regions (attention) versus the inverse (large MLPs).',
   inputSchema: {
     type: 'object',
     properties: {
@@ -286,7 +308,7 @@ const flopsByBlock: ToolDef = {
 // ── mermaid_diagram ──────────────────────────────────────────────────────────
 const mermaidDiagram: ToolDef = {
   name: 'mermaid_diagram',
-  description: 'Render the model as Mermaid flowchart syntax (top-down). The caller wraps the result in ```mermaid``` fences. Use sparingly — it gets noisy past ~30 layers; pair with namePattern via find_layers to give the user a clearer mental model.',
+  description: 'Render the model as Mermaid flowchart syntax (top-down). The caller wraps the result in ```mermaid``` fences. Use sparingly: it gets noisy past ~30 layers; pair with namePattern via find_layers to give the user a clearer mental model.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -358,7 +380,7 @@ const listBlocks: ToolDef = {
 // ── compare_layers ────────────────────────────────────────────────────────────
 const compareLayersTool: ToolDef = {
   name: 'compare_layers',
-  description: 'Structurally diff two layers: whether they are the same type, their parameter-count delta, whether input/output shapes match, and exactly which param keys differ (only-in-a, only-in-b, and changed values). Use to answer "are block_0 and block_1 identical?" before deciding whether an edit to one should mirror to the other, or whether two blocks can share an implementation. Returns null when either layer cannot be resolved.',
+  description: 'Structurally diff two layers: whether they are the same type, their parameter-count delta, whether input/output shapes match, and exactly which param keys differ (only-in-a, only-in-b, and changed values). Use to answer "are block_0 and block_1 identical?" before deciding whether an edit to one should mirror to the other, or whether two blocks can share an implementation. When either layer cannot be resolved, the error names the closest layer names.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -368,13 +390,18 @@ const compareLayersTool: ToolDef = {
     required: ['a', 'b'],
     additionalProperties: false,
   },
-  handler: ({ a, b }: { a: string; b: string }, model) => compareLayers(model, a, b),
+  handler: ({ a, b }: { a: string; b: string }, model) => {
+    const r = compareLayers(model, a, b);
+    if (r) return r;
+    const missing = [a, b].filter(n => !resolveTargets(model, [n]).resolved.length);
+    throw new Error(missing.map(n => notFound(model, n)).join(' ') || `compare_layers: could not compare "${a}" and "${b}".`);
+  },
 };
 
 // ── get_block ─────────────────────────────────────────────────────────────────
 const getBlockTool: ToolDef = {
   name: 'get_block',
-  description: 'Drill into one block (named group, or a scope prefix like "encoder.layer.0"): its member layers with per-layer params and FLOPs, the block totals, and the edges crossing the block boundary — what feeds the block and what it feeds. Use after list_blocks to understand how a block connects to the rest of the graph before recommending extracting, replacing, or freezing it. Returns null when the name resolves to no group or scope.',
+  description: 'Drill into one block (named group, or a scope prefix like "encoder.layer.0"): its member layers with per-layer params and FLOPs, the block totals, and the edges crossing the block boundary: what feeds the block and what it feeds. Use after list_blocks to understand how a block connects to the rest of the graph before recommending extracting, replacing, or freezing it. When the name resolves to no group or scope, the error lists the blocks that exist.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -383,7 +410,14 @@ const getBlockTool: ToolDef = {
     required: ['name'],
     additionalProperties: false,
   },
-  handler: ({ name }: { name: string }, model) => getBlock(model, name),
+  handler: ({ name }: { name: string }, model) => {
+    const r = getBlock(model, name);
+    if (r) return r;
+    const groups = (model.groups ?? []).map(g => g.name);
+    const scopes = [...new Set(model.components.map(c => c.scope?.split('.').slice(0, 2).join('.')).filter((x): x is string => !!x))];
+    const known = (groups.length ? groups : scopes).slice(0, 12);
+    throw new Error(`No block or scope named "${name}".${known.length ? ` Blocks here include: ${known.join(', ')}.` : ''} list_blocks has the full list.`);
+  },
 };
 
 // ── diff_models ───────────────────────────────────────────────────────────────
@@ -569,7 +603,7 @@ const lintModelTool: ToolDef = {
 // ── find_path ────────────────────────────────────────────────────────────────
 const findPath: ToolDef = {
   name: 'find_path',
-  description: 'BFS shortest directed path from one layer to another. Answers "does encoder.0.attention reach lm_head?" — returns the ordered list of layer names along the path, or null when unreachable. Useful before recommending an edit to confirm two layers are actually on the same flow.',
+  description: 'BFS shortest directed path from one layer to another. Answers "does encoder.0.attention reach lm_head?": returns the ordered list of layer names along the path, or null when unreachable. Useful before recommending an edit to confirm two layers are actually on the same flow.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -637,11 +671,11 @@ const listConnections: ToolDef = {
     properties: {
       from:  { type: 'string', description: 'Source layer.' },
       to:    { type: 'string', description: 'Target layer.' },
-      limit: { type: 'number', description: 'Default 200.' },
+      ...PAGE_PARAMS,
     },
     additionalProperties: false,
   },
-  handler: ({ from, to, limit }: { from?: string; to?: string; limit?: number }, model) => {
+  handler: ({ from, to, limit, cursor }: { from?: string; to?: string; limit?: number; cursor?: string }, model) => {
     const compById = new Map(model.components.map(c => [c.id, c]));
     let edges = model.connections.map(e => ({
       from: compById.get(e.from)?.name ?? e.from,
@@ -658,11 +692,12 @@ const listConnections: ToolDef = {
       const names = new Set(resolved.map(r => r.name));
       edges = edges.filter(e => names.has(e.to));
     }
-    const cap = typeof limit === 'number' && limit > 0 ? limit : 200;
+    const page = pageOf(edges, { limit, cursor }, 100);
     return {
       count: edges.length,
-      truncated: edges.length > cap,
-      connections: edges.slice(0, cap),
+      truncated: page.nextCursor !== null,
+      nextCursor: page.nextCursor,
+      connections: page.items,
     };
   },
 };
@@ -753,6 +788,8 @@ export const TOOLS: ToolDef[] = [
   ...OOM_TOOLS,
   ...EDIT_TOOLS,
   ...LAUNCH_TOOLS,
+  ...PIN_TOOLS,
+  ...CHANGE_TOOLS,
   getModelSummary,
   describeArchitectureTool,
   getLayer,
@@ -778,3 +815,31 @@ export const TOOLS: ToolDef[] = [
 
 // Suppress unused-export TS warning when not destructured elsewhere
 export { fmtBytes };
+
+/**
+ * The error for a layer name that resolved to nothing, with the nearest names.
+ * Returning null made an agent guess again blind; the closest names by edit
+ * distance (and any that contain the query) are the next call it should make.
+ */
+export function notFound(model: ModelArchitecture, query: string): string {
+  const q = query.toLowerCase();
+  const scored = model.components.map(c => ({ name: c.name, d: c.name.toLowerCase().includes(q) || q.includes(c.name.toLowerCase()) ? 0 : editDistance(q, c.name.toLowerCase()) }));
+  scored.sort((x, y) => x.d - y.d || x.name.localeCompare(y.name));
+  const near = scored.slice(0, 5).map(s => s.name);
+  return `No layer matches "${query}".${near.length ? ` Closest: ${near.join(', ')}.` : ''} find_layers searches by type, regex or scope.`;
+}
+
+function editDistance(a: string, b: string): number {
+  if (a.length > 64 || b.length > 64) return Math.abs(a.length - b.length) + 64;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return row[b.length];
+}

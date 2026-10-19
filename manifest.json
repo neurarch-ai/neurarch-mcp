@@ -1,10 +1,10 @@
 {
-  "manifest_version": "0.2",
+  "manifest_version": "0.3",
   "name": "neurarch-mcp",
   "display_name": "Neurarch",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Before a training job takes a GPU: peak memory at its batch, the smallest card, max batch per card, the cost, and whether it forward-passes.",
-  "long_description": "Call size_training_job before a training job launches and the agent learns what it actually needs: the training peak at its batch (weights and optimizer state, activations, stored attention scores), the smallest card that holds it, the largest batch each card holds, a two-card split when one card does not, and what one run costs. The number is a calibrated estimate under AdamW with bf16 autocast, fitted on 178 measured runs across 41 architectures; held out, the median error is 7% and it flagged 113 of the 131 times a run did not fit a card where accelerate estimate-memory flagged at most 8; on 25 runs measured after the fit the median miss is 14%. Then whether it forward-passes: the design linter (lint_model) and the full readiness verdict (check_design), plus layers, parameters, FLOPs, 81 bundled reference architectures and runnable PyTorch export. All of that runs on your machine. Two tools reach the network when called: plan renders the same card the Neurarch CI bot posts, and history says what this exact structure measured the last time it trained inside your organisation.",
+  "long_description": "Call size_training_job before a training job launches and the agent learns what it actually needs: the training peak at its batch (weights and optimizer state, activations, stored attention scores), the smallest card that holds it, the largest batch each card holds, a two-card split when one card does not, and what one run costs. The number is a calibrated estimate under AdamW with bf16 autocast, fitted on 178 measured runs across 41 architectures; held out, the median error is 7% and it flagged 113 of the 131 times a run did not fit a card where accelerate estimate-memory flagged at most 8; on 25 runs measured after the fit the median miss is 14%. Then whether it forward-passes: the design linter (lint_model) and the full readiness verdict (check_design), plus layers, parameters, FLOPs, 81 bundled reference architectures and runnable PyTorch export. All of that runs on your machine. check_pins finds Hugging Face downloads not pinned to a commit, offline. Three tools reach the network when called: plan renders the same card the Neurarch CI bot posts, history says what this exact structure measured the last time it trained inside your organisation, and model_changes reads the public change record for a Hugging Face model (what changed between revisions, and whether it is breaking).",
   "author": {
     "name": "neurarch-ai",
     "url": "https://neurarch.com"
@@ -46,6 +46,7 @@
       "required": true
     }
   },
+  "tools_generated": true,
   "tools": [
     {
       "name": "size_training_job",
@@ -66,6 +67,14 @@
     {
       "name": "check_serving_config",
       "description": "Call before a vLLM, SGLang or llama.cpp launch: TP against the heads, served length against the context, KV memory and concurrency, quantization against the card, chat template and sampler defaults."
+    },
+    {
+      "name": "check_pins",
+      "description": "Hugging Face downloads not pinned to a commit (from_pretrained, vllm serve, hf download, YAML model keys), with the fix spelled for each file. Bandit B615 rules, offline."
+    },
+    {
+      "name": "model_changes",
+      "description": "What changed upstream in a tracked Hugging Face model, revision by revision (config, tokenizer, chat template, weights), breaking or not, optionally since your pinned commit. Reads public files from neurarch.com."
     },
     {
       "name": "plan",
@@ -146,6 +155,32 @@
         "rule"
       ],
       "text": "Explain the finding {rule} on the current model: what the rule checks, the evidence behind it, and the smallest edit that clears it with its blast radius."
+    },
+    {
+      "name": "precheck_change",
+      "description": "Before a changed model takes a GPU or traffic: what changed, what the job needs, whether the launch is legal.",
+      "arguments": [
+        "base",
+        "launch"
+      ],
+      "text": "Pre-check the change from {base} to the current model, headed for {launch}: check_edit against the base, size_training_job, then check_parallel_layout or check_serving_config for the launch, and model_changes if the base is a Hugging Face id. End with a go / no-go table."
+    },
+    {
+      "name": "precheck_serving",
+      "description": "Before a vLLM, SGLang or llama.cpp launch: will it start, what fits, has the model moved upstream.",
+      "arguments": [
+        "command",
+        "gpu"
+      ],
+      "text": "Pre-check this serving launch: {command} on {gpu}. Run check_serving_config, read what it skipped, then model_changes on the served model, and say whether it will start and the one flag to change first."
+    },
+    {
+      "name": "pin_downloads",
+      "description": "Find Hugging Face downloads not pinned to a commit, and what each model changed upstream.",
+      "arguments": [
+        "paths"
+      ],
+      "text": "Run check_pins over {paths}, then model_changes for each model it names, and propose the pin each finding's fix spells for its file."
     }
   ],
   "compatibility": {

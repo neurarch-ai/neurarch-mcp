@@ -49,7 +49,7 @@ const addLayerTool: ToolDef = {
 const modifyLayerTool: ToolDef = {
   name: 'modify_layer',
   description:
-    'Modify an existing layer: shallow-merge new params, rename, or change scope. Returns a before/after diff. Cached shapes on this layer are invalidated when params change, so the user should reopen the model in Neurarch to recompute shape contracts. Call save_model afterwards. WARNING: shape-changing edits propagate downstream — call layer_impact first.',
+    'Modify an existing layer: shallow-merge new params, rename, or change scope. Returns a before/after diff. Cached shapes on this layer are invalidated when params change, so the user should reopen the model in Neurarch to recompute shape contracts. Call save_model afterwards. WARNING: shape-changing edits propagate downstream, so call layer_impact first.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -125,7 +125,7 @@ const deleteConnectionTool: ToolDef = {
 const saveModelTool: ToolDef = {
   name: 'save_model',
   description:
-    'Persist the current in-memory model to disk. Writes to the file passed on the command line by default; pass "path" to write elsewhere (will overwrite). Call this AFTER add_layer / modify_layer / add_connection — those tools only mutate memory. Returns the written path and byte count.',
+    'Persist the current in-memory model to disk. Writes to the file passed on the command line by default; pass "path" to write elsewhere (will overwrite). Call this AFTER add_layer / modify_layer / add_connection: those tools only mutate memory. Returns the written path and byte count.',
   inputSchema: {
     type: 'object',
     properties: {

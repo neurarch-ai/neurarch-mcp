@@ -56,7 +56,7 @@ describe('get_layer', () => {
     expect(l.downstream.length).toBeGreaterThan(0);
   });
   it('returns null when nothing matches', () => {
-    expect(call('get_layer', { name: 'definitely_absent' })).toBeNull();
+    expect(() => call('get_layer', { name: 'definitely_absent' })).toThrow(/No layer matches "definitely_absent"\. Closest: /);
   });
 });
 
@@ -169,7 +169,7 @@ describe('compare_layers', () => {
     expect(c.identical).toBe(true);
   });
   it('returns null when a layer is missing', () => {
-    expect(call('compare_layers', { a: 'block_0', b: 'nope_xyz' })).toBeNull();
+    expect(() => call('compare_layers', { a: 'block_0', b: 'nope_xyz' })).toThrow(/No layer matches "nope_xyz"/);
   });
 });
 
@@ -181,7 +181,7 @@ describe('get_block', () => {
     expect(b.outputs.length).toBeGreaterThan(0);
   });
   it('returns null for an unknown block', () => {
-    expect(call('get_block', { name: 'nope_xyz' })).toBeNull();
+    expect(() => call('get_block', { name: 'nope_xyz' })).toThrow(/No block or scope named "nope_xyz"/);
   });
 });
 
@@ -249,5 +249,26 @@ describe('list_hyperparams / get_design_notes', () => {
   it('filters design notes by affected layer', () => {
     const r = call('get_design_notes', { layer: 'block_0' });
     expect(r.count).toBe(1);
+  });
+});
+
+describe('paging', () => {
+  it('pages find_layers and list_connections with an opaque cursor until it is null', () => {
+    for (const [tool, key] of [['find_layers', 'layers'], ['list_connections', 'connections']] as const) {
+      const all = call(tool, { limit: 500 });
+      const seen: unknown[] = [];
+      let cursor: string | undefined;
+      do {
+        const r = call(tool, { limit: 2, ...(cursor ? { cursor } : {}) });
+        seen.push(...r[key]);
+        cursor = r.nextCursor ?? undefined;
+      } while (cursor);
+      expect(seen).toEqual(all[key]);
+      expect(all.nextCursor).toBeNull();
+    }
+  });
+
+  it('rejects a cursor it did not issue, saying what to pass instead', () => {
+    expect(() => call('find_layers', { cursor: 'garbage' })).toThrow(/pass the nextCursor value/);
   });
 });

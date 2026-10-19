@@ -5391,6 +5391,417 @@ function findMissingParams(components) {
   return out;
 }
 
+// src/utils/trainingMemory.ts
+var DEFAULT_PRECISION = "bf16-mixed";
+var DEFAULT_OPTIMIZER = "adamw";
+var CUDA_CONTEXT_GB = 1;
+var CUDA_CONTEXT_SOURCE = "CUDA context, not counted by any allocator: about 0.3 to 0.5 GB with lazy loading, up to about 1.1 GB on some PyTorch builds; 1 GB assumed";
+var BYTES = { f32: 4, half: 2, i64: 8, bool: 1 };
+function stateBytes(precision, optimizer) {
+  const w = precision === "bf16" ? 2 : 4;
+  const g = w;
+  const moments = optimizer === "adam" || optimizer === "adamw" ? 2 : optimizer === "sgd-momentum" ? 1 : 0;
+  const stepTemp = optimizer === "adam" || optimizer === "adamw" ? w : 0;
+  return { weight: w, grad: g, optim: moments * w, stepTemp };
+}
+function zeroModelStatesGb(params, largestLayerParams, gpus) {
+  const n2 = Math.max(1, Math.floor(gpus));
+  return {
+    zero2Gb: (2 * params + 18 * params / n2) / 1e9,
+    zero3Gb: (4 * largestLayerParams + 18 * params / n2) / 1e9
+  };
+}
+var SHARDING_SOURCE = "DeepSpeed estimator formulas (estimate_zero2/3_model_states_mem_needs), Adam under mixed precision, no offload";
+function shardedEstimates(mem, gpuCounts = [2, 4, 8]) {
+  return gpuCounts.map((n2) => ({
+    gpus: n2,
+    ...zeroModelStatesGb(mem.params, mem.largestLayerParams, n2),
+    activationsGb: mem.activationsGb
+  }));
+}
+function fewestShardedCards(mem, cardGb, headroom = 1.15, gpuCounts = [2, 4, 8, 16, 32, 64]) {
+  for (const n2 of gpuCounts) {
+    const z = zeroModelStatesGb(mem.params, mem.largestLayerParams, n2);
+    const per = z.zero3Gb + mem.activationsGb + mem.overheadGb;
+    if (per * headroom <= cardGb) return { gpus: n2, perCardGb: per };
+  }
+  return null;
+}
+var ATTENTION_MHA = /^(multiHeadAttention|selfAttention|attention|causalAttention|crossAttention|crossModalAttention|targetAttention|windowAttention|localAttention|linearAttention)$/;
+var GQA_LIKE = /^(groupedQueryAttention|mla)$/;
+var MATMUL_LIKE = /^(linear|lmHead|projection|contrastiveHead|matryoshkaHead|dense|fc)$/;
+var CONV_LIKE = /conv|patchEmbed|tubeletEmbed|patchMerger/i;
+var NORM_FP32 = /^(layerNorm|rmsNorm|groupNorm|instanceNorm|qkNorm)$/;
+var SAVES_OUTPUT = /^(relu|sigmoid|tanh|hardtanh|relu6)$/;
+var SAVES_INPUT = /^(gelu|silu|swish|mish|elu|leakyRelu|prelu|selu|softplus|hardswish|batchNorm)$/;
+var NO_SAVE = /^(add|residual|skipConnection|concatenate|concat|reshape|flatten|permute|transpose|view|squeeze|unsqueeze|identity|output|positionalEncoding|rope|alibi|avgpool2d|avgpool1d|adaptiveAvgPool2d|globalAvgPool2d|globalAvgPool1d|mean|upsample|split|slice)$/;
+var VIEW_LIKE = /^(reshape|flatten|permute|transpose|view|squeeze|unsqueeze|identity|output)$/;
+var EMBED_LIKE = /^(embedding|embeddingBag|timeEmbedding|positionEmbedding)$/;
+var RECURRENT = { lstm: 4, gru: 3, rnn: 1, bidirectionalLSTM: 4 };
+var prod = (s) => s && s.length ? s.reduce((a, b) => a * b, 1) : 0;
+var finiteShape = (s) => !!s && s.length > 0 && s.every((d) => Number.isFinite(d) && d > 0);
+var num2 = (v, d) => {
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) && x > 0 ? x : d;
+};
+function castIn(x, ctx, nodeId) {
+  if (!ctx.mixed || x.dtype !== "f32") return x;
+  return { id: `cast:${x.id}:${nodeId}`, bytes: x.bytes / 4 * 2, dtype: "half" };
+}
+function make(id, elems, dtype) {
+  return { id, bytes: elems * BYTES[dtype], dtype };
+}
+function nodeSave(c, ins, shapes, params, ctx) {
+  const sh = shapes.get(c.id);
+  const outShape = sh?.out ?? null;
+  const inShape = sh?.in ?? null;
+  const p = c.params ?? {};
+  const O = finiteShape(outShape) ? prod(outShape) : 0;
+  const x = ins[0] ?? make(`none:${c.id}`, 0, ctx.low);
+  const lowB = BYTES[ctx.low];
+  const promote = (ts) => ts.some((t2) => t2.dtype === "f32") ? "f32" : ts[0]?.dtype === "i64" ? "f32" : ctx.low;
+  const weightCopy = ctx.mixed ? params * 2 : 0;
+  const t = c.type;
+  const id = (k) => `${k}:${c.id}`;
+  const D = outShape && outShape.length ? outShape[outShape.length - 1] : 0;
+  const tokens = D > 0 ? O / D : 0;
+  if (VIEW_LIKE.test(t)) return { saved: [], out: { ...x, id: x.id }, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  if (t === "input") return { saved: [], out: x, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  if (EMBED_LIKE.test(t)) {
+    return { saved: [], out: make(id("out"), O, ctx.mixed ? "f32" : ctx.low), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (NO_SAVE.test(t)) {
+    const dtype = promote(ins.length ? ins : [x]);
+    return { saved: [], out: make(id("out"), O, dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "multiply" || t === "matmul") {
+    return { saved: ins.map((i) => castIn(i, ctx, c.id)), out: make(id("out"), O, ctx.mixed ? ctx.low : promote(ins)), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "dropout" || t === "dropPath") {
+    return { saved: [make(id("mask"), O, "bool")], out: make(id("out"), O, x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "softmax" || t === "logSoftmax") {
+    const out2 = make(id("out"), O, ctx.mixed ? "f32" : x.dtype);
+    return { saved: [out2], out: out2, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (SAVES_OUTPUT.test(t)) {
+    const out2 = make(id("out"), O, x.dtype === "i64" ? "f32" : x.dtype);
+    return { saved: [out2], out: out2, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (SAVES_INPUT.test(t)) {
+    return { saved: [x], out: make(id("out"), O, x.dtype === "i64" ? "f32" : x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (NORM_FP32.test(t)) {
+    const saved2 = ctx.mixed && x.dtype !== "f32" ? make(`up:${x.id}:${c.id}`, x.bytes / BYTES[x.dtype], "f32") : x;
+    return { saved: [saved2], out: make(id("out"), O, ctx.mixed ? "f32" : x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (/^(maxpool1d|maxpool2d|maxpool3d)$/.test(t)) {
+    return { saved: [x, make(id("idx"), O, "i64")], out: make(id("out"), O, x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (MATMUL_LIKE.test(t) || CONV_LIKE.test(t)) {
+    return { saved: [castIn(x, ctx, c.id)], out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (ATTENTION_MHA.test(t) && finiteShape(inShape) && inShape.length >= 2) {
+    const T = inShape[inShape.length - 2];
+    const d = inShape[inShape.length - 1];
+    const heads = num2(p.numHeads ?? p.num_heads ?? p.nhead, 8);
+    const Tk = ins[1] && ins[1].bytes > 0 ? Math.round(ins[1].bytes / BYTES[ins[1].dtype] / d) || T : T;
+    const xin = castIn(x, ctx, c.id);
+    const kvIn = ins[1] ? castIn(ins[1], ctx, `${c.id}:kv`) : null;
+    const q = make(id("q"), T * d, ctx.low);
+    const kv = make(id("kv"), 2 * Tk * d, ctx.low);
+    const context = make(id("ctx"), T * d, ctx.low);
+    const saved2 = [xin, q, kv, context];
+    if (kvIn && kvIn.id !== xin.id) saved2.push(kvIn);
+    let scratch = 0;
+    let fscratch = 0;
+    if (ctx.storesScores(c)) {
+      const window2 = t === "windowAttention" ? Math.min(Tk, num2(p.windowSize, 7) ** 2) : Tk;
+      const scores = heads * T * window2;
+      saved2.push(make(id("probs32"), scores, ctx.mixed ? "f32" : ctx.low));
+      if (ctx.mixed) saved2.push(make(id("probs16"), scores, ctx.low));
+      if (Number(p.dropout ?? p.attnDropout ?? 0) > 0) saved2.push(make(id("pmask"), scores, "bool"), make(id("pdrop"), scores, ctx.low));
+      fscratch = scores * (ctx.mixed ? 2 + 4 : lowB);
+      scratch = scores * (ctx.mixed ? 2 + 4 + 4 : 2 * lowB);
+    } else {
+      saved2.push(make(id("lse"), heads * T, "f32"));
+    }
+    return { saved: saved2, out: make(id("out"), O || T * d, ctx.low), backwardScratch: scratch, forwardScratch: fscratch, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (GQA_LIKE.test(t) && finiteShape(inShape) && inShape.length >= 2 && t === "groupedQueryAttention") {
+    const T = inShape[inShape.length - 2];
+    const d = inShape[inShape.length - 1];
+    const heads = num2(p.numHeads, 32);
+    const kvHeads = num2(p.numKVHeads, 8);
+    const hd = d / heads;
+    const xin = castIn(x, ctx, c.id);
+    const saved2 = [
+      xin,
+      make(id("q"), T * d, ctx.low),
+      make(id("kv"), 2 * T * kvHeads * hd, ctx.low),
+      make(id("ctx"), T * d, ctx.low),
+      make(id("lse"), heads * T, "f32")
+    ];
+    return { saved: saved2, out: make(id("out"), O || T * d, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (t === "feedForward" && finiteShape(inShape)) {
+    const d = inShape[inShape.length - 1];
+    const T = prod(inShape) / d;
+    const ff = num2(p.ffDim ?? p.dFf ?? p.hiddenFeatures, 4 * d);
+    const saved2 = [castIn(x, ctx, c.id), make(id("h"), T * ff, ctx.low)];
+    return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if ((t === "swiglu" || t === "geglu") && finiteShape(inShape)) {
+    const d = inShape[inShape.length - 1];
+    const T = prod(inShape) / d;
+    const I = num2(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(d * 8 / 3));
+    const saved2 = [castIn(x, ctx, c.id), make(id("gate"), T * I, ctx.low), make(id("up"), T * I, ctx.low), make(id("act"), T * I, ctx.low), make(id("prod"), T * I, ctx.low)];
+    return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (t === "transformerBlock" && finiteShape(inShape) && inShape.length >= 2) {
+    const T = inShape[inShape.length - 2];
+    const d = num2(p.embedDim ?? p.hiddenDim ?? p.dModel, inShape[inShape.length - 1]);
+    const heads = num2(p.numHeads, 8);
+    const ff = num2(p.ffDim ?? p.dFf, 4 * d);
+    const decoder = ins.length >= 2;
+    const f32 = ctx.mixed ? "f32" : ctx.low;
+    const saved2 = [
+      castIn(x, ctx, c.id),
+      // in-projection input
+      make(id("qkv"), 3 * T * d, ctx.low),
+      // q, k, v
+      make(id("ctx"), T * d, ctx.low),
+      // attention output, out-projection input
+      make(id("lse"), heads * T, "f32"),
+      make(id("m1"), T * d, "bool"),
+      // dropout after attention
+      make(id("n1"), T * d, f32),
+      // norm1 input (fp32 under autocast)
+      make(id("l1"), T * d, ctx.low),
+      // linear1 input
+      make(id("h"), T * ff, ctx.low),
+      // ReLU output
+      make(id("m2"), T * ff, "bool"),
+      // dropout mask in the feed-forward
+      make(id("h2"), T * ff, ctx.low),
+      // linear2 input
+      make(id("m3"), T * d, "bool"),
+      make(id("n2"), T * d, f32)
+    ];
+    if (decoder) {
+      saved2.push(make(id("xq"), T * d, ctx.low), make(id("xctx"), T * d, ctx.low), make(id("xkv"), 2 * T * d, ctx.low), make(id("m4"), T * d, "bool"), make(id("n3"), T * d, f32));
+    }
+    return { saved: saved2, out: make(id("out"), O || T * d, f32), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  const gates = RECURRENT[t];
+  if (gates && finiteShape(inShape)) {
+    const steps = inShape.length >= 2 ? inShape[inShape.length - 2] : 1;
+    const hidden = num2(p.hiddenSize ?? p.hidden_size, 128);
+    const layers = num2(p.numLayers ?? p.num_layers, 1);
+    const dirs = p.bidirectional || t === "bidirectionalLSTM" ? 2 : 1;
+    const elems = steps * hidden * (gates + 2) * layers * dirs;
+    return { saved: [castIn(x, ctx, c.id), make(id("rnn"), elems, ctx.low)], out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  const din = finiteShape(inShape) ? inShape[inShape.length - 1] : 0;
+  let internal = 0;
+  if (din >= 2 && tokens > 0 && !/embed|positional|^ema/i.test(t)) {
+    let pp = params;
+    if (/moe/i.test(t)) {
+      const e = num2(p.numExperts, 8), k = num2(p.topK, 2), s = Number(p.numSharedExperts ?? 0);
+      pp *= Math.min(1, (k + s) / (e + s));
+    }
+    internal = Math.max(0, tokens * pp / din - O);
+  }
+  const out = make(id("out"), O, ctx.low);
+  const saved = [castIn(x, ctx, c.id), out];
+  if (internal > 0) saved.push(make(id("int"), internal, ctx.low));
+  return { saved, out, backwardScratch: 0, weightCopyBytes: weightCopy, fallback: true };
+}
+function topo(model) {
+  const byId = new Map(model.components.map((c, i) => [c.id, i]));
+  const indeg = new Map(model.components.map((c) => [c.id, 0]));
+  const next = new Map(model.components.map((c) => [c.id, []]));
+  for (const e of model.connections ?? []) {
+    if (!byId.has(e.from) || !byId.has(e.to)) continue;
+    next.get(e.from).push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  }
+  const ready = model.components.filter((c) => indeg.get(c.id) === 0).map((c) => c.id);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  while (ready.length) {
+    ready.sort((a, b) => byId.get(a) - byId.get(b));
+    const cid = ready.shift();
+    if (seen.has(cid)) continue;
+    seen.add(cid);
+    out.push(model.components[byId.get(cid)]);
+    for (const n2 of next.get(cid) ?? []) {
+      const d = indeg.get(n2) - 1;
+      indeg.set(n2, d);
+      if (d === 0) ready.push(n2);
+    }
+  }
+  for (const c of model.components) if (!seen.has(c.id)) out.push(c);
+  return out;
+}
+function trainingMemoryFor(model, opts = {}, shapesIn) {
+  const batch = Math.max(1, Math.round(opts.batchSize ?? 32));
+  const precision = opts.precision ?? DEFAULT_PRECISION;
+  const optimizer = opts.optimizer ?? DEFAULT_OPTIMIZER;
+  const mixed = precision === "bf16-mixed" || precision === "fp16-mixed";
+  const ctx = { low: precision === "fp32" ? "f32" : "half", mixed, storesScores: opts.storesScores ?? (() => false) };
+  const shapes = shapesIn ?? propagateShapes(model).shapes;
+  const order = topo(model).filter((c) => c.type !== "stickyNote");
+  const index = new Map(order.map((c, i) => [c.id, i]));
+  const parents = new Map(order.map((c) => [c.id, []]));
+  const children = new Map(order.map((c) => [c.id, []]));
+  for (const e of model.connections ?? []) {
+    if (!index.has(e.from) || !index.has(e.to)) continue;
+    parents.get(e.to).push(e.from);
+    children.get(e.from).push(e.to);
+  }
+  const n2 = order.length;
+  const sb = stateBytes(precision, optimizer);
+  let params = 0;
+  let largestLayerParams = 0;
+  const layerParams = [];
+  const outOf = /* @__PURE__ */ new Map();
+  const saves = [];
+  let anyShape = false;
+  let fallbackLayers = 0;
+  for (const c of order) {
+    const inShape = shapes.get(c.id)?.in ?? void 0;
+    const pc = c.type === "input" || c.type === "output" ? 0 : estimateLayerParams(c.type, c.params, inShape) ?? 0;
+    params += pc;
+    largestLayerParams = Math.max(largestLayerParams, pc);
+    layerParams.push(pc);
+    let ins = (parents.get(c.id) ?? []).map((pid) => outOf.get(pid)).filter((x) => !!x);
+    if (c.type === "input") {
+      const s2 = shapes.get(c.id)?.out ?? c.params?.shape;
+      const feedsLookup = (children.get(c.id) ?? []).some((k) => EMBED_LIKE.test(order[index.get(k)].type));
+      const elems = finiteShape(s2) ? prod(s2) : 0;
+      ins = [make(`in:${c.id}`, elems, feedsLookup ? "i64" : ctx.mixed ? "f32" : ctx.low)];
+    }
+    const castable = /embed|norm|positional|^ema/i.test(c.type) ? 0 : pc;
+    const s = nodeSave(c, ins, shapes, castable, ctx);
+    if (finiteShape(shapes.get(c.id)?.out) && c.type !== "input" && c.type !== "output") anyShape = true;
+    if (s.fallback && c.type !== "input" && c.type !== "output") fallbackLayers++;
+    saves.push(s);
+    outOf.set(c.id, s.out);
+  }
+  const fwd = (i) => i;
+  const bwd = (i) => 2 * n2 - i;
+  const STEP = 2 * n2 + 1;
+  const lives = /* @__PURE__ */ new Map();
+  const extend = (t, from, to, perSample = true) => {
+    if (!(t.bytes > 0)) return;
+    const bytes = perSample ? t.bytes * batch : t.bytes;
+    const l = lives.get(t.id);
+    if (l) {
+      l.from = Math.min(l.from, from);
+      l.to = Math.max(l.to, to);
+    } else lives.set(t.id, { bytes, from, to });
+  };
+  let savedSum = 0;
+  const seenSaved = /* @__PURE__ */ new Set();
+  order.forEach((c, i) => {
+    const s = saves[i];
+    const consumers = (children.get(c.id) ?? []).map((k) => index.get(k));
+    const lastUse = consumers.length ? Math.max(...consumers) : n2;
+    extend(s.out, fwd(i), fwd(lastUse));
+    for (const t of s.saved) {
+      extend(t, fwd(i), bwd(i));
+      if (!seenSaved.has(t.id)) {
+        seenSaved.add(t.id);
+        savedSum += t.bytes * batch;
+      }
+    }
+    if (s.weightCopyBytes > 0) extend({ id: `wcopy:${c.id}`, bytes: s.weightCopyBytes, dtype: "half" }, fwd(i), bwd(i), false);
+    const isView = s.saved.length === 0 && saves[i].out.id === (parents.get(c.id) ?? []).map((pid) => outOf.get(pid)?.id)[0];
+    if (!isView && c.type !== "input") {
+      extend({ id: `grad:${s.out.id}:${c.id}`, bytes: s.out.bytes, dtype: s.out.dtype }, consumers.length ? bwd(Math.max(...consumers)) : n2, bwd(i));
+    }
+    if (s.backwardScratch > 0) extend({ id: `scratch:${c.id}`, bytes: s.backwardScratch, dtype: "f32" }, bwd(i), bwd(i));
+    if (s.forwardScratch) extend({ id: `fscratch:${c.id}`, bytes: s.forwardScratch, dtype: "f32" }, fwd(i), fwd(i));
+    if (c.type === "input") extend(s.out, 0, STEP);
+  });
+  const lossKind = opts.loss ?? "cross-entropy";
+  const sinks = order.filter((c) => (children.get(c.id) ?? []).length === 0);
+  for (const c of sinks) {
+    const o = outOf.get(c.id);
+    if (!o || !(o.bytes > 0)) continue;
+    const elems = o.bytes / BYTES[o.dtype];
+    extend(o, n2, n2 + 1);
+    if (lossKind === "cross-entropy") {
+      extend({ id: `lossup:${c.id}`, bytes: o.dtype === "f32" ? 0 : elems * 4, dtype: "f32" }, n2, n2);
+      extend({ id: `logsm:${c.id}`, bytes: elems * 4, dtype: "f32" }, n2, n2 + 1);
+      extend({ id: `lossgrad:${c.id}`, bytes: elems * 4, dtype: "f32" }, n2 + 1, n2 + 1);
+      if (o.dtype !== "f32") extend({ id: `lossgrad16:${c.id}`, bytes: o.bytes, dtype: o.dtype }, n2 + 1, n2 + 1);
+    } else {
+      extend({ id: `loss32:${c.id}`, bytes: o.dtype === "f32" ? 0 : elems * 4, dtype: "f32" }, n2, n2);
+      if (o.dtype !== "f32") extend({ id: `lossgrad16:${c.id}`, bytes: o.bytes, dtype: o.dtype }, n2 + 1, n2 + 1);
+    }
+  }
+  const weightsB = params * sb.weight;
+  const optimB = params * sb.optim;
+  const gradFrom = new Array(2 * n2 + 3).fill(0);
+  layerParams.forEach((pc, i) => {
+    if (pc > 0) gradFrom[bwd(i)] += pc * sb.grad;
+  });
+  const statesAt = (t) => {
+    let g = 0;
+    for (let k = 0; k <= Math.min(t, STEP); k++) g += gradFrom[k] ?? 0;
+    return weightsB + optimB + (t >= n2 ? g : 0) + (t === STEP ? params * sb.stepTemp : 0);
+  };
+  const actAt = new Array(STEP + 1).fill(0);
+  for (const l of lives.values()) {
+    for (let t = Math.max(0, l.from); t <= Math.min(STEP, l.to); t++) actAt[t] += l.bytes;
+  }
+  let peak = -1, peakT = 0;
+  for (let t = 0; t <= STEP; t++) {
+    const v = statesAt(t) + actAt[t];
+    if (v > peak) {
+      peak = v;
+      peakT = t;
+    }
+  }
+  const peakAt = peakT === STEP ? "optimizer-step" : peakT < n2 ? "forward" : peakT === n2 ? "loss" : "backward";
+  const layerAt = peakT < n2 ? order[peakT] : peakT > n2 && peakT < STEP ? order[2 * n2 - peakT] : null;
+  const gb = (b) => b / 1e9;
+  const modelStates = {
+    weightsGb: gb(weightsB),
+    gradsGb: gb(params * sb.grad),
+    optimizerGb: gb(optimB),
+    bytesPerParam: sb.weight + sb.grad + sb.optim
+  };
+  const peakGb = gb(peak);
+  const statesAtPeakGb = gb(statesAt(peakT));
+  return {
+    params,
+    batchSize: batch,
+    precision,
+    optimizer,
+    modelStates,
+    modelStatesGb: modelStates.weightsGb + modelStates.gradsGb + modelStates.optimizerGb,
+    activationsGb: gb(actAt[peakT]),
+    statesAtPeakGb,
+    peakGb,
+    overheadGb: params > 0 ? CUDA_CONTEXT_GB : 0,
+    totalGb: peakGb + (params > 0 ? CUDA_CONTEXT_GB : 0),
+    peakAt,
+    peakLayer: layerAt ? layerAt.name || layerAt.type : null,
+    savedSumGb: gb(savedSum),
+    largestLayerParams,
+    activationsKnown: anyShape,
+    fallbackLayers
+  };
+}
+var FLOP_CONVENTION = "FLOPs count a multiply-add as 2 (torch.utils.flop_counter convention); backward is 2x forward; elementwise ops and norms count 0; causal attention is counted as full, about 2x what a causal kernel does";
+function flopsBreakdown(forwardMacs) {
+  const f = Math.max(0, forwardMacs) * 2;
+  return { forwardMacs: Math.max(0, forwardMacs), forwardFlops: f, trainFlopsPerSample: 3 * f, convention: FLOP_CONVENTION };
+}
+
 // src/utils/preflightReport.ts
 function shapeFixHint(s) {
   const both = Array.isArray(s.actual) ? s.actual.join("\xD7") : s.actual;
@@ -5418,6 +5829,7 @@ function dataSpecInputShapes(d) {
   if (d?.inputShape && d.inputShape.length) return [d.inputShape];
   return [];
 }
+var PREFLIGHT_FIT_HEADROOM = 1.15;
 var PREFLIGHT_GPUS = [
   { name: "T4 (16GB)", gb: 16, hourly: 0.59, speed: 0.55, hwId: "t4" },
   { name: "L4 (24GB)", gb: 24, hourly: 0.8, speed: 0.8, hwId: "l4" },
@@ -5427,6 +5839,7 @@ var PREFLIGHT_GPUS = [
   { name: "A100 (80GB)", gb: 80, hourly: 2.5, speed: 2.4, hwId: "a100-80g" },
   { name: "H100 (80GB)", gb: 80, hourly: 3.95, speed: 4.5, hwId: "h100-sxm" }
 ];
+var ASSUMED_MFU = 0.35;
 function modalityFromShape(shape) {
   if (!shape || shape.length === 0) return "tabular";
   if (shape.length >= 3) return "vision";
@@ -5603,28 +6016,59 @@ function buildPreflightReport(model, opts) {
   }
   const weightBytes = params * 4;
   const trainFootprintBytes = params * 16;
-  const footprintGb = trainFootprintBytes / 1e9;
   const gpu = PREFLIGHT_GPUS.find((g) => g.name === opts?.plan?.gpu) ?? PREFLIGHT_GPUS[2];
   const epochs = Math.max(1, opts?.plan?.epochs ?? 10);
   const batch = Math.max(1, opts?.plan?.batchSize ?? 32);
-  const footprintGbWithHeadroom = footprintGb * 1.3;
+  const planAssumed = opts?.plan?.epochs == null || opts?.plan?.batchSize == null;
+  const precision = opts?.plan?.precision ?? DEFAULT_PRECISION;
+  const optimizer = opts?.plan?.optimizer ?? DEFAULT_OPTIMIZER;
+  const tm = trainingMemoryFor(model, { batchSize: batch, precision, optimizer }, shapes);
+  const needGb = Math.max(tm.peakGb * PREFLIGHT_FIT_HEADROOM, tm.totalGb);
+  const fitsCards = params > 0 ? PREFLIGHT_GPUS.filter((g) => needGb <= g.gb).map((g) => g.name) : [];
+  const smallestFit = params > 0 ? PREFLIGHT_GPUS.find((g) => needGb <= g.gb) ?? null : null;
+  const gpuFits = params > 0 ? needGb <= gpu.gb : null;
+  const largestCard = PREFLIGHT_GPUS.reduce((a, g) => g.gb > a.gb ? g : a, PREFLIGHT_GPUS[0]);
+  const zero3 = params > 0 && !smallestFit ? fewestShardedCards(tm, largestCard.gb, PREFLIGHT_FIT_HEADROOM) : null;
+  const precisionWord = precision === "bf16-mixed" ? "bf16 mixed precision" : precision === "fp16-mixed" ? "fp16 mixed precision" : precision === "bf16" ? "pure bf16" : "fp32";
+  const optimizerWord = optimizer === "adamw" ? "AdamW" : optimizer === "adam" ? "Adam" : optimizer === "sgd-momentum" ? "SGD with momentum" : "SGD";
+  const memAssumptions = `Batch ${batch}${planAssumed ? " (assumed)" : ""}, ${precisionWord}, ${optimizerWord} (${tm.modelStates.bytesPerParam} B per parameter), fused attention, cross-entropy loss. Activations are the tensors each layer keeps for backward, replayed over the step and taken at the peak, not summed. ${CUDA_CONTEXT_SOURCE}. Arithmetic on the graph, not a measurement.`;
+  const memory = {
+    batchSize: batch,
+    precision,
+    optimizer,
+    modelStatesGb: tm.modelStatesGb,
+    activationsGb: tm.activationsGb,
+    overheadGb: tm.overheadGb,
+    peakGb: tm.peakGb,
+    needGb,
+    peakAt: tm.peakAt,
+    peakLayer: tm.peakLayer,
+    activationsKnown: tm.activationsKnown,
+    sharded: params > 0 ? shardedEstimates(tm) : [],
+    shardedFit: zero3 ? { gpus: zero3.gpus, gpu: largestCard.name, perCardGb: zero3.perCardGb } : null,
+    assumptions: memAssumptions
+  };
+  const g1 = (v) => v.toFixed(v < 1 ? 2 : 1);
+  const threeNumbers = `model states ${g1(tm.modelStatesGb)} GB, activations ${tm.activationsKnown ? `${g1(tm.activationsGb)} GB at batch ${batch}` : "unknown (no shape propagated)"}, CUDA context ${g1(tm.overheadGb)} GB`;
   if (params > 0) {
-    if (footprintGbWithHeadroom <= gpu.gb) {
+    if (gpuFits) {
       findings.push({
         id: "hw-fit",
         category: "hardware",
         severity: "pass",
         title: `Fits a ${gpu.name}`,
-        detail: `Weights + Adam state are about ${footprintGb.toFixed(footprintGb < 1 ? 2 : 1)} GB; leave headroom for activations (grows with batch size).`
+        detail: `Peak about ${g1(tm.totalGb)} GB: ${threeNumbers}.`
       });
     } else {
-      const smallest = PREFLIGHT_GPUS.find((g) => g.gb >= footprintGbWithHeadroom);
+      const statesAlone = tm.modelStatesGb * PREFLIGHT_FIT_HEADROOM > gpu.gb;
+      const lever = statesAlone ? "Model states alone exceed the card, so no batch size helps." : `Activations at batch ${batch} are what push it over; a smaller batch or activation checkpointing lowers that term.`;
+      const shard = zero3 ? ` Sharded with ZeRO-3 / FSDP it needs about ${g1(zero3.perCardGb)} GB per card on ${zero3.gpus} x ${largestCard.name} (${SHARDING_SOURCE}, plus activations and context per card).` : "";
       findings.push({
         id: "hw-no-fit",
         category: "hardware",
         severity: "warn",
         title: `Will not fit a ${gpu.name}`,
-        detail: `Optimizer state alone needs about ${footprintGb.toFixed(1)} GB. ${smallest ? `Use a ${smallest.name} instead, or` : "Plan for multi-GPU / sharding (FSDP, DeepSpeed), or"} train in lower precision / with LoRA.`
+        detail: `Peak about ${g1(tm.totalGb)} GB: ${threeNumbers}. ${lever}${smallestFit ? ` The smallest card that holds it is a ${smallestFit.name}.` : " No single offered card holds it."}${shard}`
       });
     }
   }
@@ -5636,13 +6080,16 @@ function buildPreflightReport(model, opts) {
   const hw = gpuById(gpu.hwId) ?? gpuById("a10g");
   const flopsPerStep = 2 * Math.max(flops, params) * 3 * batch;
   const roofline = rooflineTime(flopsPerStep, params * 32, hw, {
-    computeUtilization: 0.35,
+    computeUtilization: ASSUMED_MFU,
     memoryUtilization: 0.8
   });
   const perStepSec = 5e-3 + roofline.seconds;
   const steps = Math.max(1, Math.ceil(samples / batch));
   const estTrainSec = params > 0 ? 60 + epochs * steps * perStepSec : 0;
   const estCostUsd = estTrainSec / 3600 * gpu.hourly;
+  const trainFlops = flopsPerStep * steps * epochs;
+  const peakTflops = hw.bf16TFLOPS;
+  const computeSec = peakTflops > 0 ? trainFlops / (peakTflops * 1e12 * ASSUMED_MFU) : 0;
   if (params > 0) {
     const hrs = estTrainSec / 3600;
     const timeStr = hrs >= 1 ? `${hrs.toFixed(1)}h` : `${Math.ceil(estTrainSec / 60)}m`;
@@ -5679,12 +6126,22 @@ function buildPreflightReport(model, opts) {
       layers: realLayers.length,
       params,
       flops,
+      flopsDetail: flopsBreakdown(flops),
+      memory,
+      fitsCards,
+      compute: params > 0 ? { trainFlops, peakTflops, assumedMfu: ASSUMED_MFU, computeSec } : void 0,
       weightBytes,
       trainFootprintBytes,
       fitsGpu: gpu.name,
+      gpuFits,
+      smallestFitGpu: smallestFit?.name ?? null,
       estTrainSec,
       estCostUsd,
-      samplesAssumed
+      samplesAssumed,
+      samples,
+      epochs,
+      batchSize: batch,
+      planAssumed
     },
     counts
   };
@@ -5781,6 +6238,70 @@ function describeDataSource(s) {
   }
 }
 
+// src/utils/structuralIndex.ts
+function fnv1a(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+function computeDepth(model) {
+  const ids = model.components.map((c) => c.id);
+  if (ids.length === 0) return 0;
+  const adj = /* @__PURE__ */ new Map();
+  const indeg = /* @__PURE__ */ new Map();
+  for (const id of ids) {
+    adj.set(id, []);
+    indeg.set(id, 0);
+  }
+  for (const e of model.connections) {
+    if (!adj.has(e.from) || !indeg.has(e.to)) continue;
+    if (e.from === e.to) continue;
+    adj.get(e.from).push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  }
+  const dist = new Map(ids.map((id) => [id, 0]));
+  const queue = ids.filter((id) => (indeg.get(id) ?? 0) === 0);
+  let processed = 0;
+  let best = 0;
+  while (queue.length > 0) {
+    const u = queue.shift();
+    processed++;
+    for (const v of adj.get(u) ?? []) {
+      const cand = (dist.get(u) ?? 0) + 1;
+      if (cand > (dist.get(v) ?? 0)) {
+        dist.set(v, cand);
+        best = Math.max(best, cand);
+      }
+      indeg.set(v, (indeg.get(v) ?? 0) - 1);
+      if ((indeg.get(v) ?? 0) === 0) queue.push(v);
+    }
+  }
+  return processed === ids.length ? best : 0;
+}
+function typeHistogramOf(model) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const c of model.components) {
+    counts.set(c.type, (counts.get(c.type) ?? 0) + 1);
+  }
+  const histogram = [...counts.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([t, n2]) => `${t}:${n2}`).join("|");
+  return { histogram, counts };
+}
+function architectureFingerprint(model) {
+  const { histogram, counts } = typeHistogramOf(model);
+  const signature = `${histogram}#e${model.connections.length}`;
+  return {
+    hash: fnv1a(signature),
+    layerCount: model.components.length,
+    connectionCount: model.connections.length,
+    depth: computeDepth(model),
+    typeHistogram: histogram,
+    distinctTypes: counts.size
+  };
+}
+
 // src/utils/pipelineFlow.ts
 function deriveRunInsights(run) {
   const out = [];
@@ -5822,13 +6343,30 @@ function deriveRunInsights(run) {
   return out;
 }
 var PIPELINE_LAST_RUN_KEY = "pipeline-last-run";
+function designFingerprint(model) {
+  const comps = (model?.components ?? []).filter((c) => c && c.type !== "stickyNote");
+  if (comps.length === 0) return null;
+  const ids = new Set(comps.map((c) => c.id));
+  const conns = (model.connections ?? []).filter((c) => c && ids.has(c.from) && ids.has(c.to));
+  return architectureFingerprint({ ...model, components: comps, connections: conns }).hash;
+}
 function getLastRun() {
   try {
     const raw = localStorage.getItem(PIPELINE_LAST_RUN_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
   }
+}
+function getLastRunFor(model) {
+  const run = getLastRun();
+  if (!run) return { run: null, otherDesign: null };
+  if (run.archHash) {
+    return run.archHash === designFingerprint(model) ? { run, otherDesign: null } : { run: null, otherDesign: run };
+  }
+  return { run, otherDesign: null };
 }
 function readDataSpec() {
   try {
@@ -5987,6 +6525,40 @@ var OVERFIT_GAP = 0.12;
 var PLATEAU_SKILL_FLOOR = 0.75;
 var DIVERGENCE_RISE = 1.2;
 var ROWS_PER_PARAM_FLOOR = 0.01;
+var SPIKE_SIGMAS = 6;
+var SPIKE_WINDOW = 8;
+var SPIKE_MIN_HISTORY = 3;
+var FIRST_LOSS_RATIO = 2;
+function expectedInitialLoss(model, source) {
+  const contract = deriveModelContract(model);
+  if (contract.taskType === "regression" || contract.taskType === "diffusion") return null;
+  const dataset = knownDatasetFor(source);
+  const classes = dataset?.classes ?? (typeof contract.outputDim === "number" ? contract.outputDim : null);
+  if (!classes || classes < 2) return null;
+  const basis = contract.taskType === "language-modeling" ? "vocabulary" : "classes";
+  const value = Math.log(classes);
+  const what = basis === "vocabulary" ? `ln ${classes.toLocaleString("en-US")}, a ${classes.toLocaleString("en-US")}-token vocabulary` : `ln ${classes}, ${classes}-way softmax cross-entropy`;
+  return { value, classes, basis, sentence: `about ${value.toFixed(2)} (${what})` };
+}
+function firstNonFinite(values) {
+  return values.findIndex((v) => v !== void 0 && (typeof v !== "number" || !Number.isFinite(v)));
+}
+function findLossSpike(values, opts = {}) {
+  const w = opts.window ?? SPIKE_WINDOW;
+  const k = opts.sigmas ?? SPIKE_SIGMAS;
+  const minH = opts.minHistory ?? SPIKE_MIN_HISTORY;
+  for (let i = minH; i < values.length; i++) {
+    const v = values[i];
+    if (!Number.isFinite(v)) return null;
+    const hist = values.slice(Math.max(0, i - w), i).filter(Number.isFinite);
+    if (hist.length < minH) continue;
+    const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+    const std = Math.sqrt(hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length);
+    if (std < 1e-10) continue;
+    if (v > mean + k * std) return { index: i, value: v, mean, std };
+  }
+  return null;
+}
 var pct = (v) => `${(v * 100).toFixed(1)}%`;
 function belowSkillFloor(valAcc, classes) {
   if (!classes || classes <= 1) return false;
@@ -6024,18 +6596,60 @@ function diagnoseRun(ev) {
     });
     return out;
   }
-  const nonFinite = ev.curve.length > 0 && last && (!Number.isFinite(last.valLoss) || !Number.isFinite(last.trainLoss));
+  const trainSeries = ev.curve.map((e) => e.trainLoss);
+  const valSeries = ev.curve.map((e) => e.valLoss);
+  const nanAtTrain = firstNonFinite(trainSeries);
+  const nanAtVal = firstNonFinite(valSeries);
+  const nanAt = nanAtTrain < 0 ? nanAtVal : nanAtVal < 0 ? nanAtTrain : Math.min(nanAtTrain, nanAtVal);
+  if (ev.curve.length > 0 && nanAt >= 0) {
+    const at = ev.curve[nanAt];
+    const before = nanAt > 0 ? ev.curve[nanAt - 1] : null;
+    const bad = nanAt === nanAtTrain ? at.trainLoss : at.valLoss;
+    out.push({
+      kind: "nan-loss",
+      // A stored run went through JSON, where NaN and Infinity both become
+      // null, so only a live curve can say which of the two it was.
+      title: `The loss became ${typeof bad !== "number" ? "non-finite (NaN or infinite)" : Number.isNaN(bad) ? "NaN" : "infinite"} at epoch ${at.epoch}`,
+      evidence: `The ${nanAt === nanAtTrain ? "training" : "validation"} loss is not a finite number from epoch ${at.epoch}` + (before && Number.isFinite(before.trainLoss) ? `; the epoch before it was ${before.trainLoss.toFixed(4)}.` : ", the first point logged.") + " The curve is logged per epoch, so the step inside that epoch is not known.",
+      fix: `Lower the learning rate. It ran at ${at.lr ?? "the configured rate"}; a tenth of that is the usual first try.`,
+      agentFixable: false,
+      explainsEverything: true
+    });
+    return out;
+  }
   const climbing = ev.curve.length >= 3 && ev.curve.every((e, i) => i === 0 || e.trainLoss > ev.curve[i - 1].trainLoss) && last.trainLoss > ev.curve[0].trainLoss * DIVERGENCE_RISE;
-  if (nonFinite || climbing) {
+  if (climbing) {
     out.push({
       kind: "diverged",
       title: "Training diverged",
-      evidence: nonFinite ? "The final loss is not a finite number." : `Training loss rose every epoch, ${ev.curve[0].trainLoss.toFixed(4)} to ${last.trainLoss.toFixed(4)}.`,
+      evidence: `Training loss rose every epoch, ${ev.curve[0].trainLoss.toFixed(4)} to ${last.trainLoss.toFixed(4)}.`,
       fix: `Lower the learning rate. It ran at ${last?.lr ?? "the configured rate"}; a tenth of that is the usual first try.`,
       agentFixable: false,
       explainsEverything: true
     });
     return out;
+  }
+  const spike = findLossSpike(trainSeries);
+  if (spike) {
+    const at = ev.curve[spike.index];
+    out.push({
+      kind: "loss-spike",
+      title: `The training loss spiked at epoch ${at.epoch}`,
+      evidence: `Training loss ${spike.value.toFixed(4)} at epoch ${at.epoch}, against a mean of ${spike.mean.toFixed(4)} (standard deviation ${spike.std.toFixed(4)}) over the ${Math.min(SPIKE_WINDOW, spike.index)} epochs before it: more than ${SPIKE_SIGMAS} standard deviations above. Per-epoch points, so this is an approximation of a per-step monitor.`,
+      fix: "Add learning-rate warmup or clip the gradient norm; a spike that recurs at a lower rate points at the architecture instead.",
+      agentFixable: false
+    });
+  }
+  const init = expectedInitialLoss(ev.model, ev.source);
+  const first = ev.curve[0];
+  if (init && first && Number.isFinite(first.trainLoss) && first.trainLoss > init.value * FIRST_LOSS_RATIO) {
+    out.push({
+      kind: "first-loss-high",
+      title: "The first loss was far above what guessing scores",
+      evidence: `The first logged training loss was ${first.trainLoss.toFixed(4)}; an uninformative head scores ${init.sentence}, and this is ${(first.trainLoss / init.value).toFixed(1)} times that after a whole epoch of training.`,
+      fix: "Check the input scale and the loss inputs: cross-entropy expects raw logits and integer class labels, and very large initial logits put the loss here.",
+      agentFixable: false
+    });
   }
   const classes = dataset?.classes ?? (typeof contract.outputDim === "number" ? contract.outputDim : null);
   if (last && classes && classes > 1) {
@@ -6103,6 +6717,59 @@ function estimateParams(model) {
     0
   );
   return total > 0 ? total : null;
+}
+
+// src/utils/trainStability.ts
+var ATTENTION = /attention|^transformerBlock$|transformerEncoder|transformerDecoder|^mla$|^ditBlock$|^hstuBlock$/i;
+var QK_NORM_INFO_WIDTH = 1024;
+var QK_NORM_WARN_WIDTH = 4096;
+var Z_LOSS_VOCAB = 32e3;
+var PAPER = "Wortsman et al., arXiv 2309.14322";
+function widthOf(c, inShape) {
+  const p = c.params ?? {};
+  const v = Number(p.embedDim ?? p.hiddenDim ?? p.dModel ?? p.hiddenSize);
+  if (Number.isFinite(v) && v > 0) return v;
+  return inShape && inShape.length ? inShape[inShape.length - 1] : 0;
+}
+function hasQkNorm(c) {
+  const p = c.params ?? {};
+  return Boolean(p.qkNorm ?? p.qk_norm ?? p.qkLayerNorm);
+}
+function stabilityFindings(model) {
+  const out = [];
+  const comps = model.components ?? [];
+  const shapes = propagateShapes(model).shapes;
+  const graphHasQkNorm = comps.some((c) => c.type === "qkNorm");
+  const attn = comps.filter((c) => ATTENTION.test(c.type) && c.type !== "qkNorm" && !hasQkNorm(c));
+  if (!graphHasQkNorm && attn.length) {
+    const wide = attn.map((c) => ({ c, d: widthOf(c, shapes.get(c.id)?.in) })).filter((x) => x.d >= QK_NORM_INFO_WIDTH);
+    if (wide.length) {
+      const d = Math.max(...wide.map((x) => x.d));
+      out.push({
+        ruleId: "attn-no-qk-norm",
+        severity: d >= QK_NORM_WARN_WIDTH ? "warn" : "info",
+        title: `${wide.length} attention layer${wide.length === 1 ? "" : "s"} at width ${d.toLocaleString("en-US")} without QK-norm`,
+        detail: `Attention-logit growth is one of the two instabilities ${PAPER} reproduce at small scale, and it gets more likely as width and learning rate grow; normalising q and k removed it in their runs. Shown from width ${QK_NORM_INFO_WIDTH.toLocaleString("en-US")}, a warning from ${QK_NORM_WARN_WIDTH.toLocaleString("en-US")}. Many models train stably without it at a tuned learning rate.`,
+        fix: "Add a qkNorm node (RMSNorm on q and k per head) to the attention blocks.",
+        agentFixable: true,
+        affectedIds: wide.map((x) => x.c.id)
+      });
+    }
+  }
+  const contract = deriveModelContract(model);
+  const V = contract.outputDim ?? 0;
+  if (contract.taskType === "language-modeling" && V >= Z_LOSS_VOCAB) {
+    out.push({
+      ruleId: "softmax-no-z-loss",
+      severity: "info",
+      title: `A ${V.toLocaleString("en-US")}-way output softmax with no z-loss`,
+      detail: `Output logits drifting away from log-probabilities is the second instability in ${PAPER}; an auxiliary z-loss (1e-4 x log^2 Z) removed it. The graph has no loss node, so this is a line in the training loop, not a layer.`,
+      fix: "Add z-loss with coefficient 1e-4 to the training loss.",
+      agentFixable: false,
+      affectedIds: []
+    });
+  }
+  return out;
 }
 
 // src/utils/evalStore.ts
@@ -6605,6 +7272,33 @@ function analyzeForDeployment(model, target) {
     recommendations
   };
 }
+var DEPLOY_TARGET_KEY = "deploy-target";
+function getChosenDeployTarget() {
+  try {
+    const raw = localStorage.getItem(DEPLOY_TARGET_KEY);
+    return raw && PLATFORM_PROFILES.some((p) => p.id === raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+var DEPLOY_TIE_ORDER = [
+  "cloud-t4",
+  "cloud-a100",
+  "edge-gpu",
+  "edge-cpu",
+  "browser",
+  "browser-webgpu",
+  "mobile-android",
+  "mobile-ios",
+  "edge-tpu"
+];
+function pickBestDeployTarget(results) {
+  const rank = (t) => {
+    const i = DEPLOY_TIE_ORDER.indexOf(t);
+    return i < 0 ? DEPLOY_TIE_ORDER.length : i;
+  };
+  return [...results].sort((a, b) => b.score - a.score || rank(a.target) - rank(b.target))[0];
+}
 
 // src/utils/pipelineStages.ts
 var STAGE_ORDER = ["preflight", "data", "train", "evaluate", "deploy"];
@@ -6622,10 +7316,18 @@ var fmtDuration = (sec) => {
 };
 var fmtCount = (n2, one, many = `${one}s`) => `${n2} ${n2 === 1 ? one : many}`;
 var pct2 = (v) => `${(v * 100).toFixed(0)}%`;
+function isDesignLayer(c) {
+  return !!c && c.type !== "input" && c.type !== "output" && c.type !== "stickyNote";
+}
 function realLayerCount(model) {
-  return model.components.filter(
-    (c) => c.type !== "input" && c.type !== "output" && c.type !== "stickyNote"
-  ).length;
+  return model.components.filter((c) => isDesignLayer({ type: c.type })).length;
+}
+function hasDesign(model) {
+  try {
+    return !!model && realLayerCount(model) > 0;
+  } catch {
+    return false;
+  }
 }
 function emptyCanvasResult(stage) {
   return {
@@ -6680,14 +7382,20 @@ function runPreflightStage(model, workload) {
   const { block, warn } = report.counts;
   const m = report.metrics;
   const costLine = m.estTrainSec > 0 ? `${fmtUsd(m.estCostUsd)} / ${fmtDuration(m.estTrainSec)} on ${gpuArticle(m.fitsGpu)} ${m.fitsGpu}` : null;
+  const assumed = [];
+  if (m.samplesAssumed) assumed.push(`${(m.samples ?? 5e4).toLocaleString("en-US")} samples`);
+  if (m.planAssumed) assumed.push(`${m.epochs ?? 10} epochs, batch ${m.batchSize ?? 32}`);
+  const assumedTail = assumed.length ? `, assuming ${assumed.join(", ")}` : "";
+  const noFit = m.gpuFits === false;
+  const fitClause = noFit ? `does not fit ${gpuArticle(m.fitsGpu)} ${m.fitsGpu}${m.smallestFitGpu ? `; the smallest card that holds it is ${gpuArticle(m.smallestFitGpu)} ${m.smallestFitGpu}` : "; no single offered card holds it, so it needs sharding"}` : "";
   let status;
   let headline;
   if (block > 0) {
     status = "blocked";
-    headline = costLine ? `${fmtCount(block, "blocker")} would have failed a ${costLine} run.` : `${fmtCount(block, "blocker")} stop this model from training.`;
+    headline = costLine ? assumedTail ? `${fmtCount(block, "blocker")} would have failed a run priced at ${costLine}${assumedTail}.` : `${fmtCount(block, "blocker")} would have failed a ${costLine} run.` : `${fmtCount(block, "blocker")} stop this model from training.`;
   } else if (warn > 0) {
     status = "attention";
-    headline = `Trainable, with ${fmtCount(warn, "warning")}. Estimated ${costLine ?? "cost unknown"}.`;
+    headline = noFit ? `Trainable, but it ${fitClause}. ${fmtCount(warn, "warning")} in all.` : `Trainable, with ${fmtCount(warn, "warning")}. Estimated ${costLine ?? "cost unknown"}.`;
   } else {
     status = "ok";
     headline = `Ready to train: ${fmtCount(m.layers, "layer")}, ${(m.params / 1e6).toFixed(m.params < 1e6 ? 2 : 1)}M params${costLine ? `, about ${costLine}` : ""}.`;
@@ -6705,16 +7413,33 @@ function runPreflightStage(model, workload) {
       layers: m.layers,
       params: m.params,
       flops: m.flops,
+      // The card the cost is priced on. Read `gpuFits` before calling it the
+      // card it trains on: it is the plan's choice whether or not it fits.
       gpu: m.fitsGpu,
+      gpuFits: m.gpuFits ?? null,
+      smallestFitGpu: m.smallestFitGpu ?? null,
       estCostUsd: m.estCostUsd,
       estTrainSec: m.estTrainSec,
+      costAssumes: {
+        samples: m.samples ?? null,
+        epochs: m.epochs ?? null,
+        batchSize: m.batchSize ?? null,
+        samplesAssumed: m.samplesAssumed,
+        planAssumed: m.planAssumed ?? false
+      },
       // The memory numbers and the "was the sample count a guess" flag were
       // already computed here and thrown away at the stage boundary. Autopilot
       // shows the arithmetic beside each candidate, and a footprint with no
       // provenance is the half of that which makes it a claim again.
       weightBytes: m.weightBytes,
       trainFootprintBytes: m.trainFootprintBytes,
-      samplesAssumed: m.samplesAssumed
+      samplesAssumed: m.samplesAssumed,
+      // Model states, activations at the planned batch, overhead and the peak,
+      // each with what it assumed; ZeRO per-card numbers for 2, 4 and 8 cards.
+      memory: m.memory ?? null,
+      fitsCards: m.fitsCards ?? [],
+      // MACs, forward FLOPs and training FLOPs, with the convention spelled out.
+      flopsDetail: m.flopsDetail ?? null
     },
     evidence: evidenceFor("preflight")
   };
@@ -6737,27 +7462,26 @@ function datasetOptionsFor(modality, numClasses) {
     case "nlp":
       return [
         { label: "IMDB reviews", value: "hf:stanfordnlp/imdb", hint: "50k reviews, binary sentiment" },
+        // GLUE is eleven configs in one repo and load_dataset refuses it without
+        // one; HF_OPTION_CONFIG supplies `sst2`, which is what this label means.
         { label: "GLUE / SST-2", value: "hf:nyu-mll/glue", hint: "Sentence-level sentiment, the standard small benchmark" },
         ...upload,
         synthetic
       ];
     case "audio":
       return [
-        { label: "Speech Commands", value: "hf:google/speech_commands", hint: "1-second spoken keywords, 35 classes" },
         ...upload,
         synthetic
       ];
     case "tabular":
-    default:
+    default: {
+      const benchmark = numClasses && numClasses > 2 ? { label: "Covertype", value: "hf:jxie/covtype", hint: "Forest cover type, 54 features, 7 classes" } : { label: "Adult / census income", value: "hf:scikit-learn/adult-census-income", hint: "A standard tabular benchmark to check the wiring against" };
       return [
         ...upload,
-        {
-          label: numClasses && numClasses > 2 ? "Covertype" : "Adult / census income",
-          value: numClasses && numClasses > 2 ? "hf:covertype" : "hf:scikit-learn/adult-census-income",
-          hint: "A standard tabular benchmark to check the wiring against"
-        },
+        benchmark,
         synthetic
       ];
+    }
   }
 }
 function runDataStage(model) {
@@ -6800,6 +7524,24 @@ function runDataStage(model) {
       evidence: evidenceFor("data")
     };
   }
+  if (source?.kind === "synthetic") {
+    notes.push({
+      severity: "warn",
+      title: "Synthetic data: proves it runs, says nothing about accuracy",
+      detail: "train.py will feed random tensors shaped to the input contract. A run on them checks the wiring end to end; its loss and accuracy describe noise, not your task.",
+      fix: "Pick a real dataset in the Data step when you have one.",
+      // A dataset choice, not a graph edit.
+      agentFixable: false
+    });
+    return {
+      stage: "data",
+      status: "attention",
+      headline: "Synthetic data: proves it runs, says nothing about accuracy.",
+      notes,
+      data: { wired: false, synthetic: true, source, modality, contract },
+      evidence: evidenceFor("data")
+    };
+  }
   return {
     stage: "data",
     status: "needs_input",
@@ -6815,27 +7557,61 @@ function runDataStage(model) {
     evidence: evidenceFor("data")
   };
 }
+function otherDesignNote(other) {
+  return {
+    severity: "info",
+    title: "The last run was for a different design",
+    detail: `${other.modelName ? `"${other.modelName}"` : "Another design"} trained last, and its structure differs from the one on the canvas. Its numbers say nothing about this design, so this one counts as untrained.`
+  };
+}
+function diagnoseStoredRun(model, run) {
+  return diagnoseRun({
+    curve: run.curve ?? [],
+    model,
+    source: getDataSource(),
+    measured: runEvidence(run).measured,
+    final: { trainAcc: run.trainAcc, valAcc: run.valAcc, trainLoss: run.trainLoss, valLoss: run.valLoss },
+    // The run's own row count when it recorded one, else the sample count the
+    // user declared in pre-flight. Without either, tiny-data cannot fire, and
+    // it used to be unable to fire at all because nothing passed this.
+    datasetSize: run.datasetSize ?? readDataSpec()?.samples ?? null
+  });
+}
 function runTrainStage(model) {
   if (realLayerCount(model) === 0) return emptyCanvasResult("train");
-  const run = getLastRun();
+  const { run, otherDesign } = getLastRunFor(model);
   const plan = readTrainPlan();
   const report = buildPreflightReport(model, { dataSpec: readDataSpec(), plan });
   const cost = report.metrics.estCostUsd;
   const dur = report.metrics.estTrainSec;
   const gpu = report.metrics.fitsGpu;
   const costLine = dur > 0 ? `${fmtUsd(cost)} / ${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}` : "cost not estimable";
+  const init = expectedInitialLoss(model, getDataSource());
+  const stabilityNotes = stabilityFindings(model).map((f) => ({
+    severity: f.severity,
+    ruleId: f.ruleId,
+    title: f.title,
+    detail: f.detail,
+    fix: f.fix,
+    // Set per rule in trainStability.ts: QK-norm is a node, z-loss is a loss term.
+    agentFixable: f.agentFixable
+  }));
+  const compute = report.metrics.compute;
+  const computeNote = compute && compute.trainFlops > 0 ? {
+    severity: "info",
+    title: `Compute: ${compute.trainFlops.toExponential(2)} training FLOPs, about ${fmtDuration(compute.computeSec)} at an assumed ${Math.round(compute.assumedMfu * 100)}% utilisation`,
+    detail: `${report.metrics.flopsDetail?.convention ?? "FLOPs count a multiply-add as 2"}. Per sample that is 3 x the forward FLOPs (about 6 x parameters per token for a dense model), times ${(report.metrics.samples ?? 0).toLocaleString("en-US")} samples and ${report.metrics.epochs ?? 10} epochs, over the ${gpu}'s ${compute.peakTflops} TFLOPS dense bf16 peak. The ${Math.round(compute.assumedMfu * 100)}% is an assumption, not a measurement; a short timed run replaces it.`
+  } : null;
   if (run) {
     const ev = runEvidence(run);
     const measured = ev.measured;
-    const diagnoses = diagnoseRun({
-      curve: run.curve ?? [],
-      model,
-      source: getDataSource(),
-      measured,
-      final: { trainAcc: run.trainAcc, valAcc: run.valAcc, trainLoss: run.trainLoss, valLoss: run.valLoss }
-    });
+    const diagnoses = diagnoseStoredRun(model, run);
     const notes = diagnoses.map((d) => ({
-      severity: "warn",
+      // A cause that explains everything (the loss diverged, the graph does not
+      // match its data) makes every number on the run a measurement of the
+      // wrong thing. That is a stop, not a note to scroll past on the way to
+      // Evaluate grading those numbers.
+      severity: d.explainsEverything ? "block" : "warn",
       ruleId: `run-${d.kind}`,
       title: d.title,
       detail: `${d.evidence} ${d.fix}`,
@@ -6847,13 +7623,15 @@ function runTrainStage(model) {
     for (const i of deriveRunInsights(run).filter((i2) => i2.severity !== "warn")) {
       notes.push({ severity: i.severity === "good" ? "good" : "info", title: i.title, detail: i.detail });
     }
+    notes.push(...stabilityNotes);
     const accPart = typeof run.valAcc === "number" ? `val acc ${pct2(run.valAcc)}` : "no accuracy reported";
+    const fatal = diagnoses.find((d) => d.explainsEverything);
     return {
       stage: "train",
-      status: diagnoses.length > 0 ? "attention" : measured ? "ok" : "attention",
-      headline: measured ? `${ev.sentence}: ${accPart} over ${fmtCount(run.epochs, "epoch")}.` : `${ev.sentence}. ${accPart}, and nothing has been measured on real data.`,
+      status: fatal ? "blocked" : diagnoses.length > 0 ? "attention" : measured ? "ok" : "attention",
+      headline: fatal ? `${ev.sentence}, but ${fatal.title.toLowerCase()}, so its ${accPart} measures nothing useful.` : measured ? `${ev.sentence}: ${accPart} over ${fmtCount(run.epochs, "epoch")}.` : `${ev.sentence}. ${accPart}, and nothing has been measured on real data.`,
       notes,
-      data: { lastRun: run, plan: plan ?? null, estCostUsd: cost, estTrainSec: dur, gpu },
+      data: { lastRun: run, plan: plan ?? null, estCostUsd: cost, estTrainSec: dur, gpu, expectedInitialLoss: init },
       evidence: evidenceFor("train")
     };
   }
@@ -6861,28 +7639,75 @@ function runTrainStage(model) {
     stage: "train",
     status: "needs_input",
     headline: `Not trained yet. A real run is estimated at ${costLine}.`,
-    notes: [{
-      severity: "info",
-      title: "Nothing is started without you",
-      detail: "Picking an option here opens the runner with that choice made. The run itself stays behind its own confirm, because it spends time or money."
-    }],
-    data: { lastRun: null, plan: plan ?? null, estCostUsd: cost, estTrainSec: dur, gpu },
+    notes: [
+      ...otherDesign ? [otherDesignNote(otherDesign)] : [],
+      ...init ? [{
+        severity: "info",
+        ruleId: "expected-first-loss",
+        title: `Expected first loss: ${init.sentence}`,
+        detail: "What an uninformative head scores. A first logged loss far above it means the start was worse than guessing, which is checked against the run when one exists."
+      }] : [],
+      ...stabilityNotes,
+      ...computeNote ? [computeNote] : [],
+      {
+        severity: "info",
+        title: "Nothing is started without you",
+        detail: "Picking an option here opens the runner with that choice made. The run itself stays behind its own confirm, because it spends time or money."
+      }
+    ],
+    data: {
+      lastRun: null,
+      ...otherDesign ? { lastRunOtherDesign: { modelName: otherDesign.modelName ?? null, finishedAt: otherDesign.finishedAt } } : {},
+      plan: plan ?? null,
+      estCostUsd: cost,
+      estTrainSec: dur,
+      gpu,
+      expectedInitialLoss: init,
+      compute: compute ?? null
+    },
     question: {
       id: "train-mode",
       question: "How do you want to train it?",
       because: "The estimate and the hardware fit are derived. Whether you want to spend the time or the money is not.",
       options: [
         { label: "Simulate it (free, instant)", value: "simulate", hint: "Architecture-based curves, useful to check the wiring, not a measurement" },
-        { label: "Free GPU (Colab / Kaggle)", value: "free_gpu", hint: "A notebook you run yourself; results report back into the app" },
-        { label: `Managed GPU (about ${fmtUsd(cost)})`, value: "managed_gpu", hint: `${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}, confirmed in the runner before anything starts` }
+        {
+          label: "Free GPU (Colab / Kaggle)",
+          value: "free_gpu",
+          // The cheapest real evidence that the graph can learn, offered as text:
+          // nothing here launches it.
+          hint: `A notebook you run yourself; results report back into the app. Worth a smoke test there first: train one fixed batch for about 100 steps and check the loss falls from ${init ? init.value.toFixed(2) : "its first value"} toward 0, then train once on zeroed inputs, a baseline the real inputs must beat`
+        },
+        {
+          label: `Managed GPU (about ${fmtUsd(cost)})`,
+          value: "managed_gpu",
+          hint: `${fmtDuration(dur)} on ${gpuArticle(gpu)} ${gpu}` + (report.metrics.gpuFits === false ? ", which it does not fit as planned" : "") + (getDataSource()?.kind === "synthetic" ? ", on synthetic data, so it proves the wiring and measures nothing" : "") + ", confirmed in the runner before anything starts"
+        }
       ]
     },
     evidence: evidenceFor("train")
   };
 }
+function classificationBaseline(model, source) {
+  const contract = deriveModelContract(model);
+  if (contract.taskType !== "classification") return null;
+  const spec = readDataSpec();
+  const ds = knownDatasetFor(source);
+  const classes = ds?.classes ?? (spec?.numClasses && spec.numClasses > 1 ? spec.numClasses : null) ?? (typeof contract.outputDim === "number" && contract.outputDim > 1 ? contract.outputDim : null);
+  if (!classes || classes < 2) return null;
+  const counts = (spec?.classCounts ?? []).filter((n2) => typeof n2 === "number" && n2 > 0);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const majority = counts.length > 1 && total > 0 ? Math.max(...counts) / total : null;
+  return {
+    classes,
+    chance: 1 / classes,
+    majority,
+    from: ds ? ds.label : spec?.numClasses ? "your declared data" : "the width of the output layer"
+  };
+}
 function runEvaluateStage(model) {
   if (realLayerCount(model) === 0) return emptyCanvasResult("evaluate");
-  const run = getLastRun();
+  const { run, otherDesign } = getLastRunFor(model);
   const suite = summarize(loadSuite(model));
   const source = getDataSource();
   const notes = [];
@@ -6897,22 +7722,47 @@ function runEvaluateStage(model) {
       selfAction: { id: "suggest-eval-cases", label: "Add starter cases" }
     });
   } else {
+    const ran = suite.passed + suite.failed + suite.errors;
+    if (suite.failed > 0) {
+      notes.push({
+        severity: "block",
+        title: `${fmtCount(suite.total, "test case")}: ${suite.passed} passed, ${suite.failed} failed`,
+        detail: "A failing assertion means the model no longer does what the suite says it should."
+      });
+    } else if (ran === 0) {
+      notes.push({
+        severity: "warn",
+        title: `${fmtCount(suite.total, "test case")}, none run yet`,
+        detail: "Every case is still pending, so the suite has not checked anything about this model.",
+        fix: "Run the suite from the Evaluate step after the next training run."
+      });
+    } else {
+      notes.push({
+        severity: suite.pending > 0 || suite.errors > 0 ? "info" : "good",
+        title: `${fmtCount(suite.total, "test case")}: ${suite.passed} passed${suite.errors ? `, ${suite.errors} errored` : ""}${suite.pending ? `, ${suite.pending} pending` : ""}`,
+        detail: suite.pending > 0 ? `${suite.pending} still pending a run.` : void 0
+      });
+    }
+  }
+  if (source?.kind === "synthetic") {
     notes.push({
-      severity: suite.failed > 0 ? "block" : "good",
-      title: `${fmtCount(suite.total, "test case")}: ${suite.passed} passed${suite.failed ? `, ${suite.failed} failed` : ""}`,
-      detail: suite.failed > 0 ? "A failing assertion means the model no longer does what the suite says it should." : suite.pending > 0 ? `${suite.pending} still pending a run.` : void 0
+      severity: "warn",
+      title: "The data is synthetic",
+      detail: "A run on random tensors proves the graph trains end to end. Its accuracy describes noise, so nothing here can say whether the model is any good."
     });
   }
   if (!run) {
+    if (otherDesign) notes.unshift(otherDesignNote(otherDesign));
     return {
       stage: "evaluate",
-      status: "attention",
-      headline: "Nothing measured yet: there is no training run to judge.",
+      status: notes.some((n2) => n2.severity === "block") ? "blocked" : "attention",
+      headline: "Nothing measured yet: there is no training run of this design to judge.",
       notes,
       data: { run: null, suite },
       evidence: evidenceFor("evaluate")
     };
   }
+  const measured = runEvidence(run).measured;
   const evalMetrics = run.evalMetrics ?? {};
   const metricNames = Object.keys(evalMetrics);
   if (metricNames.length) {
@@ -6922,21 +7772,31 @@ function runEvaluateStage(model) {
       detail: metricNames.slice(0, 6).map((k) => `${k.replace(/_/g, " ")} ${Math.abs(evalMetrics[k]) >= 100 ? evalMetrics[k].toFixed(1) : evalMetrics[k].toFixed(4)}`).join(", ")
     });
   }
-  const diagnoses = diagnoseRun({
-    curve: run.curve ?? [],
-    model,
-    source,
-    // Same predicate as the Train row: a Colab run is measured, and telling
-    // `diagnoseRun` otherwise makes it explain a real run as a simulated one.
-    measured: runEvidence(run).measured,
-    final: { trainAcc: run.trainAcc, valAcc: run.valAcc, trainLoss: run.trainLoss, valLoss: run.valLoss }
-  });
+  const diagnoses = diagnoseStoredRun(model, run);
   if (diagnoses.length > 0) {
+    const fatal = diagnoses.some((d) => d.explainsEverything);
     notes.push({
-      severity: "warn",
+      severity: fatal ? "block" : "warn",
       ruleId: "run-diagnosed",
       title: diagnoses.length === 1 ? `The run has a diagnosed cause: ${diagnoses[0].title.toLowerCase()}` : `The run has ${diagnoses.length} diagnosed causes`,
       detail: `${diagnoses.map((d) => d.title).join("; ")}. The evidence and the fix for each are on the Train row.`
+    });
+  }
+  const baseline = measured ? classificationBaseline(model, source) : null;
+  if (baseline && typeof run.valAcc === "number") {
+    const parts = [`chance is ${pct2(baseline.chance)} for ${baseline.classes} classes (from ${baseline.from})`];
+    if (baseline.majority != null) parts.push(`always predicting the commonest class scores ${pct2(baseline.majority)}`);
+    const belowMajority = baseline.majority != null && baseline.majority > baseline.chance && run.valAcc <= baseline.majority + 0.01;
+    notes.push(belowMajority ? {
+      severity: "warn",
+      title: "No better than predicting the commonest class",
+      detail: `Validation accuracy ${pct2(run.valAcc)}; ${parts.join(", and ")}. The model may have learned the class balance and nothing else.`,
+      fix: "Look at per-class recall before reading the accuracy, and weight the loss by class.",
+      agentFixable: false
+    } : {
+      severity: "info",
+      title: `Val acc ${pct2(run.valAcc)} against a ${pct2(Math.max(baseline.chance, baseline.majority ?? 0))} baseline`,
+      detail: `${parts.join("; ")}.`
     });
   }
   const insights = deriveRunInsights(run).filter((i) => i.severity !== "warn");
@@ -6947,28 +7807,47 @@ function runEvaluateStage(model) {
       detail: i.detail
     });
   }
-  const bad = suite.failed > 0 || diagnoses.length > 0;
   const accPart = typeof run.valAcc === "number" ? `val acc ${pct2(run.valAcc)}` : "no accuracy reported";
+  const status = notes.some((n2) => n2.severity === "block") ? "blocked" : notes.some((n2) => n2.severity === "warn") || !measured ? "attention" : "ok";
   return {
     stage: "evaluate",
-    status: suite.failed > 0 ? "blocked" : bad ? "attention" : runEvidence(run).measured ? "ok" : "attention",
-    headline: runEvidence(run).measured ? `${accPart}${suite.total ? `, ${suite.passed}/${suite.total} test cases passing` : ", no test cases"}.` : `${accPart}, but simulated: this describes the architecture, not a trained model.`,
+    status,
+    headline: measured ? `${accPart}${suite.total ? `, ${suite.passed}/${suite.total} test cases passing` : ", no test cases"}.` : `${accPart}, but simulated: this describes the architecture, not a trained model.`,
     notes,
-    data: { run, suite, evalMetrics },
+    data: { run, suite, evalMetrics, baseline },
     evidence: evidenceFor("evaluate")
   };
 }
 function runDeployStage(model) {
   if (realLayerCount(model) === 0) return emptyCanvasResult("deploy");
   const all = PLATFORM_PROFILES.map((p) => analyzeForDeployment(model, p.id));
-  const best = [...all].sort((a, b) => b.score - a.score)[0];
-  const blockers = best.recommendations.filter((r) => r.severity === "blocker");
-  const warnings = best.recommendations.filter((r) => r.severity === "warning");
+  const best = pickBestDeployTarget(all);
+  const chosenId = getChosenDeployTarget();
+  const chosen = chosenId ? all.find((r) => r.profile.id === chosenId) : void 0;
+  const target = chosen ?? best;
+  const blockers = target.recommendations.filter((r) => r.severity === "blocker");
+  const warnings = target.recommendations.filter((r) => r.severity === "warning");
+  const suggestions = target.recommendations.filter((r) => r.severity === "suggestion");
   const notes = [
     ...blockers.map((r) => ({ severity: "block", title: r.title, detail: r.message, agentFixable: true })),
     ...warnings.map((r) => ({ severity: "warn", title: r.title, detail: r.message, agentFixable: true }))
   ];
-  const runners = all.filter((r) => r.profile.id !== best.profile.id).sort((a, b) => b.score - a.score).slice(0, 2);
+  if (target.score < 100) {
+    const cost = (r) => r.severity === "blocker" ? 30 : r.severity === "warning" ? 10 : 3;
+    notes.push({
+      severity: "info",
+      title: `Where the ${100 - target.score} points went`,
+      detail: target.recommendations.map((r) => `${r.title} (-${cost(r)})`).join(", ") + "."
+    });
+  }
+  if (chosen) {
+    notes.push({
+      severity: "info",
+      title: `Target is ${chosen.profile.label}, as chosen in the Deploy panel`,
+      detail: chosen.profile.id !== best.profile.id ? `The best-scoring target for this graph is ${best.profile.label} (${best.score}/100).` : "It is also the best-scoring target for this graph."
+    });
+  }
+  const runners = all.filter((r) => r.profile.id !== target.profile.id).sort((a, b) => b.score - a.score).slice(0, 2);
   if (runners.length) {
     notes.push({
       severity: "info",
@@ -6976,8 +7855,9 @@ function runDeployStage(model) {
       detail: runners.map((r) => `${r.profile.label} ${r.score}/100`).join(", ") + ". Change the target in the Deploy panel to see its own analysis."
     });
   }
-  const run = getLastRun();
+  const { run, otherDesign } = getLastRunFor(model);
   const deployEv = runEvidence(run);
+  if (otherDesign) notes.push(otherDesignNote(otherDesign));
   if (!deployEv.measured) {
     notes.push({
       severity: "warn",
@@ -6985,20 +7865,25 @@ function runDeployStage(model) {
       detail: run ? `${deployEv.sentence}, so nothing below is evidence about the trained model, only about the architecture.` : "This analysis is about the architecture. Nothing has been trained, so there are no weights to ship."
     });
   }
+  const who = chosen ? `your target, ${target.profile.label}` : `${target.profile.label}, the best-scoring target`;
   return {
     stage: "deploy",
     status: blockers.length ? "blocked" : warnings.length || !deployEv.measured ? "attention" : "ok",
-    headline: blockers.length ? `${fmtCount(blockers.length, "blocker")} for ${best.profile.label}, the best-scoring target (${best.score}/100).` : `Best target is ${best.profile.label} (${best.score}/100): ${best.estimatedLatencyLabel} per inference, ${best.totalParamsMB.toFixed(1)} MB.`,
+    headline: blockers.length ? `${fmtCount(blockers.length, "blocker")} for ${who} (${target.score}/100).` : chosen ? `Your target is ${target.profile.label} (${target.score}/100): ${target.estimatedLatencyLabel} per inference, ${target.totalParamsMB.toFixed(1)} MB.` : `Best target is ${target.profile.label} (${target.score}/100): ${target.estimatedLatencyLabel} per inference, ${target.totalParamsMB.toFixed(1)} MB.`,
     notes,
     data: {
-      target: best.profile.id,
-      targetLabel: best.profile.label,
-      score: best.score,
-      latencyMs: best.estimatedLatencyMs,
-      sizeMB: best.totalParamsMB,
-      sizeMBQuantized: best.totalParamsMBQuantized,
+      target: target.profile.id,
+      targetLabel: target.profile.label,
+      // Who picked it: the user in the Deploy panel, or the ranking.
+      targetChosenBy: chosen ? "user" : "score",
+      bestTarget: best.profile.id,
+      score: target.score,
+      latencyMs: target.estimatedLatencyMs,
+      sizeMB: target.totalParamsMB,
+      sizeMBQuantized: target.totalParamsMBQuantized,
       blockers: blockers.map((r) => r.title),
       warnings: warnings.map((r) => r.title),
+      suggestions: suggestions.map((r) => r.title),
       alternatives: all.map((r) => ({ id: r.profile.id, label: r.profile.label, score: r.score }))
     },
     evidence: evidenceFor("deploy")
@@ -7039,10 +7924,34 @@ function runStageSafely(stage, model, opts) {
     };
   }
 }
+var GRAPH_ONLY_STAGES = /* @__PURE__ */ new Set(["data", "deploy"]);
+function provisionalAfter(stoppedAt, model, opts) {
+  const out = [];
+  for (const stage of STAGE_ORDER.slice(STAGE_ORDER.indexOf(stoppedAt) + 1)) {
+    if (!GRAPH_ONLY_STAGES.has(stage)) continue;
+    if (stage === "data" && !hasRealData(getDataSource())) continue;
+    const r = runStageSafely(stage, model, opts);
+    if (r.data.error) continue;
+    out.push({ ...r, provisional: true });
+  }
+  return out;
+}
 function runPipeline(model, opts) {
   const results = [];
   let stoppedAt = null;
   let question;
+  if (!hasDesign(model) && Array.isArray(model?.components) && model.components.every((c) => c && typeof c === "object")) {
+    const r = emptyCanvasResult("preflight");
+    return {
+      results: [r],
+      provisional: [],
+      stoppedAt: "preflight",
+      outcome: "blocked",
+      headline: r.headline,
+      empty: true,
+      ranAt: Date.now()
+    };
+  }
   for (const stage of STAGE_ORDER) {
     const r = runStageSafely(stage, model, opts);
     results.push(r);
@@ -7057,6 +7966,7 @@ function runPipeline(model, opts) {
   const lead = (stoppedAt ? results.find((r) => r.stage === stoppedAt) : void 0) ?? results.find((r) => r.status === "blocked") ?? results.find((r) => r.status === "needs_input") ?? results[results.length - 1];
   return {
     results,
+    provisional: stoppedAt ? provisionalAfter(stoppedAt, model, opts) : [],
     stoppedAt,
     outcome,
     headline: lead.headline,
@@ -7117,6 +8027,13 @@ function checkDesign(model) {
       status: r.status,
       headline: r.headline,
       data: r.data
+    })),
+    provisionalStages: (report.provisional ?? []).map((r) => ({
+      stage: r.stage,
+      status: r.status,
+      headline: r.headline,
+      data: r.data,
+      findings: r.notes.filter((n2) => n2.severity === "block" || n2.severity === "warn").map((n2) => ({ stage: r.stage, severity: n2.severity, ruleId: n2.ruleId, title: n2.title, detail: n2.detail, fix: n2.fix }))
     })),
     decision: report.question ? {
       question: report.question.question,
@@ -7268,7 +8185,7 @@ function signalsFromCheck(id, check, firedRuleIds, outcomeRuleIds) {
   const outcome = new Set(outcomeRuleIds);
   const preflight = stages.find((s) => s.stage === "preflight");
   const data = preflight?.data ?? {};
-  const num2 = (k) => typeof data[k] === "number" && Number.isFinite(data[k]) ? data[k] : null;
+  const num3 = (k) => typeof data[k] === "number" && Number.isFinite(data[k]) ? data[k] : null;
   const blocks = findings.filter((f) => f.severity === "block");
   return {
     id,
@@ -7276,8 +8193,8 @@ function signalsFromCheck(id, check, firedRuleIds, outcomeRuleIds) {
     warnings: findings.filter((f) => f.severity === "warn" && f.stage === "preflight").length,
     otherStageBlockers: blocks.filter((f) => f.stage !== "preflight").map((f) => ({ stage: f.stage, title: f.title })),
     outcomeFlags: [...new Set([...firedRuleIds].filter((r) => r && outcome.has(r)))],
-    params: num2("params"),
-    estCostUsd: num2("estCostUsd"),
+    params: num3("params"),
+    estCostUsd: num3("estCostUsd"),
     fitsGpu: typeof data.gpu === "string" ? data.gpu : null,
     summary: typeof c.summary === "string" ? c.summary : void 0
   };

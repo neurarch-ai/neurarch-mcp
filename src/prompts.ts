@@ -23,6 +23,7 @@ export interface PromptDef {
 const GROUND_RULES = `Ground rules for this session:
 - Every number you state (parameters, FLOPs, shapes, layer counts, memory) must come from a tool result in this conversation, never from memory of similar models.
 - Before any training job is launched, size it with size_training_job (batch, card, attention) and quote its verdict; its memory number is a calibrated estimate, so say so.
+- Time and memory figures from check_parallel_layout and check_serving_config are predictions or upper bounds; keep the label the tool gives them. None of these tools predicts accuracy or quality.
 - Climb the ladder in order and stop at the first rung that fails: validate_model (is it a graph), lint_model (does it break a design rule), check_design (will it train, what will it cost, where can it run).
 - Before recommending any change to a layer, call layer_impact on it and say which downstream layers are shape-sensitive or carry weights.
 - Quote the provenance lint_model returns for a rule when you cite it; a rule with no measurement behind it is a convention, and say so.`;
@@ -114,6 +115,58 @@ ${GROUND_RULES}
 2. Say what the rule checks, in terms of this layer's actual parameters (get_layer). Quote the provenance if lint_model returned one for it; if it returned none, say the rule is a convention without a published measurement behind it.
 3. Name the smallest edit that clears it, run layer_impact on that layer, and state the blast radius.
 4. If the finding is a warning rather than a block, say plainly whether it is worth acting on for this model.`,
+  },
+  {
+    name: 'precheck_change',
+    title: 'Pre-check a model change',
+    description: 'Before a changed model takes a GPU or traffic: what changed against the base, what the job now needs, and whether the launch it is headed for is legal. One go / no-go table, every line from a tool.',
+    arguments: [
+      { name: 'base', description: 'The model before the change: a path, zoo:<id> or hf:<org/name>, e.g. "hf:Qwen/Qwen3-8B".', required: true },
+      { name: 'launch', description: 'Optional: where it is going, e.g. "train on 8xH100 at batch 16", "tp 4 pp 2 micro 1 seq 4096", or a vllm serve line.' },
+    ],
+    render: ({ base, launch }) => `Pre-check the change from ${base} to the model this server is attached to${launch ? `, headed for: ${launch}` : ''}.
+
+${GROUND_RULES}
+
+Procedure:
+1. check_edit with base_model_path "${base}" (and the batch and card if the launch names them). List every block finding first: these load, run and are wrong, so nothing later will catch them.
+2. size_training_job on the changed model at the launch's batch and card, and say whether the change is what moved the job on or off its card.
+3. ${launch ? 'If the launch is a multi-GPU training split, check_parallel_layout with its tp / pp / dp / micro_batch / seq_len. If it is a serving launch, check_serving_config with the command and against "' + base + '".' : 'If the user names a multi-GPU split or a serving launch, run check_parallel_layout or check_serving_config on it; otherwise say these were not checked.'}
+4. If ${base} is a Hugging Face id, model_changes on it, so a change upstream is not mistaken for the user's own.
+5. End with a table: check, verdict (pass / fail / not checked), the tool that decided it. Then one sentence: go or no-go, and the first thing to fix if no-go. Label every memory and time figure as the tool labels it (estimate, prediction, upper bound).`,
+  },
+  {
+    name: 'precheck_serving',
+    title: 'Pre-check a serving launch',
+    description: 'Before a vLLM, SGLang or llama.cpp launch: will it start, how many full-length sequences fit, does it serve the model as published, and has the model moved upstream.',
+    arguments: [
+      { name: 'command', description: 'The launch line, e.g. "vllm serve Qwen/Qwen3-8B -tp 4 --max-model-len 32768".', required: true },
+      { name: 'gpu', description: 'The card, e.g. "h100", "l4", "a100-80g".' },
+    ],
+    render: ({ command, gpu }) => `Pre-check this serving launch: ${command}${gpu ? ` on ${gpu}` : ''}.
+
+${GROUND_RULES}
+
+Procedure:
+1. check_serving_config with command set to the launch line${gpu ? ` and gpu "${gpu}"` : ' (ask for the card and GPU count if the line does not say)'}. Report block findings first, then the memory line, quoting "upper bound" where the result does.
+2. Read \`skipped\` and \`caveats\` out loud: a check that did not run is not a pass.
+3. model_changes on the model the command serves. If the launch has no --revision, say which recorded changes it would pick up, and which of them are breaking.
+4. End with: will it start (yes / no / not checked), will it serve what was asked (context, concurrency), and the one flag to change first.`,
+  },
+  {
+    name: 'pin_downloads',
+    title: 'Pin Hugging Face downloads',
+    description: 'Find every Hugging Face download in this repository that is not pinned to a commit, and what each model has changed upstream, so the pins can be chosen rather than guessed.',
+    arguments: [{ name: 'paths', description: 'Optional: directories or files to scan, comma separated. Default: the repository.' }],
+    render: ({ paths }) => `Find the Hugging Face downloads in ${paths ? paths : 'this repository'} that are not pinned to a commit.
+
+${GROUND_RULES}
+
+Procedure:
+1. check_pins${paths ? ` with paths ${JSON.stringify(paths.split(',').map(x => x.trim()).filter(Boolean))}` : ''}. Page through nextCursor until it is null.
+2. For each distinct model id it names, model_changes. Report how many recorded changes there are and how many are breaking, and the commit main points at now.
+3. For each finding, propose the edit the finding's fix spells for that file. Do not invent a commit sha: use one model_changes returned, or leave <sha> for the user.
+4. Say which models are not in the change record: no record is not the same as no change.`,
   },
 ];
 

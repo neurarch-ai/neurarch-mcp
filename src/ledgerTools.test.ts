@@ -303,7 +303,7 @@ describe('plan', () => {
 
   it('reports an unreachable API as one sentence, not a stack trace', async () => {
     process.env.NEURARCH_API = 'http://127.0.0.1:1';
-    await expect(call('plan', {})).rejects.toThrow(/could not be reached.*works offline/s);
+    await expect(call('plan', {})).rejects.toThrow(/could not be reached.*local tools still work offline/s);
   });
 });
 

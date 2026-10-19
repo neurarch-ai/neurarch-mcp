@@ -265,6 +265,82 @@
     },
     "additionalProperties": false
   },
+  "check_pins": {
+    "type": "object",
+    "properties": {
+      "paths": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Files or dirs. Default \".\"."
+      },
+      "source": {
+        "type": "string",
+        "description": "File text, instead of paths."
+      },
+      "filename": {
+        "type": "string",
+        "description": "For source, e.g. train.py."
+      },
+      "include_dynamic": {
+        "type": "boolean",
+        "description": "List ids held in variables."
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Page size."
+      },
+      "cursor": {
+        "type": "string",
+        "description": "Previous nextCursor."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "File, zoo:<id>, hf:<org/name>"
+      }
+    },
+    "additionalProperties": false
+  },
+  "model_changes": {
+    "type": "object",
+    "properties": {
+      "hf_id": {
+        "type": "string",
+        "description": "e.g. \"Qwen/Qwen3-8B\"."
+      },
+      "since_revision": {
+        "type": "string",
+        "description": "Your pinned commit."
+      },
+      "breaking_only": {
+        "type": "boolean"
+      },
+      "detail": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "full"
+        ]
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Page size."
+      },
+      "cursor": {
+        "type": "string",
+        "description": "Previous nextCursor."
+      },
+      "model_path": {
+        "type": "string",
+        "description": "File, zoo:<id>, hf:<org/name>"
+      }
+    },
+    "required": [
+      "hf_id"
+    ],
+    "additionalProperties": false
+  },
   "get_model_summary": {
     "type": "object",
     "properties": {
@@ -326,8 +402,12 @@
         "description": "Largest first."
       },
       "limit": {
-        "type": "number",
-        "description": "Default 100."
+        "type": "integer",
+        "description": "Page size."
+      },
+      "cursor": {
+        "type": "string",
+        "description": "Previous nextCursor."
       },
       "model_path": {
         "type": "string",
@@ -571,8 +651,12 @@
         "description": "Target layer."
       },
       "limit": {
-        "type": "number",
-        "description": "Default 200."
+        "type": "integer",
+        "description": "Page size."
+      },
+      "cursor": {
+        "type": "string",
+        "description": "Previous nextCursor."
       },
       "model_path": {
         "type": "string",
@@ -683,6 +767,21 @@
       "attention": {
         "type": "string",
         "description": "e.g. \"groupedQueryAttention\"."
+      },
+      "detail": {
+        "type": "string",
+        "enum": [
+          "concise",
+          "full"
+        ]
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Page size."
+      },
+      "cursor": {
+        "type": "string",
+        "description": "Previous nextCursor."
       },
       "model_path": {
         "type": "string",

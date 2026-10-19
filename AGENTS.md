@@ -11,8 +11,8 @@ Two shipped artifacts from one repo:
 - **`neurarch-mcp`** (npm, Node 20+): an MCP server that turns a PyTorch model
   into a structured graph and answers questions about it with computation
   instead of inference, first of all what a training job on it needs. Every
-  tool but `plan` and `history` runs locally, needs no key and no account, and
-  opens no socket.
+  tool but `plan`, `history` and `model_changes` runs locally, needs no key and
+  no account, and opens no socket.
 - **`neurarch-trace`** (PyPI, torch >= 2.0): runs one forward pass and writes
   the graph with real per-layer shapes.
 
@@ -154,6 +154,8 @@ reserve is not counted).
 | I edited the config or the architecture: is the edit silently wrong, and what did it do to memory? | `check_edit` |
 | Is this TP / PP / DP split legal, and which stage is the straggler? | `check_parallel_layout` |
 | Will this vLLM / SGLang / llama.cpp launch start and serve the model as published? | `check_serving_config` |
+| Which Hugging Face downloads are not pinned to a commit? | `check_pins` |
+| What changed upstream in this model since my pin, and is it breaking? | `model_changes` |
 | What is this model? | `describe_architecture`, `get_model_summary`, `mermaid_diagram` |
 | Where is the budget? | `param_count_by_block`, `flops_by_block`, `list_blocks`, `get_block` |
 | Will it run? | `validate_model`, `lint_model`, `check_design` |
@@ -167,10 +169,12 @@ reserve is not counted).
 | Get code out | `export_pytorch` |
 | Find something to start from | `list_architectures`, `load_architecture`, `load_hf_model`, `find_models` |
 
-`plan` and `history` are the only two that open a socket, and they are the only
-two that can answer a question the model in front of you structurally cannot:
-what happened the last time this exact structure trained in this organisation.
-That is not in the weights and not in the repository.
+`plan`, `history` and `model_changes` are the only three that open a socket.
+The first two are the only tools that can answer a question the model in front
+of you structurally cannot: what happened the last time this exact structure
+trained in this organisation. That is not in the weights and not in the
+repository. `model_changes` reads the public change record for a Hugging Face
+model; it says what a revision does mechanically, not that anything broke.
 
 ## When you are asked "is this design worth training"
 

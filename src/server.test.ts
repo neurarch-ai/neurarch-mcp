@@ -70,7 +70,7 @@ describe('ListTools', () => {
     }
   });
 
-  it('marks every read tool closed-world except the two that read the ledger', async () => {
+  it('marks every read tool closed-world except the three that call neurarch.com', async () => {
     // check_design was the exception until the verifier was vendored: it POSTed
     // the graph to an endpoint, so its answer tracked a service rather than the
     // file, and it was annotated openWorld/non-idempotent to say so. It is a
@@ -81,7 +81,10 @@ describe('ListTools', () => {
     // such: their answers live on the other side of an API key, and a client
     // that believes they are local is a client that will not warn anybody the
     // graph is about to leave the machine.
-    const openWorld = new Set(['plan', 'history']);
+    //
+    // model_changes (0.20) is the third: two GETs of public files, no key and
+    // nothing about the user's code, but a socket all the same.
+    const openWorld = new Set(['plan', 'history', 'model_changes']);
     const client = await connect();
     const { tools } = await client.listTools();
     for (const t of tools) {

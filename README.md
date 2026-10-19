@@ -47,7 +47,7 @@ Call `size_training_job` before a job launches and the agent learns, for the mod
 
 The memory number is a calibrated estimate of the training peak under AdamW with bf16 autocast, not a measurement: 1.2 x 16 bytes per parameter, plus, per sample in bf16, 0.88 x every layer output, 3.64 x stored attention scores (eager attention only; SDPA and flash keep none), 1.34 x each layer's weight-matrix intermediates, 5.2 x recurrent gate states and 2.02 x the largest single tensor. Fitted on 178 measured runs across 41 architectures, out-of-memory runs included. Held out one architecture at a time, the median error is 7% above 1 GB and it flagged 113 of the 131 times a run did not fit a 16, 24, 40 or 80 GB card, where `accelerate estimate-memory` flagged at most 8. On 25 runs measured after the fit, at the edge of a 24 GB card, the median miss is 14%, so read it as a fit check before a precise number. Every run is public: [neurarch.com/memory-calibration](https://www.neurarch.com/memory-calibration.html).
 
-Get the graph by tracing the model for real shapes, or point the server at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but two runs on your machine, offline, with no API key and no account. The two that do not, `plan` and `history`, read what a frontier model structurally cannot know: what happened the last time this exact structure trained here. That is not in the weights and not in the repository. They are the only tools in this package that open a socket.
+Get the graph by tracing the model for real shapes, or point the server at a saved graph, a PyTorch `.py`, or a Hugging Face repo. Every tool but three runs on your machine, offline, with no API key and no account. Two of the three, `plan` and `history`, read what a frontier model structurally cannot know: what happened the last time this exact structure trained here. That is not in the weights and not in the repository. The third, `model_changes`, reads the public record of what changed in a Hugging Face model between revisions. They are the only tools in this package that open a socket.
 
 ## Install
 
@@ -156,6 +156,19 @@ check_serving_config { command: "vllm serve Qwen/Qwen3-8B -tp 4 --max-model-len 
 ```
 
 Both are the app's own checks (`npx neurarch layout`, `npx neurarch serve-check`), vendored in the plan bundle and offline; an `hf:` model needs `--hf` the first time.
+
+### Before a Hugging Face download moves under you
+
+`check_pins` finds downloads that load whatever `main` points at on the day the job runs (`from_pretrained`, `load_dataset`, `hf_hub_download`, `snapshot_download`, `pipeline`, `vllm serve`, the SGLang server, `hf download`, YAML model keys), with the fix spelled for each file. It is the scanner behind `npx neurarch pin-check`, aligned with Bandit B615, and offline. `model_changes` says what a tracked model changed between revisions (config, tokenizer, chat template, generation defaults, weights), whether each change is breaking under the published rule, and with `since_revision` only what landed after your pin. It reads two public files from [the change record](https://www.neurarch.com/changes-feeds/); a change record says what a revision does mechanically, not that anything broke, and an untracked model has no record rather than no changes.
+
+```text
+check_pins { paths: ["."] }
+-> 4 downloads not pinned to a commit in 3 files
+   train.py:2  AutoModel.from_pretrained("Qwen/Qwen3-8B") has no revision: it loads whatever main is when the job runs
+   fix: Pin a full 40-character commit: revision="<sha>", from https://huggingface.co/Qwen/Qwen3-8B/commits/main (`neurarch pin-check --resolve` looks it up).
+model_changes { hf_id: "Qwen/Qwen3-8B" }
+-> 1 recorded change, 0 breaking; main is b968826d9c46 (2025-07-26)
+```
 
 ### The plan card, and the memory behind it
 
@@ -388,20 +401,21 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
 - `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
-- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 4.7k tokens per turn, the full one 6.6k.
+- `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.3k tokens per turn, the full one 7.6k, output schemas included.
 - `--http[=PORT]`, `--host=ADDR`: serve over Streamable HTTP. See [Remote access](#remote-access).
 - `--version`, `--help`.
 
-## Network: two tools, two switches, and nothing else
+## Network: three tools, two switches, and nothing else
 
 | What | What it sends | When |
 |---|---|---|
 | `plan` | Your graph (and the base graph, and the policy lines) to `POST /api/v1/plan`. `share` is pinned to false. | Only when the agent calls `plan`. |
 | `history` | An 8-character structural fingerprint and your `NEURARCH_API_KEY`, to `GET /api/v1/history`. **Never the graph.** | Only when the agent calls `history` **and** a key is set. With no key it makes no request. |
+| `model_changes` | Two GETs of public static files on www.neurarch.com: the advisory index and the one model's revision list (its path is the model id). No key, no graph, nothing from your repository. | Only when the agent calls `model_changes`; the index is cached for an hour. |
 | `--hf` | A request to huggingface.co for a repo's `config.json`, plus `tokenizer_config.json`, `chat_template.jinja` and `generation_config.json` for `check_serving_config` (and `HF_TOKEN`, if set). Never your model. | Only on `load_hf_model` or an `hf:` ref, each file cached for a day. |
 | `NEURARCH_REPORT=1` | One anonymous structure+verdict row: structural fingerprint, layer-type histogram, edge count, (rule id, severity) pairs. **Structurally incapable of carrying the graph.** | After each `validate_model`, `lint_model`, `check_design` or `plan` call, fire and forget, 5s cap. |
 
-Both switches are off by default and `NEURARCH_REPORT` has not changed: `plan` joins the three tools that already send a row so that opting in means one thing across every tool that grades, and `history` grades nothing and sends none. Nothing here is new default-on behaviour; the two tools reach out when they are called, which their descriptions and their `openWorldHint` annotation say out loud.
+Both switches are off by default and `NEURARCH_REPORT` has not changed: `plan` joins the three tools that already send a row so that opting in means one thing across every tool that grades, and `history` grades nothing and sends none. Nothing here is new default-on behaviour; the three tools reach out when they are called, which their descriptions and their `openWorldHint` annotation say out loud. Under `--hf` every read tool is annotated open-world too, because any of them can be handed an `hf:` model.
 
 With `--hf` off, `NEURARCH_REPORT` unset and neither `plan` nor `history` called, this server makes **no network calls at all**, and no other tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package, so your model never leaves the machine. `NEURARCH_API` (the same variable `neurarch-trace` uses) points the two ledger tools somewhere else. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 

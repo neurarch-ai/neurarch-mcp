@@ -12,7 +12,7 @@ describe('tool descriptions', () => {
       expect(SHORT[t.name].length, `${t.name} short description too long`).toBeLessThanOrEqual(220);
     }
   });
-  it('the core listing stays under 4.8k tokens and the full one under 6.7k (0.13 was 6.9k for the full set)', () => {
+  it('the core listing stays under 5.4k tokens and the full one under 7.7k (0.13 was 6.9k for the full set)', () => {
     // The budget moved once, in 0.16, when `plan` and `history` joined the core
     // set: two tools an agent should reach for first are worth ~0.7k a turn,
     // and the cap is raised deliberately rather than quietly. It is still a
@@ -21,13 +21,28 @@ describe('tool descriptions', () => {
     // the plan, trace, rank and find_layers schemas were trimmed to fit.
     // check_edit (~0.25k) did too: the model_path description injected on
     // every read tool was cut to a third of its length.
+    //
+    // 0.20 raised it again, deliberately, by ~0.6k: output schemas on the
+    // tools whose shape is stable (the contract a client validates against,
+    // trimmed to the keys every code path returns) and check_pins plus
+    // model_changes in the core set, which mermaid_diagram and export_pytorch
+    // left for it (both are also resources).
     const core = JSON.stringify(listedTools(true, 'core')).length / 4;
     const full = JSON.stringify(listedTools(true, 'full')).length / 4;
-    expect(core).toBeLessThan(4800);
-    expect(full).toBeLessThan(6700);
+    expect(core).toBeLessThan(5400);
+    expect(full).toBeLessThan(7700);
   });
   it('core tools all exist', () => {
     const names = new Set(TOOLS.map(t => t.name));
     for (const c of CORE_TOOLS) expect(names.has(c), c).toBe(true);
+  });
+  it('listed descriptions make no quality or accuracy claim and no superlative', () => {
+    // A tool description is also an attack surface and a selection signal:
+    // boastful wording is what poisoned descriptions use to win selection
+    // (arXiv 2509.24272), and this server's numbers are estimates and
+    // predictions, never a statement about how well a model will train.
+    for (const [name, text] of Object.entries(SHORT)) {
+      expect(text, name).not.toMatch(/\b(best|better|optimal|guarantee[sd]?|accurate|accuracy|always works)\b/i);
+    }
   });
 });
