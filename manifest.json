@@ -46,6 +46,7 @@
       "required": true
     }
   },
+  "tools_generated": true,
   "tools": [
     {
       "name": "size_training_job",

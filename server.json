@@ -1,7 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.neurarch-ai/neurarch-mcp",
+  "title": "Neurarch",
   "description": "Pre-checks a model change before GPU time or traffic: memory, layout, serving config, pins.",
+  "websiteUrl": "https://www.neurarch.com/mcp",
   "repository": {
     "url": "https://github.com/neurarch-ai/neurarch-mcp",
     "source": "github"
