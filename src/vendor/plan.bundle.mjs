@@ -5422,6 +5422,417 @@ function findMissingParams(components) {
   return out;
 }
 
+// src/utils/trainingMemory.ts
+var DEFAULT_PRECISION = "bf16-mixed";
+var DEFAULT_OPTIMIZER = "adamw";
+var CUDA_CONTEXT_GB = 1;
+var CUDA_CONTEXT_SOURCE = "CUDA context, not counted by any allocator: about 0.3 to 0.5 GB with lazy loading, up to about 1.1 GB on some PyTorch builds; 1 GB assumed";
+var BYTES = { f32: 4, half: 2, i64: 8, bool: 1 };
+function stateBytes(precision, optimizer) {
+  const w = precision === "bf16" ? 2 : 4;
+  const g = w;
+  const moments = optimizer === "adam" || optimizer === "adamw" ? 2 : optimizer === "sgd-momentum" ? 1 : 0;
+  const stepTemp = optimizer === "adam" || optimizer === "adamw" ? w : 0;
+  return { weight: w, grad: g, optim: moments * w, stepTemp };
+}
+function zeroModelStatesGb(params, largestLayerParams, gpus) {
+  const n2 = Math.max(1, Math.floor(gpus));
+  return {
+    zero2Gb: (2 * params + 18 * params / n2) / 1e9,
+    zero3Gb: (4 * largestLayerParams + 18 * params / n2) / 1e9
+  };
+}
+var SHARDING_SOURCE = "DeepSpeed estimator formulas (estimate_zero2/3_model_states_mem_needs), Adam under mixed precision, no offload";
+function shardedEstimates(mem, gpuCounts = [2, 4, 8]) {
+  return gpuCounts.map((n2) => ({
+    gpus: n2,
+    ...zeroModelStatesGb(mem.params, mem.largestLayerParams, n2),
+    activationsGb: mem.activationsGb
+  }));
+}
+function fewestShardedCards(mem, cardGb, headroom = 1.15, gpuCounts = [2, 4, 8, 16, 32, 64]) {
+  for (const n2 of gpuCounts) {
+    const z = zeroModelStatesGb(mem.params, mem.largestLayerParams, n2);
+    const per = z.zero3Gb + mem.activationsGb + mem.overheadGb;
+    if (per * headroom <= cardGb) return { gpus: n2, perCardGb: per };
+  }
+  return null;
+}
+var ATTENTION_MHA = /^(multiHeadAttention|selfAttention|attention|causalAttention|crossAttention|crossModalAttention|targetAttention|windowAttention|localAttention|linearAttention)$/;
+var GQA_LIKE = /^(groupedQueryAttention|mla)$/;
+var MATMUL_LIKE = /^(linear|lmHead|projection|contrastiveHead|matryoshkaHead|dense|fc)$/;
+var CONV_LIKE = /conv|patchEmbed|tubeletEmbed|patchMerger/i;
+var NORM_FP32 = /^(layerNorm|rmsNorm|groupNorm|instanceNorm|qkNorm)$/;
+var SAVES_OUTPUT = /^(relu|sigmoid|tanh|hardtanh|relu6)$/;
+var SAVES_INPUT = /^(gelu|silu|swish|mish|elu|leakyRelu|prelu|selu|softplus|hardswish|batchNorm)$/;
+var NO_SAVE = /^(add|residual|skipConnection|concatenate|concat|reshape|flatten|permute|transpose|view|squeeze|unsqueeze|identity|output|positionalEncoding|rope|alibi|avgpool2d|avgpool1d|adaptiveAvgPool2d|globalAvgPool2d|globalAvgPool1d|mean|upsample|split|slice)$/;
+var VIEW_LIKE = /^(reshape|flatten|permute|transpose|view|squeeze|unsqueeze|identity|output)$/;
+var EMBED_LIKE = /^(embedding|embeddingBag|timeEmbedding|positionEmbedding)$/;
+var RECURRENT = { lstm: 4, gru: 3, rnn: 1, bidirectionalLSTM: 4 };
+var prod = (s) => s && s.length ? s.reduce((a, b) => a * b, 1) : 0;
+var finiteShape = (s) => !!s && s.length > 0 && s.every((d) => Number.isFinite(d) && d > 0);
+var num2 = (v, d) => {
+  const x = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(x) && x > 0 ? x : d;
+};
+function castIn(x, ctx, nodeId) {
+  if (!ctx.mixed || x.dtype !== "f32") return x;
+  return { id: `cast:${x.id}:${nodeId}`, bytes: x.bytes / 4 * 2, dtype: "half" };
+}
+function make(id, elems, dtype) {
+  return { id, bytes: elems * BYTES[dtype], dtype };
+}
+function nodeSave(c, ins, shapes, params, ctx) {
+  const sh = shapes.get(c.id);
+  const outShape = sh?.out ?? null;
+  const inShape = sh?.in ?? null;
+  const p = c.params ?? {};
+  const O = finiteShape(outShape) ? prod(outShape) : 0;
+  const x = ins[0] ?? make(`none:${c.id}`, 0, ctx.low);
+  const lowB = BYTES[ctx.low];
+  const promote = (ts) => ts.some((t2) => t2.dtype === "f32") ? "f32" : ts[0]?.dtype === "i64" ? "f32" : ctx.low;
+  const weightCopy = ctx.mixed ? params * 2 : 0;
+  const t = c.type;
+  const id = (k) => `${k}:${c.id}`;
+  const D = outShape && outShape.length ? outShape[outShape.length - 1] : 0;
+  const tokens = D > 0 ? O / D : 0;
+  if (VIEW_LIKE.test(t)) return { saved: [], out: { ...x, id: x.id }, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  if (t === "input") return { saved: [], out: x, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  if (EMBED_LIKE.test(t)) {
+    return { saved: [], out: make(id("out"), O, ctx.mixed ? "f32" : ctx.low), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (NO_SAVE.test(t)) {
+    const dtype = promote(ins.length ? ins : [x]);
+    return { saved: [], out: make(id("out"), O, dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "multiply" || t === "matmul") {
+    return { saved: ins.map((i) => castIn(i, ctx, c.id)), out: make(id("out"), O, ctx.mixed ? ctx.low : promote(ins)), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "dropout" || t === "dropPath") {
+    return { saved: [make(id("mask"), O, "bool")], out: make(id("out"), O, x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (t === "softmax" || t === "logSoftmax") {
+    const out2 = make(id("out"), O, ctx.mixed ? "f32" : x.dtype);
+    return { saved: [out2], out: out2, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (SAVES_OUTPUT.test(t)) {
+    const out2 = make(id("out"), O, x.dtype === "i64" ? "f32" : x.dtype);
+    return { saved: [out2], out: out2, backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (SAVES_INPUT.test(t)) {
+    return { saved: [x], out: make(id("out"), O, x.dtype === "i64" ? "f32" : x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (NORM_FP32.test(t)) {
+    const saved2 = ctx.mixed && x.dtype !== "f32" ? make(`up:${x.id}:${c.id}`, x.bytes / BYTES[x.dtype], "f32") : x;
+    return { saved: [saved2], out: make(id("out"), O, ctx.mixed ? "f32" : x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (/^(maxpool1d|maxpool2d|maxpool3d)$/.test(t)) {
+    return { saved: [x, make(id("idx"), O, "i64")], out: make(id("out"), O, x.dtype), backwardScratch: 0, weightCopyBytes: 0, fallback: false };
+  }
+  if (MATMUL_LIKE.test(t) || CONV_LIKE.test(t)) {
+    return { saved: [castIn(x, ctx, c.id)], out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (ATTENTION_MHA.test(t) && finiteShape(inShape) && inShape.length >= 2) {
+    const T = inShape[inShape.length - 2];
+    const d = inShape[inShape.length - 1];
+    const heads = num2(p.numHeads ?? p.num_heads ?? p.nhead, 8);
+    const Tk = ins[1] && ins[1].bytes > 0 ? Math.round(ins[1].bytes / BYTES[ins[1].dtype] / d) || T : T;
+    const xin = castIn(x, ctx, c.id);
+    const kvIn = ins[1] ? castIn(ins[1], ctx, `${c.id}:kv`) : null;
+    const q = make(id("q"), T * d, ctx.low);
+    const kv = make(id("kv"), 2 * Tk * d, ctx.low);
+    const context = make(id("ctx"), T * d, ctx.low);
+    const saved2 = [xin, q, kv, context];
+    if (kvIn && kvIn.id !== xin.id) saved2.push(kvIn);
+    let scratch = 0;
+    let fscratch = 0;
+    if (ctx.storesScores(c)) {
+      const window = t === "windowAttention" ? Math.min(Tk, num2(p.windowSize, 7) ** 2) : Tk;
+      const scores = heads * T * window;
+      saved2.push(make(id("probs32"), scores, ctx.mixed ? "f32" : ctx.low));
+      if (ctx.mixed) saved2.push(make(id("probs16"), scores, ctx.low));
+      if (Number(p.dropout ?? p.attnDropout ?? 0) > 0) saved2.push(make(id("pmask"), scores, "bool"), make(id("pdrop"), scores, ctx.low));
+      fscratch = scores * (ctx.mixed ? 2 + 4 : lowB);
+      scratch = scores * (ctx.mixed ? 2 + 4 + 4 : 2 * lowB);
+    } else {
+      saved2.push(make(id("lse"), heads * T, "f32"));
+    }
+    return { saved: saved2, out: make(id("out"), O || T * d, ctx.low), backwardScratch: scratch, forwardScratch: fscratch, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (GQA_LIKE.test(t) && finiteShape(inShape) && inShape.length >= 2 && t === "groupedQueryAttention") {
+    const T = inShape[inShape.length - 2];
+    const d = inShape[inShape.length - 1];
+    const heads = num2(p.numHeads, 32);
+    const kvHeads = num2(p.numKVHeads, 8);
+    const hd = d / heads;
+    const xin = castIn(x, ctx, c.id);
+    const saved2 = [
+      xin,
+      make(id("q"), T * d, ctx.low),
+      make(id("kv"), 2 * T * kvHeads * hd, ctx.low),
+      make(id("ctx"), T * d, ctx.low),
+      make(id("lse"), heads * T, "f32")
+    ];
+    return { saved: saved2, out: make(id("out"), O || T * d, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (t === "feedForward" && finiteShape(inShape)) {
+    const d = inShape[inShape.length - 1];
+    const T = prod(inShape) / d;
+    const ff = num2(p.ffDim ?? p.dFf ?? p.hiddenFeatures, 4 * d);
+    const saved2 = [castIn(x, ctx, c.id), make(id("h"), T * ff, ctx.low)];
+    return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if ((t === "swiglu" || t === "geglu") && finiteShape(inShape)) {
+    const d = inShape[inShape.length - 1];
+    const T = prod(inShape) / d;
+    const I = num2(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(d * 8 / 3));
+    const saved2 = [castIn(x, ctx, c.id), make(id("gate"), T * I, ctx.low), make(id("up"), T * I, ctx.low), make(id("act"), T * I, ctx.low), make(id("prod"), T * I, ctx.low)];
+    return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  if (t === "transformerBlock" && finiteShape(inShape) && inShape.length >= 2) {
+    const T = inShape[inShape.length - 2];
+    const d = num2(p.embedDim ?? p.hiddenDim ?? p.dModel, inShape[inShape.length - 1]);
+    const heads = num2(p.numHeads, 8);
+    const ff = num2(p.ffDim ?? p.dFf, 4 * d);
+    const decoder = ins.length >= 2;
+    const f32 = ctx.mixed ? "f32" : ctx.low;
+    const saved2 = [
+      castIn(x, ctx, c.id),
+      // in-projection input
+      make(id("qkv"), 3 * T * d, ctx.low),
+      // q, k, v
+      make(id("ctx"), T * d, ctx.low),
+      // attention output, out-projection input
+      make(id("lse"), heads * T, "f32"),
+      make(id("m1"), T * d, "bool"),
+      // dropout after attention
+      make(id("n1"), T * d, f32),
+      // norm1 input (fp32 under autocast)
+      make(id("l1"), T * d, ctx.low),
+      // linear1 input
+      make(id("h"), T * ff, ctx.low),
+      // ReLU output
+      make(id("m2"), T * ff, "bool"),
+      // dropout mask in the feed-forward
+      make(id("h2"), T * ff, ctx.low),
+      // linear2 input
+      make(id("m3"), T * d, "bool"),
+      make(id("n2"), T * d, f32)
+    ];
+    if (decoder) {
+      saved2.push(make(id("xq"), T * d, ctx.low), make(id("xctx"), T * d, ctx.low), make(id("xkv"), 2 * T * d, ctx.low), make(id("m4"), T * d, "bool"), make(id("n3"), T * d, f32));
+    }
+    return { saved: saved2, out: make(id("out"), O || T * d, f32), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  const gates = RECURRENT[t];
+  if (gates && finiteShape(inShape)) {
+    const steps = inShape.length >= 2 ? inShape[inShape.length - 2] : 1;
+    const hidden = num2(p.hiddenSize ?? p.hidden_size, 128);
+    const layers = num2(p.numLayers ?? p.num_layers, 1);
+    const dirs = p.bidirectional || t === "bidirectionalLSTM" ? 2 : 1;
+    const elems = steps * hidden * (gates + 2) * layers * dirs;
+    return { saved: [castIn(x, ctx, c.id), make(id("rnn"), elems, ctx.low)], out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
+  }
+  const din = finiteShape(inShape) ? inShape[inShape.length - 1] : 0;
+  let internal = 0;
+  if (din >= 2 && tokens > 0 && !/embed|positional|^ema/i.test(t)) {
+    let pp = params;
+    if (/moe/i.test(t)) {
+      const e = num2(p.numExperts, 8), k = num2(p.topK, 2), s = Number(p.numSharedExperts ?? 0);
+      pp *= Math.min(1, (k + s) / (e + s));
+    }
+    internal = Math.max(0, tokens * pp / din - O);
+  }
+  const out = make(id("out"), O, ctx.low);
+  const saved = [castIn(x, ctx, c.id), out];
+  if (internal > 0) saved.push(make(id("int"), internal, ctx.low));
+  return { saved, out, backwardScratch: 0, weightCopyBytes: weightCopy, fallback: true };
+}
+function topo(model) {
+  const byId = new Map(model.components.map((c, i) => [c.id, i]));
+  const indeg = new Map(model.components.map((c) => [c.id, 0]));
+  const next = new Map(model.components.map((c) => [c.id, []]));
+  for (const e of model.connections ?? []) {
+    if (!byId.has(e.from) || !byId.has(e.to)) continue;
+    next.get(e.from).push(e.to);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
+  }
+  const ready = model.components.filter((c) => indeg.get(c.id) === 0).map((c) => c.id);
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  while (ready.length) {
+    ready.sort((a, b) => byId.get(a) - byId.get(b));
+    const cid = ready.shift();
+    if (seen.has(cid)) continue;
+    seen.add(cid);
+    out.push(model.components[byId.get(cid)]);
+    for (const n2 of next.get(cid) ?? []) {
+      const d = indeg.get(n2) - 1;
+      indeg.set(n2, d);
+      if (d === 0) ready.push(n2);
+    }
+  }
+  for (const c of model.components) if (!seen.has(c.id)) out.push(c);
+  return out;
+}
+function trainingMemoryFor(model, opts = {}, shapesIn) {
+  const batch = Math.max(1, Math.round(opts.batchSize ?? 32));
+  const precision = opts.precision ?? DEFAULT_PRECISION;
+  const optimizer = opts.optimizer ?? DEFAULT_OPTIMIZER;
+  const mixed = precision === "bf16-mixed" || precision === "fp16-mixed";
+  const ctx = { low: precision === "fp32" ? "f32" : "half", mixed, storesScores: opts.storesScores ?? (() => false) };
+  const shapes = shapesIn ?? propagateShapes(model).shapes;
+  const order = topo(model).filter((c) => c.type !== "stickyNote");
+  const index = new Map(order.map((c, i) => [c.id, i]));
+  const parents = new Map(order.map((c) => [c.id, []]));
+  const children = new Map(order.map((c) => [c.id, []]));
+  for (const e of model.connections ?? []) {
+    if (!index.has(e.from) || !index.has(e.to)) continue;
+    parents.get(e.to).push(e.from);
+    children.get(e.from).push(e.to);
+  }
+  const n2 = order.length;
+  const sb = stateBytes(precision, optimizer);
+  let params = 0;
+  let largestLayerParams = 0;
+  const layerParams = [];
+  const outOf = /* @__PURE__ */ new Map();
+  const saves = [];
+  let anyShape = false;
+  let fallbackLayers = 0;
+  for (const c of order) {
+    const inShape = shapes.get(c.id)?.in ?? void 0;
+    const pc = c.type === "input" || c.type === "output" ? 0 : estimateLayerParams(c.type, c.params, inShape) ?? 0;
+    params += pc;
+    largestLayerParams = Math.max(largestLayerParams, pc);
+    layerParams.push(pc);
+    let ins = (parents.get(c.id) ?? []).map((pid) => outOf.get(pid)).filter((x) => !!x);
+    if (c.type === "input") {
+      const s2 = shapes.get(c.id)?.out ?? c.params?.shape;
+      const feedsLookup = (children.get(c.id) ?? []).some((k) => EMBED_LIKE.test(order[index.get(k)].type));
+      const elems = finiteShape(s2) ? prod(s2) : 0;
+      ins = [make(`in:${c.id}`, elems, feedsLookup ? "i64" : ctx.mixed ? "f32" : ctx.low)];
+    }
+    const castable = /embed|norm|positional|^ema/i.test(c.type) ? 0 : pc;
+    const s = nodeSave(c, ins, shapes, castable, ctx);
+    if (finiteShape(shapes.get(c.id)?.out) && c.type !== "input" && c.type !== "output") anyShape = true;
+    if (s.fallback && c.type !== "input" && c.type !== "output") fallbackLayers++;
+    saves.push(s);
+    outOf.set(c.id, s.out);
+  }
+  const fwd = (i) => i;
+  const bwd = (i) => 2 * n2 - i;
+  const STEP = 2 * n2 + 1;
+  const lives = /* @__PURE__ */ new Map();
+  const extend = (t, from, to, perSample = true) => {
+    if (!(t.bytes > 0)) return;
+    const bytes = perSample ? t.bytes * batch : t.bytes;
+    const l = lives.get(t.id);
+    if (l) {
+      l.from = Math.min(l.from, from);
+      l.to = Math.max(l.to, to);
+    } else lives.set(t.id, { bytes, from, to });
+  };
+  let savedSum = 0;
+  const seenSaved = /* @__PURE__ */ new Set();
+  order.forEach((c, i) => {
+    const s = saves[i];
+    const consumers = (children.get(c.id) ?? []).map((k) => index.get(k));
+    const lastUse = consumers.length ? Math.max(...consumers) : n2;
+    extend(s.out, fwd(i), fwd(lastUse));
+    for (const t of s.saved) {
+      extend(t, fwd(i), bwd(i));
+      if (!seenSaved.has(t.id)) {
+        seenSaved.add(t.id);
+        savedSum += t.bytes * batch;
+      }
+    }
+    if (s.weightCopyBytes > 0) extend({ id: `wcopy:${c.id}`, bytes: s.weightCopyBytes, dtype: "half" }, fwd(i), bwd(i), false);
+    const isView = s.saved.length === 0 && saves[i].out.id === (parents.get(c.id) ?? []).map((pid) => outOf.get(pid)?.id)[0];
+    if (!isView && c.type !== "input") {
+      extend({ id: `grad:${s.out.id}:${c.id}`, bytes: s.out.bytes, dtype: s.out.dtype }, consumers.length ? bwd(Math.max(...consumers)) : n2, bwd(i));
+    }
+    if (s.backwardScratch > 0) extend({ id: `scratch:${c.id}`, bytes: s.backwardScratch, dtype: "f32" }, bwd(i), bwd(i));
+    if (s.forwardScratch) extend({ id: `fscratch:${c.id}`, bytes: s.forwardScratch, dtype: "f32" }, fwd(i), fwd(i));
+    if (c.type === "input") extend(s.out, 0, STEP);
+  });
+  const lossKind = opts.loss ?? "cross-entropy";
+  const sinks = order.filter((c) => (children.get(c.id) ?? []).length === 0);
+  for (const c of sinks) {
+    const o = outOf.get(c.id);
+    if (!o || !(o.bytes > 0)) continue;
+    const elems = o.bytes / BYTES[o.dtype];
+    extend(o, n2, n2 + 1);
+    if (lossKind === "cross-entropy") {
+      extend({ id: `lossup:${c.id}`, bytes: o.dtype === "f32" ? 0 : elems * 4, dtype: "f32" }, n2, n2);
+      extend({ id: `logsm:${c.id}`, bytes: elems * 4, dtype: "f32" }, n2, n2 + 1);
+      extend({ id: `lossgrad:${c.id}`, bytes: elems * 4, dtype: "f32" }, n2 + 1, n2 + 1);
+      if (o.dtype !== "f32") extend({ id: `lossgrad16:${c.id}`, bytes: o.bytes, dtype: o.dtype }, n2 + 1, n2 + 1);
+    } else {
+      extend({ id: `loss32:${c.id}`, bytes: o.dtype === "f32" ? 0 : elems * 4, dtype: "f32" }, n2, n2);
+      if (o.dtype !== "f32") extend({ id: `lossgrad16:${c.id}`, bytes: o.bytes, dtype: o.dtype }, n2 + 1, n2 + 1);
+    }
+  }
+  const weightsB = params * sb.weight;
+  const optimB = params * sb.optim;
+  const gradFrom = new Array(2 * n2 + 3).fill(0);
+  layerParams.forEach((pc, i) => {
+    if (pc > 0) gradFrom[bwd(i)] += pc * sb.grad;
+  });
+  const statesAt = (t) => {
+    let g = 0;
+    for (let k = 0; k <= Math.min(t, STEP); k++) g += gradFrom[k] ?? 0;
+    return weightsB + optimB + (t >= n2 ? g : 0) + (t === STEP ? params * sb.stepTemp : 0);
+  };
+  const actAt = new Array(STEP + 1).fill(0);
+  for (const l of lives.values()) {
+    for (let t = Math.max(0, l.from); t <= Math.min(STEP, l.to); t++) actAt[t] += l.bytes;
+  }
+  let peak = -1, peakT = 0;
+  for (let t = 0; t <= STEP; t++) {
+    const v = statesAt(t) + actAt[t];
+    if (v > peak) {
+      peak = v;
+      peakT = t;
+    }
+  }
+  const peakAt = peakT === STEP ? "optimizer-step" : peakT < n2 ? "forward" : peakT === n2 ? "loss" : "backward";
+  const layerAt = peakT < n2 ? order[peakT] : peakT > n2 && peakT < STEP ? order[2 * n2 - peakT] : null;
+  const gb2 = (b) => b / 1e9;
+  const modelStates = {
+    weightsGb: gb2(weightsB),
+    gradsGb: gb2(params * sb.grad),
+    optimizerGb: gb2(optimB),
+    bytesPerParam: sb.weight + sb.grad + sb.optim
+  };
+  const peakGb = gb2(peak);
+  const statesAtPeakGb = gb2(statesAt(peakT));
+  return {
+    params,
+    batchSize: batch,
+    precision,
+    optimizer,
+    modelStates,
+    modelStatesGb: modelStates.weightsGb + modelStates.gradsGb + modelStates.optimizerGb,
+    activationsGb: gb2(actAt[peakT]),
+    statesAtPeakGb,
+    peakGb,
+    overheadGb: params > 0 ? CUDA_CONTEXT_GB : 0,
+    totalGb: peakGb + (params > 0 ? CUDA_CONTEXT_GB : 0),
+    peakAt,
+    peakLayer: layerAt ? layerAt.name || layerAt.type : null,
+    savedSumGb: gb2(savedSum),
+    largestLayerParams,
+    activationsKnown: anyShape,
+    fallbackLayers
+  };
+}
+var FLOP_CONVENTION = "FLOPs count a multiply-add as 2 (torch.utils.flop_counter convention); backward is 2x forward; elementwise ops and norms count 0; causal attention is counted as full, about 2x what a causal kernel does";
+function flopsBreakdown(forwardMacs) {
+  const f = Math.max(0, forwardMacs) * 2;
+  return { forwardMacs: Math.max(0, forwardMacs), forwardFlops: f, trainFlopsPerSample: 3 * f, convention: FLOP_CONVENTION };
+}
+
 // src/utils/preflightReport.ts
 function shapeFixHint(s) {
   const both = Array.isArray(s.actual) ? s.actual.join("\xD7") : s.actual;
@@ -5449,6 +5860,7 @@ function dataSpecInputShapes(d) {
   if (d?.inputShape && d.inputShape.length) return [d.inputShape];
   return [];
 }
+var PREFLIGHT_FIT_HEADROOM = 1.15;
 var PREFLIGHT_GPUS = [
   { name: "T4 (16GB)", gb: 16, hourly: 0.59, speed: 0.55, hwId: "t4" },
   { name: "L4 (24GB)", gb: 24, hourly: 0.8, speed: 0.8, hwId: "l4" },
@@ -5458,6 +5870,7 @@ var PREFLIGHT_GPUS = [
   { name: "A100 (80GB)", gb: 80, hourly: 2.5, speed: 2.4, hwId: "a100-80g" },
   { name: "H100 (80GB)", gb: 80, hourly: 3.95, speed: 4.5, hwId: "h100-sxm" }
 ];
+var ASSUMED_MFU = 0.35;
 function categoryForAdvisor(cat) {
   if (cat === "structure") return "structure";
   if (cat === "performance") return "training";
@@ -5617,28 +6030,59 @@ function buildPreflightReport(model, opts) {
   }
   const weightBytes2 = params * 4;
   const trainFootprintBytes = params * 16;
-  const footprintGb = trainFootprintBytes / 1e9;
   const gpu = PREFLIGHT_GPUS.find((g) => g.name === opts?.plan?.gpu) ?? PREFLIGHT_GPUS[2];
   const epochs = Math.max(1, opts?.plan?.epochs ?? 10);
   const batch = Math.max(1, opts?.plan?.batchSize ?? 32);
-  const footprintGbWithHeadroom = footprintGb * 1.3;
+  const planAssumed = opts?.plan?.epochs == null || opts?.plan?.batchSize == null;
+  const precision = opts?.plan?.precision ?? DEFAULT_PRECISION;
+  const optimizer = opts?.plan?.optimizer ?? DEFAULT_OPTIMIZER;
+  const tm = trainingMemoryFor(model, { batchSize: batch, precision, optimizer }, shapes);
+  const needGb = Math.max(tm.peakGb * PREFLIGHT_FIT_HEADROOM, tm.totalGb);
+  const fitsCards = params > 0 ? PREFLIGHT_GPUS.filter((g) => needGb <= g.gb).map((g) => g.name) : [];
+  const smallestFit = params > 0 ? PREFLIGHT_GPUS.find((g) => needGb <= g.gb) ?? null : null;
+  const gpuFits = params > 0 ? needGb <= gpu.gb : null;
+  const largestCard = PREFLIGHT_GPUS.reduce((a, g) => g.gb > a.gb ? g : a, PREFLIGHT_GPUS[0]);
+  const zero3 = params > 0 && !smallestFit ? fewestShardedCards(tm, largestCard.gb, PREFLIGHT_FIT_HEADROOM) : null;
+  const precisionWord = precision === "bf16-mixed" ? "bf16 mixed precision" : precision === "fp16-mixed" ? "fp16 mixed precision" : precision === "bf16" ? "pure bf16" : "fp32";
+  const optimizerWord = optimizer === "adamw" ? "AdamW" : optimizer === "adam" ? "Adam" : optimizer === "sgd-momentum" ? "SGD with momentum" : "SGD";
+  const memAssumptions = `Batch ${batch}${planAssumed ? " (assumed)" : ""}, ${precisionWord}, ${optimizerWord} (${tm.modelStates.bytesPerParam} B per parameter), fused attention, cross-entropy loss. Activations are the tensors each layer keeps for backward, replayed over the step and taken at the peak, not summed. ${CUDA_CONTEXT_SOURCE}. Arithmetic on the graph, not a measurement.`;
+  const memory = {
+    batchSize: batch,
+    precision,
+    optimizer,
+    modelStatesGb: tm.modelStatesGb,
+    activationsGb: tm.activationsGb,
+    overheadGb: tm.overheadGb,
+    peakGb: tm.peakGb,
+    needGb,
+    peakAt: tm.peakAt,
+    peakLayer: tm.peakLayer,
+    activationsKnown: tm.activationsKnown,
+    sharded: params > 0 ? shardedEstimates(tm) : [],
+    shardedFit: zero3 ? { gpus: zero3.gpus, gpu: largestCard.name, perCardGb: zero3.perCardGb } : null,
+    assumptions: memAssumptions
+  };
+  const g1 = (v) => v.toFixed(v < 1 ? 2 : 1);
+  const threeNumbers = `model states ${g1(tm.modelStatesGb)} GB, activations ${tm.activationsKnown ? `${g1(tm.activationsGb)} GB at batch ${batch}` : "unknown (no shape propagated)"}, CUDA context ${g1(tm.overheadGb)} GB`;
   if (params > 0) {
-    if (footprintGbWithHeadroom <= gpu.gb) {
+    if (gpuFits) {
       findings.push({
         id: "hw-fit",
         category: "hardware",
         severity: "pass",
         title: `Fits a ${gpu.name}`,
-        detail: `Weights + Adam state are about ${footprintGb.toFixed(footprintGb < 1 ? 2 : 1)} GB; leave headroom for activations (grows with batch size).`
+        detail: `Peak about ${g1(tm.totalGb)} GB: ${threeNumbers}.`
       });
     } else {
-      const smallest = PREFLIGHT_GPUS.find((g) => g.gb >= footprintGbWithHeadroom);
+      const statesAlone = tm.modelStatesGb * PREFLIGHT_FIT_HEADROOM > gpu.gb;
+      const lever = statesAlone ? "Model states alone exceed the card, so no batch size helps." : `Activations at batch ${batch} are what push it over; a smaller batch or activation checkpointing lowers that term.`;
+      const shard = zero3 ? ` Sharded with ZeRO-3 / FSDP it needs about ${g1(zero3.perCardGb)} GB per card on ${zero3.gpus} x ${largestCard.name} (${SHARDING_SOURCE}, plus activations and context per card).` : "";
       findings.push({
         id: "hw-no-fit",
         category: "hardware",
         severity: "warn",
         title: `Will not fit a ${gpu.name}`,
-        detail: `Optimizer state alone needs about ${footprintGb.toFixed(1)} GB. ${smallest ? `Use a ${smallest.name} instead, or` : "Plan for multi-GPU / sharding (FSDP, DeepSpeed), or"} train in lower precision / with LoRA.`
+        detail: `Peak about ${g1(tm.totalGb)} GB: ${threeNumbers}. ${lever}${smallestFit ? ` The smallest card that holds it is a ${smallestFit.name}.` : " No single offered card holds it."}${shard}`
       });
     }
   }
@@ -5650,13 +6094,16 @@ function buildPreflightReport(model, opts) {
   const hw = gpuById(gpu.hwId) ?? gpuById("a10g");
   const flopsPerStep = 2 * Math.max(flops, params) * 3 * batch;
   const roofline = rooflineTime(flopsPerStep, params * 32, hw, {
-    computeUtilization: 0.35,
+    computeUtilization: ASSUMED_MFU,
     memoryUtilization: 0.8
   });
   const perStepSec = 5e-3 + roofline.seconds;
   const steps = Math.max(1, Math.ceil(samples / batch));
   const estTrainSec = params > 0 ? 60 + epochs * steps * perStepSec : 0;
   const estCostUsd = estTrainSec / 3600 * gpu.hourly;
+  const trainFlops = flopsPerStep * steps * epochs;
+  const peakTflops = hw.bf16TFLOPS;
+  const computeSec = peakTflops > 0 ? trainFlops / (peakTflops * 1e12 * ASSUMED_MFU) : 0;
   if (params > 0) {
     const hrs = estTrainSec / 3600;
     const timeStr = hrs >= 1 ? `${hrs.toFixed(1)}h` : `${Math.ceil(estTrainSec / 60)}m`;
@@ -5693,12 +6140,22 @@ function buildPreflightReport(model, opts) {
       layers: realLayers.length,
       params,
       flops,
+      flopsDetail: flopsBreakdown(flops),
+      memory,
+      fitsCards,
+      compute: params > 0 ? { trainFlops, peakTflops, assumedMfu: ASSUMED_MFU, computeSec } : void 0,
       weightBytes: weightBytes2,
       trainFootprintBytes,
       fitsGpu: gpu.name,
+      gpuFits,
+      smallestFitGpu: smallestFit?.name ?? null,
       estTrainSec,
       estCostUsd,
-      samplesAssumed
+      samplesAssumed,
+      samples,
+      epochs,
+      batchSize: batch,
+      planAssumed
     },
     counts
   };
@@ -6213,7 +6670,7 @@ var EDIT_RULE_SEEN_IN = {
   "lora-target-partial": ["https://github.com/huggingface/peft/issues/3533"],
   "lora-target-wrapper": ["https://github.com/huggingface/peft/issues/3129"]
 };
-var num2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var num3 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
 var plural = (n2, w) => `${n2} ${w}${n2 === 1 ? "" : "s"}`;
 var list = (xs, max = 6) => xs.slice(0, max).join(", ") + (xs.length > max ? `, and ${xs.length - max} more` : "");
 var VOCAB_ROW_TYPES = /* @__PURE__ */ new Set(["embedding", "embeddingBag", "lmHead"]);
@@ -6221,13 +6678,13 @@ function vocabField(c) {
   const p = c.params ?? {};
   if (!VOCAB_ROW_TYPES.has(c.type)) return null;
   for (const k of ["vocabSize", "numEmbeddings"]) {
-    const v = num2(p[k]);
+    const v = num3(p[k]);
     if (v != null) return [k, v];
   }
   return null;
 }
 function linearOut(c) {
-  return c.type === "linear" ? num2((c.params ?? {}).outFeatures) : null;
+  return c.type === "linear" ? num3((c.params ?? {}).outFeatures) : null;
 }
 function byName(m) {
   const out = /* @__PURE__ */ new Map();
@@ -6245,7 +6702,7 @@ function inputEmbedding(m) {
 }
 function embedDimOf(c) {
   const p = c.params ?? {};
-  return num2(p.embeddingDim) ?? num2(p.embedDim);
+  return num3(p.embeddingDim) ?? num3(p.embedDim);
 }
 function checkGraphEdit(base, head) {
   const out = [];
@@ -6313,8 +6770,8 @@ function checkGraphEdit(base, head) {
     for (const c of m.components ?? []) {
       if ((c.params ?? {}).tied !== true || c === emb) continue;
       const p = c.params ?? {};
-      const out2 = num2(p.outFeatures) ?? num2(p.vocabSize);
-      const inn = num2(p.inFeatures) ?? num2(p.hiddenSize) ?? num2(p.embedDim);
+      const out2 = num3(p.outFeatures) ?? num3(p.vocabSize);
+      const inn = num3(p.inFeatures) ?? num3(p.hiddenSize) ?? num3(p.embedDim);
       if (out2 != null && V != null && out2 !== V || inn != null && D != null && inn !== D) bad.push(c.name);
     }
     return bad;
@@ -6334,7 +6791,7 @@ function checkGraphEdit(base, head) {
   const baseTied = (base.components ?? []).filter((c) => (c.params ?? {}).tied === true && !h.has(c.name));
   if (baseTied.length && !untied.length) {
     const V = inputEmbedding(head) ? vocabField(inputEmbedding(head))?.[1] : null;
-    const added = (head.components ?? []).filter((c) => !b.has(c.name) && (c.params ?? {}).tied !== true && (c.type === "linear" && num2((c.params ?? {}).outFeatures) === V || c.type === "lmHead"));
+    const added = (head.components ?? []).filter((c) => !b.has(c.name) && (c.params ?? {}).tied !== true && (c.type === "linear" && num3((c.params ?? {}).outFeatures) === V || c.type === "lmHead"));
     if (V != null && added.length) {
       out.push({
         rule: "weight-tying-lost",
@@ -6361,14 +6818,14 @@ var VOCAB_TENSOR = {
 function vocabPaths(c) {
   const out = /* @__PURE__ */ new Map();
   for (const k of VOCAB_KEYS) {
-    const v = num2(c[k]);
+    const v = num3(c[k]);
     if (v != null) out.set(k, v);
   }
   for (const s of NESTED) {
     const sub = c[s];
     if (!isObj(sub)) continue;
     for (const k of VOCAB_KEYS) {
-      const v = num2(sub[k]);
+      const v = num3(sub[k]);
       if (v != null) out.set(`${s}.${k}`, v);
     }
   }
@@ -6385,7 +6842,7 @@ function ropeFactor(c) {
   const found = [];
   const scan = (v, depth) => {
     if (!isObj(v) || depth > 2) return;
-    const f = num2(v.factor);
+    const f = num3(v.factor);
     if (f != null) found.push(f);
     for (const x of Object.values(v)) scan(x, depth + 1);
   };
@@ -6443,7 +6900,7 @@ function checkConfigEdit(baseIn, headIn) {
       });
     }
   }
-  const g = (c, k) => num2(textKey(c, k));
+  const g = (c, k) => num3(textKey(c, k));
   const H0 = g(base, "num_attention_heads");
   const H1 = g(head, "num_attention_heads");
   const K0 = g(base, "num_key_value_heads");
@@ -7030,8 +7487,8 @@ function latentSource(nodes, start) {
       cur = [...n2.links.values()][0];
       continue;
     }
-    const prod = LATENT_PRODUCERS[n2.classType];
-    if (prod && (prod.slot == null || prod.slot === cur[1])) return { node: n2, channels: prod.channels, why: `${n2.classType} makes ${prod.channels}-channel latents` };
+    const prod2 = LATENT_PRODUCERS[n2.classType];
+    if (prod2 && (prod2.slot == null || prod2.slot === cur[1])) return { node: n2, channels: prod2.channels, why: `${n2.classType} makes ${prod2.channels}-channel latents` };
     const named = CLASS_CHANNELS.exec(n2.classType);
     if (named) return { node: n2, channels: Number(named[1]), why: `${n2.classType} names ${named[1]} channels` };
     const through = LATENT_PASSTHROUGH[n2.classType];
@@ -7145,7 +7602,7 @@ function readPolicy(input) {
   const raw = input;
   const policy = {};
   const problems = [];
-  const num5 = (k) => {
+  const num6 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     const n2 = typeof v === "string" ? Number(v) : v;
@@ -7173,11 +7630,11 @@ function readPolicy(input) {
     if (typeof raw.must_fit !== "string") problems.push("must_fit: expected a GPU name like A100-40GB");
     else policy.must_fit = raw.must_fit;
   }
-  const mm = num5("max_memory_gb");
+  const mm = num6("max_memory_gb");
   if (mm != null) policy.max_memory_gb = mm;
-  const ml = num5("max_layers");
+  const ml = num6("max_layers");
   if (ml != null) policy.max_layers = ml;
-  const mc = num5("max_cost_usd");
+  const mc = num6("max_cost_usd");
   if (mc != null) policy.max_cost_usd = mc;
   const ft = list2("forbid_types");
   if (ft) policy.forbid_types = ft;
@@ -8288,12 +8745,12 @@ function renderPlanMarkdown(plan) {
 
 // src/utils/oomDiagnosis.ts
 var UNIT = { b: 1e-9, kib: 1024 / 1e9, kb: 1e-6, mib: 1024 ** 2 / 1e9, mb: 1e-3, gib: 1024 ** 3 / 1e9, gb: 1, tib: 1024 ** 4 / 1e9 };
-var num3 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
+var num4 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
 var SIZE = String.raw`([\d.,]+)\s*(B|KiB|KB|MiB|MB|GiB|GB|TiB)`;
 function grab(text, re) {
   const m = re.exec(text);
   if (!m) return null;
-  const v = num3(m[1], m[2]);
+  const v = num4(m[1], m[2]);
   return Number.isFinite(v) ? v : null;
 }
 function parseOomMessage(text) {
@@ -8306,7 +8763,7 @@ function parseOomMessage(text) {
     const reservedUnallocatedGb = grab(t, new RegExp(String.raw`${SIZE} is reserved by PyTorch but unallocated`, "i"));
     let other = 0;
     for (const m of t.matchAll(new RegExp(String.raw`Process \d+ has ${SIZE} memory in use`, "gi"))) {
-      const v = num3(m[1], m[2]);
+      const v = num4(m[1], m[2]);
       if (Number.isFinite(v)) other += v;
     }
     const processInUseGb = grab(t, new RegExp(String.raw`this process has ${SIZE} memory in use`, "i"));
@@ -8881,7 +9338,7 @@ function nonGemmOf(c, out, stack, qkNorm) {
   const width = out[out.length - 1] || 1;
   const tokens = elems / width;
   const p = c.params ?? {};
-  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
   const op = (r, n2) => ({ bytes: r.bytes * n2, kernels: r.kernels });
   switch (c.type) {
     case "rmsNorm":
@@ -8891,33 +9348,33 @@ function nonGemmOf(c, out, stack, qkNorm) {
     case "add":
       return op(R.add, elems);
     case "dropout": {
-      const pr = num5(p.p) ?? num5(p.rate) ?? 0;
+      const pr = num6(p.p) ?? num6(p.rate) ?? 0;
       return pr > 0 ? op(R.dropout, elems) : { bytes: 0, kernels: 0 };
     }
     case "swiglu":
     case "geglu": {
-      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
       const g = I ? op(R.swiglu, tokens * I) : { bytes: 0, kernels: 0 };
       return { bytes: g.bytes, kernels: g.kernels + 3 * GEMM_KERNELS };
     }
     case "feedForward": {
-      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
       const g = I ? op(R.gelu, tokens * I) : { bytes: 0, kernels: 0 };
       return { bytes: g.bytes, kernels: g.kernels + 2 * GEMM_KERNELS };
     }
     case "linear":
       return { bytes: 0, kernels: GEMM_KERNELS };
     case "embedding": {
-      const V = num5(p.vocabSize), D = num5(p.embeddingDim) ?? width;
+      const V = num6(p.vocabSize), D = num6(p.embeddingDim) ?? width;
       return { bytes: (V ? V * D * 2 : 0) + tokens * D * 10, kernels: 3 };
     }
     default: {
       if (!ATTN.test(c.type)) return { bytes: 0, kernels: 0 };
-      const E = num5(p.embedDim) ?? num5(p.hiddenDim) ?? width;
-      const H = num5(p.numHeads);
+      const E = num6(p.embedDim) ?? num6(p.hiddenDim) ?? width;
+      const H = num6(p.numHeads);
       if (!H) return { bytes: 0, kernels: 4 * GEMM_KERNELS + ATTN_KERNELS };
-      const hd = num5(p.headDim) ?? E / H;
-      const kv = num5(p.numKVHeads) ?? H;
+      const hd = num6(p.headDim) ?? E / H;
+      const kv = num6(p.numKVHeads) ?? H;
       const qk = tokens * (H + kv) * hd;
       let bytes = R.attnLayout.bytes * tokens * (H + 2 * kv) * hd;
       let kernels = 4 * GEMM_KERNELS + ATTN_KERNELS + R.attnLayout.kernels;
@@ -8933,13 +9390,13 @@ function nonGemmOf(c, out, stack, qkNorm) {
 function ropeOf(c, out, stack) {
   if (!out.length || !ATTN.test(c.type)) return { bytes: 0, kernels: 0 };
   const p = c.params ?? {};
-  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
   const width = out[out.length - 1] || 1;
   const tokens = out.reduce((a, b) => a * b, 1) / width;
-  const H = num5(p.numHeads);
+  const H = num6(p.numHeads);
   if (!H) return { bytes: 0, kernels: 0 };
-  const hd = num5(p.headDim) ?? (num5(p.embedDim) ?? width) / H;
-  const kv = num5(p.numKVHeads) ?? H;
+  const hd = num6(p.headDim) ?? (num6(p.embedDim) ?? width) / H;
+  const kv = num6(p.numKVHeads) ?? H;
   const r = NONGEMM_RATES[stack].rope;
   return { bytes: r.bytes * tokens * (H + kv) * hd, kernels: r.kernels };
 }
@@ -9249,7 +9706,17 @@ function gemmMs(gpuId, flops, peakFlopsPerSec2, anchor, axis = "time") {
   return flops / (plateau * s) * 1e3;
 }
 var GEMM_SHAPE_CARDS = {
-  "h100-sxm": { sms: 132, sustainedOfPeak: 786 / 989, attnOfPeak: 0.35, source: "MSMF 786 of 989 TFLOPS (ml-engineering); FA2 about 35% on H100 (FlashAttention-3 paper, arXiv 2407.08608)" },
+  // attnOfPeak on h100-sxm and l4 is our own measurement, not a published one:
+  // scripts/layout-calibration/eager_profile.py timed torch 2.8 sdpa (the
+  // FlashAttention-2 kernels) inside one eager transformers block, forward and
+  // backward, and this is the model's attention FLOPs (3 x a causal forward)
+  // over the measured kernel time, pooled over Qwen3-0.6B and the
+  // Llama-3.2-1B geometry. FA2's backward recomputes, so the kernels' own
+  // utilisation is higher (H100: forward 28% to 32%, backward 24% to 27%);
+  // the number here is what makes this model's FLOP count come out at the
+  // measured time. In-sample for those two one-GPU rows.
+  "h100-sxm": { sms: 132, sustainedOfPeak: 786 / 989, attnOfPeak: 0.229, source: "MSMF 786 of 989 TFLOPS (ml-engineering); attention 22.9% measured (torch 2.8 sdpa FA2, eager block fwd+bwd at 4096 x 4, data/eager_profile.json; the FlashAttention-3 paper puts FA2 near 35% on H100 forward)" },
+  l4: { sms: 58, sustainedOfPeak: 76.6 / 121, attnOfPeak: 0.33, source: "MSMF 76.6 of 121 TFLOPS, our mamf-finder run on a Modal L4 (data/mamf_l4_2026-10-18.txt; MAMF 84, power-capped at 72 W); attention 33% measured (torch 2.8 sdpa FA2, eager block fwd+bwd at 2048 x 1, data/eager_profile.json)" },
   h200: { sms: 132, sustainedOfPeak: 755 / 989, attnOfPeak: 0.35, source: "MSMF 755 of 989 TFLOPS, H200 SXM (ml-engineering); FA2 utilisation taken from H100 (same SM)" },
   b200: { sms: 148, sustainedOfPeak: 1439 / 2250, attnOfPeak: null, source: "MSMF 1439 of 2250 TFLOPS, B200 SXM (ml-engineering)" },
   "a100-80g": { sms: 108, sustainedOfPeak: 258 / 312, attnOfPeak: 0.5, source: "MSMF 258 of 312 TFLOPS, A100 PCIe (ml-engineering; no SXM sustained row); FA2 50% to 73% on A100 (FlashAttention-2 paper, arXiv 2307.08691), low end" },
@@ -9603,22 +10070,22 @@ function blocksOf(model) {
 var ATTN2 = /attention|^mla$/i;
 function geometryOf(model) {
   const g = { numHeads: null, numKVHeads: null, hidden: null, ffn: null, numExperts: null, vocab: null };
-  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
   for (const c of model.components) {
     const p = c.params ?? {};
     if (g.numHeads == null && ATTN2.test(c.type)) {
-      g.numHeads = num5(p.numHeads);
-      g.numKVHeads = num5(p.numKVHeads) ?? g.numHeads;
-      g.hidden = g.hidden ?? num5(p.embedDim);
+      g.numHeads = num6(p.numHeads);
+      g.numKVHeads = num6(p.numKVHeads) ?? g.numHeads;
+      g.hidden = g.hidden ?? num6(p.embedDim);
     }
-    if (g.ffn == null && /^(swiglu|feedForward|geglu|mlp)$/i.test(c.type)) g.ffn = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+    if (g.ffn == null && /^(swiglu|feedForward|geglu|mlp)$/i.test(c.type)) g.ffn = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
     if (/moe/i.test(c.type)) {
-      g.numExperts = g.numExperts ?? num5(p.numExperts);
-      g.ffn = g.ffn ?? num5(p.expertDim) ?? num5(p.ffDim);
+      g.numExperts = g.numExperts ?? num6(p.numExperts);
+      g.ffn = g.ffn ?? num6(p.expertDim) ?? num6(p.ffDim);
     }
     if (c.type === "embedding" && g.vocab == null) {
-      g.vocab = num5(p.vocabSize);
-      g.hidden = g.hidden ?? num5(p.embeddingDim);
+      g.vocab = num6(p.vocabSize);
+      g.hidden = g.hidden ?? num6(p.embeddingDim);
     }
   }
   return g;
@@ -9634,7 +10101,7 @@ function memBoundBytes(c, shapes, hasRope) {
   const width = outS[outS.length - 1] || 1;
   const tokens = elems / width;
   const p = c.params ?? {};
-  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
   const B = MEM_BYTES_PER_ELEM;
   switch (c.type) {
     case "rmsNorm":
@@ -9645,23 +10112,23 @@ function memBoundBytes(c, shapes, hasRope) {
       return elems * B.add;
     case "swiglu":
     case "geglu": {
-      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
       return I ? tokens * I * B.swiglu : 0;
     }
     case "feedForward": {
-      const I = num5(p.intermediateSize) ?? num5(p.ffDim) ?? num5(p.hiddenFeatures);
+      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
       return I ? tokens * I * B.gelu : 0;
     }
     case "embedding": {
-      const V = num5(p.vocabSize), D = num5(p.embeddingDim) ?? width;
+      const V = num6(p.vocabSize), D = num6(p.embeddingDim) ?? width;
       return (V ? V * D * ACT_BYTES : 0) + tokens * D * 10;
     }
     default:
       if (hasRope && ATTN2.test(c.type)) {
-        const H = num5(p.numHeads), E = num5(p.embedDim) ?? width;
+        const H = num6(p.numHeads), E = num6(p.embedDim) ?? width;
         if (!H) return 0;
-        const hd = num5(p.headDim) ?? E / H;
-        const kv = num5(p.numKVHeads) ?? H;
+        const hd = num6(p.headDim) ?? E / H;
+        const kv = num6(p.numKVHeads) ?? H;
         return tokens * (H + kv) * hd * B.rope;
       }
       return 0;
@@ -9678,15 +10145,15 @@ function gemmShapesOf(c, shapes, macs) {
   const outS = sh?.out ?? [];
   const T = inS.length >= 2 ? inS[inS.length - 2] : 1;
   const p = c.params ?? {};
-  const num5 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
   const parts = [];
   const mm = (m, n2, k) => ({ macs: m * n2 * k, m, n: n2, k });
   if (c.type === "groupedQueryAttention" || c.type === "multiHeadAttention" || c.type === "causalAttention" || c.type === "selfAttention" || c.type === "attention") {
-    const D = num5(p.embedDim) ?? num5(p.hiddenDim) ?? (inS[inS.length - 1] || null);
+    const D = num6(p.embedDim) ?? num6(p.hiddenDim) ?? (inS[inS.length - 1] || null);
     if (D) {
       if (c.type === "groupedQueryAttention") {
-        const H = num5(p.numHeads) ?? 32, kv = num5(p.numKVHeads) ?? H;
-        const hd = num5(p.headDim) ?? Math.floor(D / H);
+        const H = num6(p.numHeads) ?? 32, kv = num6(p.numKVHeads) ?? H;
+        const hd = num6(p.headDim) ?? Math.floor(D / H);
         parts.push(
           mm(T, H * hd, D),
           mm(T, kv * hd, D),
@@ -9695,15 +10162,15 @@ function gemmShapesOf(c, shapes, macs) {
           mm(T, D, H * hd)
         );
       } else {
-        const H = num5(p.numHeads) ?? 1;
+        const H = num6(p.numHeads) ?? 1;
         parts.push(mm(T, D, D), mm(T, D, D), mm(T, D, D), { macs: T * T * D, m: T, n: T, k: Math.max(1, Math.floor(D / H)), batch: H, attn: true }, mm(T, D, D));
       }
     }
   } else if (c.type === "swiglu" || c.type === "geglu") {
-    const D = num5(p.embedDim) ?? num5(p.inFeatures), I = num5(p.intermediateSize) ?? num5(p.hiddenFeatures) ?? num5(p.ffDim);
+    const D = num6(p.embedDim) ?? num6(p.inFeatures), I = num6(p.intermediateSize) ?? num6(p.hiddenFeatures) ?? num6(p.ffDim);
     if (D && I) parts.push(mm(T, I, D), mm(T, I, D), mm(T, D, I));
   } else if (c.type === "feedForward") {
-    const D = num5(p.embedDim) ?? num5(p.hiddenDim), I = num5(p.ffDim) ?? (D ? 4 * D : null);
+    const D = num6(p.embedDim) ?? num6(p.hiddenDim), I = num6(p.ffDim) ?? (D ? 4 * D : null);
     if (D && I && Math.abs(2 * T * D * I - macs) <= macs * 1e-6) parts.push(mm(T, I, D), mm(T, D, I));
   } else if (c.type === "linear") {
     const K = inS[inS.length - 1], N = outS[outS.length - 1];
@@ -11611,12 +12078,12 @@ function readHumanBytes(v) {
   const n2 = Math.round(Number(m[1]) * base ** pow);
   return n2 > 0 ? n2 : null;
 }
-var num4 = (v) => {
+var num5 = (v) => {
   const n2 = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   return Number.isFinite(n2) ? n2 : null;
 };
 var posInt3 = (v) => {
-  const n2 = num4(v);
+  const n2 = num5(v);
   return n2 != null && Number.isInteger(n2) && n2 > 0 ? n2 : null;
 };
 function parseJsonObject(v) {
@@ -11729,7 +12196,7 @@ function parseServeCommand(cmd, engineHint) {
       if (has("--enable-expert-parallel")) args.expertParallel = true;
       setNum("maxModelLen", get("--max-model-len"), readTokenCount);
       setNum("maxNumSeqs", get("--max-num-seqs"));
-      setNum("gpuMemoryUtilization", get("--gpu-memory-utilization"), num4);
+      setNum("gpuMemoryUtilization", get("--gpu-memory-utilization"), num5);
       const rope = parseJsonObject(get("--rope-scaling"));
       const hfo = parseJsonObject(get("--hf-overrides"));
       if (rope) args.ropeScaling = rope;
@@ -11773,12 +12240,12 @@ function parseServeCommand(cmd, engineHint) {
       if (has("--enable-ep-moe") || args.epSize != null && args.epSize > 1) args.expertParallel = true;
       setNum("maxModelLen", get("--context-length"), readTokenCount);
       setNum("maxNumSeqs", get("--max-running-requests"));
-      setNum("memFractionStatic", get("--mem-fraction-static"), num4);
+      setNum("memFractionStatic", get("--mem-fraction-static"), num5);
       const over = parseJsonObject(get("--json-model-override-args"));
       if (over?.rope_scaling && typeof over.rope_scaling === "object") args.ropeScaling = over.rope_scaling;
       if (over && posInt3(over.max_position_embeddings) != null) args.maxPositionOverride = posInt3(over.max_position_embeddings);
       args.generationConfigMode = get("--sampling-defaults");
-      setNum("chunkedPrefillSize", get("--chunked-prefill-size"), num4);
+      setNum("chunkedPrefillSize", get("--chunked-prefill-size"), num5);
       if (has("--disable-cuda-graph")) args.enforceEager = true;
       if (has("--enable-dp-attention")) args.dpAttention = true;
       if (/deepep/i.test(get("--moe-a2a-backend") ?? "")) args.deepep = true;
@@ -11797,14 +12264,14 @@ function parseServeCommand(cmd, engineHint) {
     args.ggufFile = hff ?? m ?? (hf ? hf.includes(":") ? hf : `${hf}:Q4_K_M` : void 0);
     const c = get("-c", "--ctx-size");
     if (c != null) {
-      const n2 = num4(c);
+      const n2 = num5(c);
       if (n2 != null && n2 >= 0) args.ctxSize = n2;
     }
     const ngl = get("-ngl", "--gpu-layers", "--n-gpu-layers");
-    if (ngl != null) args.nGpuLayers = ngl === "all" || ngl === "auto" ? ngl : posInt3(ngl) ?? (num4(ngl) === 0 ? 0 : "auto");
+    if (ngl != null) args.nGpuLayers = ngl === "all" || ngl === "auto" ? ngl : posInt3(ngl) ?? (num5(ngl) === 0 ? 0 : "auto");
     const np = get("-np", "--parallel", "--n-parallel");
     if (np != null) {
-      const n2 = num4(np);
+      const n2 = num5(np);
       if (n2 != null && n2 > 0) args.nParallel = n2;
     }
     if (has("-kvu", "--kv-unified")) args.kvUnified = true;
@@ -11812,17 +12279,17 @@ function parseServeCommand(cmd, engineHint) {
     args.cacheTypeK = get("-ctk", "--cache-type-k");
     args.cacheTypeV = get("-ctv", "--cache-type-v");
     args.ropeScalingType = get("--rope-scaling");
-    setNum("ropeScale", get("--rope-scale"), num4);
+    setNum("ropeScale", get("--rope-scale"), num5);
     setNum("yarnOrigCtx", get("--yarn-orig-ctx"));
     args.chatTemplate = get("--chat-template", "--chat-template-file");
     const s = {};
-    const t = num4(get("--temp", "--temperature"));
+    const t = num5(get("--temp", "--temperature"));
     if (t != null) s.temperature = t;
-    const tp = num4(get("--top-p"));
+    const tp = num5(get("--top-p"));
     if (tp != null) s.top_p = tp;
-    const tk = num4(get("--top-k"));
+    const tk = num5(get("--top-k"));
     if (tk != null) s.top_k = tk;
-    const rp = num4(get("--repeat-penalty"));
+    const rp = num5(get("--repeat-penalty"));
     if (rp != null) s.repetition_penalty = rp;
     if (Object.keys(s).length) args.samplerFlags = s;
     setNum("nUbatch", get("-ub", "--ubatch-size"));
@@ -11839,7 +12306,7 @@ function readSampler(raw) {
   const out = {};
   const pick = (k, ...names) => {
     for (const n2 of names) {
-      const v = num4(r[n2]);
+      const v = num5(r[n2]);
       if (v != null) {
         out[k] = v;
         return;
@@ -11961,7 +12428,7 @@ function derivedMaxLen(config, ropeOverride, maxPosOverride, graphMax) {
   if (native == null) return { len: null, native: null, rope };
   if (!rope) return { len: native, native, rope: null };
   const type = String(rope.rope_type ?? rope.type ?? "").toLowerCase();
-  const factor = num4(rope.factor);
+  const factor = num5(rope.factor);
   if (!factor || ["llama3", "longrope", "su", "mrope", "default"].includes(type)) return { len: native, native, rope };
   if (!ropeOverride && /gemma3/.test(String(c.model_type ?? ""))) return { len: native, native, rope };
   const base = type === "yarn" ? posInt3(rope.original_max_position_embeddings) ?? native : native;
@@ -12128,7 +12595,7 @@ function kvLayoutFromConfig(config, opts) {
       const inter2 = nh * hd;
       return (inter2 + 2 * ng * state) / tp * (conv - 1) * opts.modelBytes + nh / tp * hd * state * ssmBytes;
     }
-    const expand = num4(c.mamba_expand) ?? num4(c.expand) ?? 2;
+    const expand = num5(c.mamba_expand) ?? num5(c.expand) ?? 2;
     const inter = posInt3(c.intermediate_size) && /^(falcon_)?mamba$/.test(mt) ? posInt3(c.intermediate_size) : hidden ? hidden * expand : null;
     if (inter && state) return inter / tp * (conv - 1) * opts.modelBytes + inter / tp * state * ssmBytes;
     return null;
@@ -12152,7 +12619,7 @@ function kvLayoutFromConfig(config, opts) {
     const k = posInt3(c.full_attention_interval);
     kinds = Array.from({ length: n2 }, (_, i) => (i + 1) % k === 0 ? "attn" : "mamba");
   } else if (posInt3(c.attn_layer_period) != null) {
-    const per = posInt3(c.attn_layer_period), off = num4(c.attn_layer_offset) ?? 0;
+    const per = posInt3(c.attn_layer_period), off = num5(c.attn_layer_offset) ?? 0;
     kinds = Array.from({ length: n2 }, (_, i) => i % per === off ? "attn" : "mamba");
   } else if (/^(mamba|mamba2|falcon_mamba)$/.test(mt)) {
     kinds = Array.from({ length: n2 }, () => "mamba");
@@ -12820,7 +13287,7 @@ function engineMemory(x) {
     let kvAlloc = 0;
     const swaNotes = [];
     const tcfg = textConfigOf(x.config);
-    const lora = num4(tcfg.kv_lora_rank) ?? 0, ropeD = num4(tcfg.qk_rope_head_dim) ?? 0;
+    const lora = num5(tcfg.kv_lora_rank) ?? 0, ropeD = num5(tcfg.qk_rope_head_dim) ?? 0;
     const mlaFactor = lora ? (2 * lora + ropeD) / (lora + ropeD) : 1;
     for (const l of stage.layers) {
       if (l.kind === "mamba") {

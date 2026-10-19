@@ -38,7 +38,7 @@ import { resolve } from 'node:path';
 import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 import { HF_TOOLS } from './extraTools.js';
-import { listedTools, resolveToolCall, isWriteTool, MODEL_PATH_PARAM, type ToolSetName } from './cli.js';
+import { listedTools, resolveToolCall, isWriteTool, declaresOutputSchema, MODEL_PATH_PARAM, type ToolSetName } from './cli.js';
 import { reportingEnabled, buildCorpusReport, sendCorpusReport } from './lib/corpusReport.js';
 import { loadModelCached } from './models.js';
 import { listZoo, loadZooModel, modelFromText } from './sources.js';
@@ -217,6 +217,15 @@ export function createMcpServer(opts: McpServerOptions): Server {
       // direct-call tests and the CLI read it the same way.
       if (structured && typeof structured.error === 'string') {
         return { isError: true, content: [{ type: 'text', text: `${tool.name}: ${structured.error}` }] };
+      }
+      // A declared outputSchema makes structuredContent a MUST on success.
+      // Silently omitting it would hand a validating client a result it has
+      // to reject, so a handler that broke its own contract fails loudly here.
+      if (!structured && declaresOutputSchema(tool.name)) {
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `${tool.name}: internal error, the result is not an object although the tool declares an outputSchema` }],
+        };
       }
       const links = structured && tool.links ? tool.links(structured) : [];
       return {

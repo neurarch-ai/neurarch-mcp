@@ -11,11 +11,11 @@
  * from "always in context" to "one read away".
  */
 export const SHORT: Record<string, string> = {
-  size_training_job: 'Call BEFORE any training launch: peak memory at your batch, fits/borderline/no per card, smallest safe card, max batch, two-card split, cost, data fit. Offline.',
+  size_training_job: 'Call BEFORE any training launch: peak memory at your batch, fits/borderline/no per card, smallest safe card, max batch, two-card split, cost, data fit. Not a convergence check. Offline.',
   check_edit: 'Call after editing a model\'s config or architecture, before training: silent edit bugs (vocab resize, tying, heads, RoPE, LoRA targets) and the memory delta. Offline.',
   diagnose_oom: 'Call after a CUDA OOM, before changing batch size: the one cause (too big, fragmented, another process, undeclared memory) and fixes, least invasive first.',
   check_parallel_layout: 'Call BEFORE a TP/PP/DP training launch: legality, per-stage table, predicted step slowdown, and a split predicted to be faster (predicted, not measured).',
-  check_serving_config: 'Call BEFORE a vLLM/SGLang/llama.cpp launch: TP vs heads, context, KV concurrency, quant vs card, template, sampler.',
+  check_serving_config: 'Call BEFORE a vLLM/SGLang/llama.cpp launch: TP vs heads, context, KV concurrency, quant vs card, template, sampler. Static: starts no server.',
   check_pins: 'Hugging Face downloads not pinned to a commit (from_pretrained, vllm serve, hf download, YAML), with the fix per file. Bandit B615 rules. Offline.',
   model_changes: 'What changed upstream in a tracked HF model per revision (config, tokenizer, template, weights), breaking or not, optionally since your pin. GETs public files from neurarch.com.',
   plan: 'The card the CI bot posts: memory, GPU fit, cost, whether it runs, your .neurarch.yml rules, last run here. Sends the graph to /api/v1/plan.',

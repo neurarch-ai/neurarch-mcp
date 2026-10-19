@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMcpServer } from './server.js';
-import { listedTools } from './cli.js';
+import { listedTools, declaresOutputSchema } from './cli.js';
 import { loadZooModel } from './sources.js';
 import { makeModel } from './test/fixtures.js';
 import { clearChangeCache } from './changeTools.js';
@@ -92,6 +92,14 @@ describe('outputSchema conformance', () => {
       }
     }
   }, 120_000);
+
+  it('the server-side guard knows exactly the tools that list an outputSchema', () => {
+    // server.ts turns a non-object result from these into isError rather than
+    // dropping structuredContent; the guard and the listing must agree.
+    for (const t of listedTools(true, 'full')) {
+      expect(declaresOutputSchema(t.name), t.name).toBe(!!t.outputSchema);
+    }
+  });
 
   it('every tool that declares an outputSchema is exercised above', () => {
     const called = new Set(CALLS.map(c => c[0]));

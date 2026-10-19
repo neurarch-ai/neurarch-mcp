@@ -66,6 +66,14 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   listing 7.6k (was 6.6k), almost all of it the output schemas.
 - `@modelcontextprotocol/sdk` floor raised to `^1.29.0`, the version tested;
   the MCPB manifest moves to `manifest_version` 0.3.
+- **A tool that declares an output schema can no longer drop
+  `structuredContent`.** If such a handler ever returns something other than
+  an object, the call fails with an internal error instead of a result a
+  validating client has to reject.
+- `size_training_job` and `check_serving_config` descriptions now say what
+  they do not answer: not a convergence check; static, starts no server.
+- Vendored engine, verifier and plan bundles rebuilt from neurarch-ai/neurarch
+  `main` at 1ffaa2d8 (`npm run check:mcp-vendor` in sync).
 
 ## [0.19.0] - 2026-10-18
 

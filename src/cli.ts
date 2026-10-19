@@ -254,6 +254,9 @@ const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
   find_models: obj({ models: A }),
 };
 
+/** True when `name` declares an outputSchema, so every success must carry structuredContent. */
+export const declaresOutputSchema = (name: string): boolean => name in OUTPUT_SCHEMAS;
+
 /**
  * Build the ListTools payload: schemas with `model_path` where it applies, and
  * annotations resolved from the per-tool overrides over the read defaults.

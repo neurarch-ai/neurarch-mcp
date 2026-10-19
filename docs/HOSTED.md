@@ -35,6 +35,25 @@ fly ips allocate-v4 --shared && fly ips allocate-v6   # if the deploy could not 
 
 Any container host works the same way; the image listens on 8787.
 
+### Redeploy after every npm release
+
+Nothing deploys the hosted instance automatically: there is no workflow for
+it, and `fly deploy` builds whatever is checked out. It stayed on 0.15.0 for
+five releases because nobody ran this after publishing (the release tags and
+GitHub releases stopped at the same time, after 0.16.0). From the commit that
+was published, which is `main` right after the release PR merges:
+
+```bash
+git checkout main && git pull --ff-only
+fly deploy --remote-only -a neurarch-mcp
+curl -s https://neurarch-mcp.fly.dev/mcp -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+  | grep -o '"version":"[^"]*"'
+```
+
+The last line must print the version just published.
+
 The production instance lives at `https://neurarch-mcp.fly.dev/mcp` and runs
 in PUBLIC read-only mode (`NEURARCH_MCP_PUBLIC_HOST=neurarch-mcp.fly.dev`, no
 token): anyone may call the read tools, write tools are not exposed, and the
