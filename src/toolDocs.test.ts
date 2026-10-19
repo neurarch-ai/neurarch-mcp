@@ -12,7 +12,7 @@ describe('tool descriptions', () => {
       expect(SHORT[t.name].length, `${t.name} short description too long`).toBeLessThanOrEqual(220);
     }
   });
-  it('the core listing stays under 5.4k tokens and the full one under 7.7k (0.13 was 6.9k for the full set)', () => {
+  it('the core listing stays under 5.5k tokens and the full one under 7.8k (0.13 was 6.9k for the full set)', () => {
     // The budget moved once, in 0.16, when `plan` and `history` joined the core
     // set: two tools an agent should reach for first are worth ~0.7k a turn,
     // and the cap is raised deliberately rather than quietly. It is still a
@@ -27,10 +27,14 @@ describe('tool descriptions', () => {
     // trimmed to the keys every code path returns) and check_pins plus
     // model_changes in the core set, which mermaid_diagram and export_pytorch
     // left for it (both are also resources).
+    //
+    // 0.21 raised the core cap by 0.1k for `response_format` on the five
+    // tools whose answers run to kilobytes: ~90 tokens of listing a turn
+    // against up to ~2.2k tokens saved on each lint_model call on a 7B model.
     const core = JSON.stringify(listedTools(true, 'core')).length / 4;
     const full = JSON.stringify(listedTools(true, 'full')).length / 4;
-    expect(core).toBeLessThan(5400);
-    expect(full).toBeLessThan(7700);
+    expect(core).toBeLessThan(5500);
+    expect(full).toBeLessThan(7800);
   });
   it('core tools all exist', () => {
     const names = new Set(TOOLS.map(t => t.name));

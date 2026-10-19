@@ -41,6 +41,15 @@ describe('initialize', () => {
     expect(c.getServerVersion()).toMatchObject({ name: 'neurarch-mcp', title: 'Neurarch' });
   });
 
+  it('sends a PNG icon as a data URI, and it is the same bytes as icon.png', async () => {
+    const { readFileSync } = await import('node:fs');
+    const icons = (await connect()).getServerVersion()?.icons ?? [];
+    expect(icons).toHaveLength(1);
+    expect(icons[0].mimeType).toBe('image/png');
+    const b64 = icons[0].src.replace(/^data:image\/png;base64,/, '');
+    expect(Buffer.from(b64, 'base64').equals(readFileSync(new URL('../icon.png', import.meta.url)))).toBe(true);
+  });
+
   it('lists every tool with a top-level title', async () => {
     const c = await connect({ writeEnabled: true });
     for (const t of (await c.listTools()).tools) expect(t.title, t.name).toEqual(expect.any(String));
@@ -62,7 +71,7 @@ describe('argument errors', () => {
   it('names an unknown argument and lists the accepted ones', async () => {
     const r = await (await connect()).callTool({ name: 'lint_model', arguments: { severty: 'warn' } });
     expect(r.isError).toBe(true);
-    expect(text(r)).toMatch(/unknown argument "severty".*Accepted: severity, model_path/s);
+    expect(text(r)).toMatch(/unknown argument "severty".*Accepted: severity, response_format, model_path/s);
   });
 
   it('names a wrong type and an out-of-set value', async () => {
