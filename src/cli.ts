@@ -6,6 +6,7 @@
 import { TOOLS, type ToolAnnotations, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 import { HF_TOOLS, hfToolsIfEnabled } from './extraTools.js';
+import { isHfEnabled as hfEnabled } from './sources.js';
 import { shortDescription, TITLES } from './toolDocs.js';
 
 export interface ParsedFlags {
@@ -57,6 +58,11 @@ const COMMANDS = new Set<Command>(['lint', 'check', 'hook']);
  * then trace, because a static parse of a real repository is the weak path
  * (recognisable on 41% of 116 real files, zero true findings hand-judged);
  * then plan, then the local legality ladder.
+ *
+ * 0.20 added check_pins and model_changes (what changed upstream is half of a
+ * pre-check) and moved mermaid_diagram and export_pytorch out to keep the
+ * count at 19: both are also served as resources (neurarch://model/mermaid,
+ * neurarch://model/pytorch), and both stay callable by name.
  */
 export const CORE_TOOLS: readonly string[] = [
   'size_training_job',
@@ -67,6 +73,8 @@ export const CORE_TOOLS: readonly string[] = [
   'check_edit',
   'check_parallel_layout',
   'check_serving_config',
+  'check_pins',
+  'model_changes',
   'check_design',
   'lint_model',
   'describe_architecture',
@@ -74,8 +82,6 @@ export const CORE_TOOLS: readonly string[] = [
   'layer_impact',
   'get_layer',
   'find_layers',
-  'mermaid_diagram',
-  'export_pytorch',
   'list_architectures',
   'find_models',
 ];
@@ -177,6 +183,17 @@ const READ_TOOL_DEFAULTS: ToolAnnotations = {
   openWorldHint: false,
 };
 
+/**
+ * Under --hf, any read tool can be handed `model_path: "hf:<org/name>"` (or an
+ * `hf_id`) and fetch a config from huggingface.co, so its honest annotation is
+ * open-world. Without --hf an hf: model is served from the cache or refused,
+ * and the same tool is closed-world. Every read tool takes model_path, so the
+ * flag flips them all; the function exists so the rule has one name.
+ */
+function reachesHub(_t: ToolDef): boolean {
+  return true;
+}
+
 /** The wire form of a tool: what ListTools sends to the client. */
 export interface ListedTool {
   name: string;
@@ -184,6 +201,7 @@ export interface ListedTool {
   inputSchema: Record<string, unknown>;
   annotations: ToolAnnotations;
   outputSchema?: Record<string, unknown>;
+  title?: string;
 }
 
 /**
@@ -194,21 +212,46 @@ export interface ListedTool {
  * cost ~100 listing tokens and said nothing the default does not). A drift between handler and schema then
  * costs a missing hint, not a broken tool.
  */
+const S = { type: 'string' } as const;
+const B = { type: 'boolean' } as const;
+const N = { type: 'number' } as const;
+const A = { type: 'array' } as const;
+const O = { type: 'object' } as const;
+const CURSOR = { type: ['string', 'null'] } as const;
+/** An object schema whose `required` keys every code path of the handler returns. */
+const obj = (props: Record<string, unknown>, required: string[] = []) =>
+  required.length
+    ? { type: 'object', properties: Object.fromEntries(required.map(k => [k, props[k] ?? {}])), required }
+    : { type: 'object', properties: props };
+
+/**
+ * `required` lists only keys every code path returns, and
+ * outputSchema.test.ts calls each of these tools through a real SDK client,
+ * which validates structuredContent against them, on four fixture models.
+ */
 const OUTPUT_SCHEMAS: Record<string, Record<string, unknown>> = {
-  size_training_job: { type: 'object', properties: { verdict: { type: 'string' }, fits: { type: ['boolean', 'null'] } } },
-  diagnose_oom: { type: 'object', properties: { cause: { type: 'string' }, summary: { type: 'string' }, fixes: { type: 'array' } } },
-  plan: { type: 'object', properties: { text: { type: 'string' }, plan: { type: ['object', 'null'] }, policy: { type: 'object' }, history: { type: 'object' } } },
-  history: { type: 'object', properties: { fingerprint: { type: 'string' }, ledger: { type: 'string' }, runs: { type: ['number', 'null'] }, summary: { type: 'string' } } },
-  check_design: { type: 'object', properties: { verdict: { type: 'string' }, outcome: { type: 'string' }, summary: { type: 'string' }, findings: { type: 'array' } } },
-  lint_model: { type: 'object', properties: { clean: { type: 'boolean' }, counts: { type: 'object' }, findings: { type: 'array' } } },
-  validate_model: { type: 'object', properties: { ok: { type: 'boolean' } } },
-  rank_designs: { type: 'object', properties: { ranked: { type: 'array' }, recommended: { type: ['string', 'null'] }, recommendation: { type: 'string' }, calibration: { type: 'object' } } },
-  suggest_fix: { type: 'object', properties: { fixes: { type: 'array' }, notFixable: { type: 'array' } } },
-  describe_architecture: { type: 'object', properties: { pipeline: { type: 'array' }, layerCount: { type: 'number' } } },
-  layer_impact: { type: 'object', additionalProperties: true },
-  export_pytorch: { type: 'object', properties: { code: { type: 'string' }, language: { type: 'string' } } },
-  list_architectures: { type: 'object', properties: { architectures: { type: 'array' } } },
-  find_models: { type: 'object', properties: { models: { type: 'array' } } },
+  size_training_job: obj({ verdict: S, fits: { type: ['boolean', 'null'] }, accuracy: S }, ['verdict', 'fits']),
+  check_edit: obj({ verdict: S, ok: B, findings: A, memory: { type: ['object', 'null'] } }, ['verdict', 'ok', 'findings']),
+  check_parallel_layout: obj({ verdict: S, legal: B, predicted: O, findings: A, stages: A, basis: S }, ['verdict', 'legal', 'predicted', 'findings', 'basis']),
+  check_serving_config: obj({ verdict: S, blocked: B, findings: A, checked: A, skipped: A, caveats: A, basis: S }, ['verdict', 'blocked', 'findings', 'checked', 'skipped']),
+  check_pins: obj({ verdict: S, counts: O, findings: A, nextCursor: CURSOR }, ['verdict', 'findings', 'nextCursor']),
+  model_changes: obj({ model: S, tracked: B, verdict: S, changes: A, nextCursor: CURSOR }, ['model', 'tracked', 'verdict', 'changes', 'nextCursor']),
+  diagnose_oom: obj({ cause: S, summary: S, fixes: A }, ['cause', 'summary', 'fixes']),
+  plan: obj({ text: S, plan: { type: ['object', 'null'] }, policy: O, history: O }),
+  history: obj({ fingerprint: S, ledger: S, runs: { type: ['number', 'null'] }, summary: S }),
+  check_design: obj({ verdict: S, outcome: S, summary: S, findings: A }, ['verdict', 'findings']),
+  lint_model: obj({ clean: B, counts: O, findings: A }, ['clean', 'counts', 'findings']),
+  validate_model: obj({ ok: B, findings: A }, ['ok', 'findings']),
+  rank_designs: obj({ ranked: A, recommended: { type: ['string', 'null'] }, recommendation: S, calibration: O }, ['ranked', 'recommended']),
+  suggest_fix: obj({ fixes: A, notFixable: A }, ['fixes', 'notFixable']),
+  describe_architecture: obj({ pipeline: A, layerCount: N, totalParameters: N }, ['pipeline', 'layerCount']),
+  get_model_summary: obj({ layerCount: N, totalParameters: N }, ['layerCount', 'totalParameters']),
+  layer_impact: O,
+  find_layers: obj({ count: N, layers: A, nextCursor: CURSOR }, ['count', 'layers', 'nextCursor']),
+  list_connections: obj({ count: N, connections: A, nextCursor: CURSOR }, ['count', 'connections', 'nextCursor']),
+  export_pytorch: obj({ code: S, language: S }, ['code']),
+  list_architectures: obj({ architectures: A, nextCursor: CURSOR }, ['architectures', 'nextCursor']),
+  find_models: obj({ models: A }),
 };
 
 /**
@@ -219,18 +262,20 @@ export function listedTools(writeEnabled: boolean, toolSet: ToolSetName = 'core'
   const reads = selectTools(false, toolSet).map(t => ({
     name: t.name,
     description: shortDescription(t.name, t.description),
+    title: TITLES[t.name] ?? t.name,
     inputSchema: withModelPath(t.inputSchema),
-    annotations: { title: TITLES[t.name] ?? t.name, ...READ_TOOL_DEFAULTS, ...(t.annotations ?? {}) },
+    annotations: { ...READ_TOOL_DEFAULTS, ...(hfEnabled() && reachesHub(t) ? { openWorldHint: true } : {}), ...(t.annotations ?? {}) },
     ...(OUTPUT_SCHEMAS[t.name] ? { outputSchema: OUTPUT_SCHEMAS[t.name] } : {}),
   }));
   if (!writeEnabled) return reads;
   const writes = WRITE_TOOLS.map(t => ({
     name: t.name,
     description: shortDescription(t.name, t.description),
+    title: TITLES[t.name] ?? t.name,
     inputSchema: t.inputSchema,
     // Write tools always declare their own; the fallback exists so a new one
     // added without annotations is still never advertised as read-only.
-    annotations: { title: TITLES[t.name] ?? t.name, readOnlyHint: false, destructiveHint: true, ...(t.annotations ?? {}) },
+    annotations: { readOnlyHint: false, destructiveHint: true, ...(t.annotations ?? {}) },
   }));
   return [...reads, ...writes];
 }
@@ -261,5 +306,11 @@ export function resolveToolCall(name: string, writeEnabled: boolean): ToolResolu
     : isGatedHfTool
       ? ' Restart the MCP server with --hf to allow the Hugging Face lookup (the one network call this server can make).'
       : '';
-  return { errorText: `Unknown tool: ${name}.${hint}` };
+  if (hint) return { errorText: `Unknown tool: ${name}.${hint}` };
+  // A near miss (lint vs lint_model, check_serving vs check_serving_config)
+  // gets the names it was probably reaching for, so the retry is one call.
+  const all = [...selectTools(true, 'full'), ...HF_TOOLS].map(t => t.name);
+  const q = name.toLowerCase();
+  const near = all.filter(n => n.includes(q) || q.includes(n) || n.split('_').some(w => w.length > 3 && q.includes(w))).slice(0, 5);
+  return { errorText: `Unknown tool: ${name}.${near.length ? ` Did you mean: ${near.join(', ')}?` : ''} neurarch://docs lists every tool.` };
 }

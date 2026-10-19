@@ -132,8 +132,18 @@ describe('list_architectures / load_architecture', () => {
     const gqa = await call('list_architectures', { attention: 'groupedQueryAttention' });
     expect(gqa.matched).toBeGreaterThan(0);
     expect(gqa.matched).toBeLessThan(all.total);
-    const d = await call('list_architectures', { domain: all.domains[0] });
+    const d = await call('list_architectures', { domain: all.domains[0], limit: 500 });
     expect(d.architectures.every((a: any) => a.domain === all.domains[0])).toBe(true);
+  });
+  it('pages by 20 and keeps the long fields behind detail: full', async () => {
+    const first = await call('list_architectures', {});
+    expect(first.architectures).toHaveLength(20);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    expect(first.architectures[0].paper).toBeUndefined();
+    const second = await call('list_architectures', { cursor: first.nextCursor });
+    expect(second.architectures[0].id).not.toBe(first.architectures[0].id);
+    const full = await call('list_architectures', { query: 'qwen', detail: 'full' });
+    expect(full.architectures[0]).toHaveProperty('paramCheck');
   });
   it('describes an entry and saves it only under --write', async () => {
     const r = await call('load_architecture', { id: 'bert-base' });

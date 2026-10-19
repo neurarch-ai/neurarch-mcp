@@ -17,12 +17,12 @@ describe('prompts', () => {
 
   it('only ever name tools that exist', () => {
     for (const p of PROMPTS) {
-      const text = renderPrompt(p, { target: 't', rule: 'r', architecture: 'a', focus: 'f' }, { writeEnabled: true });
+      const text = renderPrompt(p, { target: 't', rule: 'r', architecture: 'a', focus: 'f', base: 'hf:Qwen/Qwen3-8B', launch: 'tp 4', command: 'vllm serve x', gpu: 'h100', paths: 'src,configs' }, { writeEnabled: true });
       for (const m of text.matchAll(/\b([a-z]+(?:_[a-z]+)+)\b/g)) {
         const name = m[1];
         // Only tokens that look like our tool names; other snake_case is prose (head_dim, save_to...).
-        if (['head_dim', 'save_to', 'model_path', 'include_current', 'model_source', 'input_ids', 'num_layers', 'n_layers'].includes(name)) continue;
-        if (KNOWN.has(name) || !/^(get|list|find|describe|validate|lint|check|rank|export|load|layer|param|flops|mermaid|diff|compare|add|modify|delete|save)_/.test(name)) continue;
+        if (['head_dim', 'save_to', 'model_path', 'include_current', 'model_source', 'input_ids', 'num_layers', 'n_layers', 'base_model_path', 'micro_batch', 'seq_len', 'max_model_len'].includes(name)) continue;
+        if (KNOWN.has(name) || !/^(get|list|find|describe|validate|lint|check|rank|export|load|layer|param|flops|mermaid|diff|compare|add|modify|delete|save|model|size|diagnose)_/.test(name)) continue;
         expect(KNOWN.has(name), `prompt ${p.name} names unknown tool ${name}`).toBe(true);
       }
     }

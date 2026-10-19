@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.neurarch-ai/neurarch-mcp",
-  "description": "Sizes a training job before it launches: peak memory, smallest GPU, max batch, cost.",
+  "description": "Pre-checks a model change before GPU time or traffic: memory, layout, serving config, pins.",
   "repository": {
     "url": "https://github.com/neurarch-ai/neurarch-mcp",
     "source": "github"
   },
-  "version": "0.19.0",
+  "version": "0.20.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "neurarch-mcp",
-      "version": "0.19.0",
+      "version": "0.20.0",
       "transport": {
         "type": "stdio"
       },
@@ -37,7 +37,7 @@
         {
           "type": "named",
           "name": "--hf",
-          "description": "Allow hf:<org/name> refs and load_hf_model (the one network switch)",
+          "description": "Allow hf:<org/name> refs and load_hf_model (reads config files from huggingface.co)",
           "isRequired": false
         },
         {

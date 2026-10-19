@@ -73,6 +73,8 @@ interface ApiRequestOptions {
   /** Bearer token. Omitted rather than sent empty. */
   key?: string;
   timeoutMs?: number;
+  /** The tool call's cancellation signal: a cancelled call aborts the request. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -88,6 +90,8 @@ export async function apiRequest<T>(path: string, opts: ApiRequestOptions): Prom
   const host = apiHost(base);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const onCancel = () => ctrl.abort();
+  opts.signal?.addEventListener('abort', onCancel, { once: true });
 
   let res: Response;
   try {
@@ -102,12 +106,14 @@ export async function apiRequest<T>(path: string, opts: ApiRequestOptions): Prom
       signal: ctrl.signal,
     });
   } catch (e) {
+    if (opts.signal?.aborted) throw new Error('cancelled by the client before it answered.');
     const why = (e as Error).name === 'AbortError'
       ? `did not answer within ${(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000}s`
       : `could not be reached (${(e as Error).message})`;
-    throw new Error(`${host} ${why}. Every other tool in this server works offline.`);
+    throw new Error(`${host} ${why}. The local tools still work offline.`);
   } finally {
     clearTimeout(timer);
+    opts.signal?.removeEventListener('abort', onCancel);
   }
 
   const raw = await res.text();

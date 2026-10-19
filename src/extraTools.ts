@@ -20,6 +20,7 @@ import { listZoo, loadZooModel, loadHFModel, isHfEnabled } from './sources.js';
 import { discoverModels } from './discover.js';
 import { generatePyTorchCode, lintModelGraph } from './vendor/engine.bundle.mjs';
 import { suggestFixes } from './lib/suggestFix.js';
+import { pageOf, PAGE_PARAMS } from './paging.js';
 
 /**
  * Creating a file is a write, even when the file is new. Tools that can save
@@ -135,17 +136,24 @@ export const listArchitecturesTool: ToolDef = {
     + '(DeepSeek-V3, Qwen2.5, Llama, Mixtral, Whisper, CLIP, BERT, ViT, ResNet and more), each with real dimensions '
     + 'from the model\'s config and a parameter count checked against the published one. Offline. Any read tool '
     + 'can then be asked about an entry by passing model_path: "zoo:<id>", so you can compare the user\'s design '
-    + 'against a known-good one without leaving the conversation.',
+    + 'against a known-good one without leaving the conversation. Paged (20 per page, nextCursor); detail "full" adds '
+    + 'attention kinds, the parameter check and paper / Hugging Face links per entry. Each entry is also a resource at '
+    + 'neurarch://zoo/<id>.',
   inputSchema: {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Substring of id, title, type or domain.' },
       domain: { type: 'string', description: 'e.g. "Language models".' },
       attention: { type: 'string', description: 'e.g. "groupedQueryAttention".' },
+      detail: { type: 'string', enum: ['concise', 'full'] },
+      ...PAGE_PARAMS,
     },
     additionalProperties: false,
   },
-  handler: async ({ query, domain, attention }: { query?: string; domain?: string; attention?: string }) => {
+  links: (r: { architectures?: Array<{ id: string; title: string }> }) => (r.architectures ?? []).map(e => ({
+    uri: `neurarch://zoo/${e.id}`, name: e.id, title: e.title, mimeType: 'application/json',
+  })),
+  handler: async ({ query, domain, attention, detail, limit, cursor }: { query?: string; domain?: string; attention?: string; detail?: 'concise' | 'full'; limit?: number; cursor?: string }) => {
     const all = await listZoo();
     const q = query?.toLowerCase();
     const hits = all.filter(e =>
@@ -154,14 +162,16 @@ export const listArchitecturesTool: ToolDef = {
       && (!attention || e.attention.includes(attention)),
     );
     const domains = [...new Set(all.map(e => e.domain))].sort();
+    const page = pageOf(hits, { limit, cursor }, 20);
     return {
       total: all.length,
       matched: hits.length,
       domains,
-      architectures: hits.map(e => ({
+      nextCursor: page.nextCursor,
+      architectures: page.items.map(e => ({
         id: e.id, title: e.title, domain: e.domain, type: e.type, params: e.params, layers: e.layers,
-        attention: e.attention, paramCheck: e.paramCheck, paper: e.urls.paper, huggingface: e.urls.huggingface,
         modelPath: `zoo:${e.id}`,
+        ...(detail === 'full' ? { attention: e.attention, paramCheck: e.paramCheck, paper: e.urls.paper, huggingface: e.urls.huggingface } : {}),
       })),
     };
   },
@@ -362,16 +372,31 @@ export const traceModelTool: ToolDef = {
     if (args.depth) argv.push('--depth', String(args.depth));
     if (args.name) argv.push('--name', args.name);
 
+    let cancelled = false;
     const result = await new Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }>(res => {
       const child = spawn(python, argv, { cwd: fileMatch ? join(target.split(':')[0], '..') : process.cwd() });
       let stdout = '', stderr = '', timedOut = false;
       child.stdout.on('data', d => { stdout += d; });
       child.stderr.on('data', d => { stderr += d; });
-      const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, (args.timeout_s ?? 120) * 1000);
-      child.on('error', e => { clearTimeout(timer); res({ code: null, stdout, stderr: stderr + e.message, timedOut }); });
-      child.on('close', code => { clearTimeout(timer); res({ code, stdout, stderr, timedOut }); });
+      const limitS = args.timeout_s ?? 120;
+      const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, limitS * 1000);
+      // A cancelled call kills the trace rather than leaving Python running
+      // against a request nobody is waiting for.
+      const onAbort = () => { cancelled = true; child.kill('SIGKILL'); };
+      ctx.signal?.addEventListener('abort', onAbort, { once: true });
+      // A trace can take a minute; a client that asked for progress hears the
+      // elapsed seconds against the timeout every five, which is all that is
+      // known from outside the Python process.
+      const started = Date.now();
+      const beat = ctx.progress
+        ? setInterval(() => { const s = Math.round((Date.now() - started) / 1000); void ctx.progress!(s, limitS, `tracing ${args.target}: ${s}s of at most ${limitS}s`); }, 5000)
+        : undefined;
+      const done = () => { clearTimeout(timer); if (beat) clearInterval(beat); ctx.signal?.removeEventListener('abort', onAbort); };
+      child.on('error', e => { done(); res({ code: null, stdout, stderr: stderr + e.message, timedOut }); });
+      child.on('close', code => { done(); res({ code, stdout, stderr, timedOut }); });
     });
 
+    if (cancelled) throw new Error('trace_model: cancelled by the client; the Python process was killed.');
     if (result.timedOut) throw new Error(`trace_model: the trace did not finish in ${args.timeout_s ?? 120}s and was killed. Try a smaller input or --depth.`);
     if (result.code !== 0) {
       const tail = result.stderr.trim().split('\n').slice(-6).join('\n');

@@ -6,6 +6,67 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-10-19
+
+### Added
+- **`check_pins`: Hugging Face downloads not pinned to a commit.** Reads
+  Python (`from_pretrained`, `load_dataset`, `hf_hub_download`,
+  `snapshot_download`, `pipeline`), notebooks, shell scripts and Dockerfiles
+  (`vllm serve`, the SGLang server, `huggingface-cli` / `hf download`) and YAML
+  model keys, with the fix spelled for each file. The scanner is the CLI's
+  `neurarch pin-check` (neurarch-ai/neurarch #346, aligned with Bandit B615),
+  vendored as `src/vendor/policy.bundle.mjs`. Offline; paged.
+- **`model_changes`: what changed upstream in a tracked Hugging Face model**,
+  revision by revision (config, tokenizer, chat template, generation defaults,
+  weights), whether each change is breaking under the published rule, and with
+  `since_revision` only what landed after your pin. Reads two public files from
+  the change record at www.neurarch.com/changes-feeds/ (neurarch-ai/neurarch
+  #341); no key, nothing from your repository. The third tool that opens a
+  socket, annotated open-world. `detail: "full"` adds each change's keys.
+- **Prompts** `precheck_change`, `precheck_serving` and `pin_downloads`.
+- **Resource** `neurarch://rules/catalogue`: every rule id a tool here can
+  report (lint, shape, edit, pin) with its source and, where the verifier has
+  one, the measurement behind it.
+- **Server instructions** at initialize: which tool answers which moment, and
+  that memory figures are estimates and times are predictions. Server `title`
+  and `websiteUrl`; every tool has a top-level `title`.
+- **Completions** (`completion/complete`) for zoo ids, tool names, rule ids and
+  card ids, on prompt arguments and resource templates.
+- **Progress notifications and cancellation.** `trace_model` reports elapsed
+  seconds against its timeout and is killed on cancel; `plan`, `history` and
+  `model_changes` abort their request on cancel; `check_pins` reports files
+  read on large trees.
+- **`resource_link` results**: `list_architectures` links each entry to
+  `neurarch://zoo/<id>`.
+
+### Changed
+- **Output schemas on every tool whose result shape is stable** (22 tools, up
+  from 14), each naming only keys every code path returns. A new test calls
+  every schema'd tool through the SDK client, which validates
+  `structuredContent` against the schema, on four models.
+- **Arguments are checked before a handler runs**: a missing required argument,
+  an unknown argument, a wrong type or a value outside an enum now comes back
+  as an error naming the argument and what is accepted. `rank_designs {}` and
+  `load_architecture {}` used to answer "Cannot read properties of undefined".
+  An unknown tool name suggests the tools it was probably reaching for.
+- **Errors are errors**: a handler result carrying `error` is returned with
+  `isError: true`, and `get_layer`, `compare_layers` and `get_block` report a
+  name that matches nothing as an error with the closest names, instead of
+  `null`.
+- **Long lists are paged** with an opaque `nextCursor`: `list_architectures`
+  (20 per page, was every entry, 41 KB), `find_layers` (50, was 100),
+  `list_connections` (100, was 200), `check_pins`, `model_changes`.
+  `list_architectures` keeps paper links and the parameter check behind
+  `detail: "full"`.
+- **Under `--hf` every read tool is annotated open-world**, since any of them
+  can be handed an `hf:` model; without `--hf` they stay closed-world.
+- The core listing swaps `mermaid_diagram` and `export_pytorch` (both also
+  served as resources, both still callable) for `check_pins` and
+  `model_changes`. It costs about 5.3k tokens a turn (was 4.7k), the full
+  listing 7.6k (was 6.6k), almost all of it the output schemas.
+- `@modelcontextprotocol/sdk` floor raised to `^1.29.0`, the version tested;
+  the MCPB manifest moves to `manifest_version` 0.3.
+
 ## [0.19.0] - 2026-10-18
 
 ### Changed

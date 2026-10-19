@@ -31,6 +31,7 @@ import {
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
+  CompleteRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { ModelArchitecture } from './lib/types.js';
 import { resolve } from 'node:path';
@@ -45,6 +46,8 @@ import { renderMermaid } from './mermaid.js';
 import { generatePyTorchCode } from './vendor/engine.bundle.mjs';
 import { RULE_PROVENANCE } from './vendor/verifier.bundle.mjs';
 import { PROMPTS, renderPrompt } from './prompts.js';
+import { ruleCatalogue } from './ruleCatalogue.js';
+import { validateArgs } from './argCheck.js';
 
 /**
  * The tools that grade a graph rather than describe one.
@@ -79,19 +82,23 @@ export interface McpServerOptions {
 export function createMcpServer(opts: McpServerOptions): Server {
   const { getModel, ctx, writeEnabled, version } = opts;
   const toolSet = opts.toolSet ?? 'core';
-  const tools = listedTools(writeEnabled, toolSet).map(t => ({
+  const withSource = (t: ReturnType<typeof listedTools>[number]) => ({
     ...t,
     inputSchema: isWriteTool(t.name) ? t.inputSchema : withModelSource(t.inputSchema),
-  }));
+  });
+  const tools = listedTools(writeEnabled, toolSet).map(withSource);
+  // What a call is validated against: every callable tool, listed or not, in
+  // the exact shape a client would have been shown under --tools=full.
+  const callable = new Map(listedTools(writeEnabled, 'full').map(withSource).map(t => [t.name, t]));
 
   const server = new Server(
-    { name: 'neurarch-mcp', version },
-    { capabilities: { tools: {}, prompts: {}, resources: {} } },
+    { name: 'neurarch-mcp', title: 'Neurarch', version, websiteUrl: 'https://www.neurarch.com/mcp' },
+    { capabilities: { tools: {}, prompts: {}, resources: {}, completions: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+  server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
     const { tool, errorText } = resolveToolCall(req.params.name, writeEnabled);
     if (!tool) {
       return {
@@ -99,6 +106,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
         content: [{ type: 'text', text: errorText! }],
       };
     }
+
     // `model_path` lets one server answer about any model in the repository
     // instead of only the one it was launched with; `model_source` does the
     // same for text the client holds and this process cannot read from disk.
@@ -127,6 +135,15 @@ export function createMcpServer(opts: McpServerOptions): Server {
     if (wantsOtherModel && wantsInline) {
       return { isError: true, content: [{ type: 'text', text: `${tool.name}: give ${MODEL_PATH_PARAM} or ${MODEL_SOURCE_PARAM}, not both.` }] };
     }
+
+    // Arguments are checked against the advertised schema before a handler
+    // sees them (after the model_path refusal above, whose message is the more
+    // specific one). Without this a missing required argument reached the
+    // handler as undefined and came back as "Cannot read properties of
+    // undefined", which tells an agent nothing about what to send instead.
+    const listed = callable.get(tool.name);
+    const argError = listed ? validateArgs(tool.name, listed.inputSchema, rawArgs) : null;
+    if (argError) return { isError: true, content: [{ type: 'text', text: argError }] };
 
     try {
       let model: ModelArchitecture;
@@ -161,7 +178,12 @@ export function createMcpServer(opts: McpServerOptions): Server {
         : wantsOtherModel || wantsInline ? { ...ctx, currentPath: '' } : ctx;
       // Elicitation is offered only when the client said it can answer.
       const canAsk = !!server.getClientCapabilities()?.elicitation;
-      const callCtx: ToolContext = canAsk ? { ...base, elicit: (q) => elicit(server, q) } : base;
+      const callCtx: ToolContext = {
+        ...base,
+        ...(canAsk ? { elicit: (q) => elicit(server, q) } : {}),
+        signal: extra.signal,
+        ...progressReporter(req.params._meta?.progressToken, extra),
+      };
       const result = await tool.handler(args, model, callCtx);
       // Opt-in corpus row (NEURARCH_REPORT=1). Fire and forget: it can neither
       // slow nor fail the tool call. Privacy scope in lib/corpusReport.ts.
@@ -180,18 +202,28 @@ export function createMcpServer(opts: McpServerOptions): Server {
       // predate it would otherwise see an empty result, and because a human
       // reading a transcript can still see what came back.
       //
-      // No `outputSchema` is declared. A client validates structuredContent
-      // against a declared schema and fails the call on a mismatch, so
-      // declaring 30 hand-written schemas would convert every drift between
-      // schema and handler into a broken tool. Sending the data without the
-      // contract is the honest half of the feature; the contract can come when
-      // the schemas are generated from the handlers rather than typed twice.
+      // Tools with a stable result shape also declare an `outputSchema`
+      // (cli.ts OUTPUT_SCHEMAS). A client validates structuredContent against
+      // it and fails the call on a mismatch, so those schemas name only the
+      // keys a handler always returns, and outputSchema.test.ts calls every
+      // one of them through a real client, which runs that validation.
       const structured =
         result !== null && typeof result === 'object' && !Array.isArray(result)
           ? (result as Record<string, unknown>)
           : undefined;
+      // A handler that answered { error } is reporting a failed call, and the
+      // spec's place for that is isError: the agent then reads it as something
+      // to fix, not as data. Kept as the handlers' convention because the
+      // direct-call tests and the CLI read it the same way.
+      if (structured && typeof structured.error === 'string') {
+        return { isError: true, content: [{ type: 'text', text: `${tool.name}: ${structured.error}` }] };
+      }
+      const links = structured && tool.links ? tool.links(structured) : [];
       return {
-        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        content: [
+          { type: 'text', text: JSON.stringify(result, null, 2) },
+          ...links.map(l => ({ type: 'resource_link' as const, ...l })),
+        ],
         ...(structured ? { structuredContent: structured } : {}),
       };
     } catch (e) {
@@ -227,6 +259,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
     { uri: 'neurarch://model/pytorch', name: 'Current model as PyTorch', description: 'Runnable nn.Module source generated from the current graph.', mimeType: 'text/x-python' },
     { uri: 'neurarch://zoo', name: 'Reference architecture index', description: 'The bundled library of verified published architectures. Each entry is readable at neurarch://zoo/{id}.', mimeType: 'application/json' },
     { uri: 'neurarch://rules', name: 'Rule provenance', description: 'For every design rule with a published measurement behind it, the measurement and its source.', mimeType: 'application/json' },
+    { uri: 'neurarch://rules/catalogue', name: 'Rule catalogue', title: 'Every rule id this server can report', description: 'Every rule id a tool here can return (lint, shape, edit, pin), with its source and, where one exists, the measurement behind it.', mimeType: 'application/json' },
     { uri: 'neurarch://docs', name: 'Tool documentation', description: 'The long-form contract of every tool, including the ones --tools=core does not list. One read instead of 7k tokens on every turn.', mimeType: 'text/markdown' },
   ];
 
@@ -247,6 +280,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
       if (uri === 'neurarch://model/pytorch') return { mimeType: 'text/x-python', text: generatePyTorchCode(getModel()) };
       if (uri === 'neurarch://zoo') return { mimeType: 'application/json', text: JSON.stringify(await listZoo(), null, 2) };
       if (uri === 'neurarch://rules') return { mimeType: 'application/json', text: JSON.stringify(RULE_PROVENANCE, null, 2) };
+      if (uri === 'neurarch://rules/catalogue') return { mimeType: 'application/json', text: JSON.stringify(ruleCatalogue(), null, 2) };
       const zoo = /^neurarch:\/\/zoo\/([\w.-]+)$/.exec(uri);
       if (zoo) return { mimeType: 'application/json', text: JSON.stringify(await loadZooModel(zoo[1]), null, 2) };
       if (uri === 'neurarch://docs') return { mimeType: 'text/markdown', text: renderToolDocs(allToolDefs()) };
@@ -262,7 +296,76 @@ export function createMcpServer(opts: McpServerOptions): Server {
     return { contents: [{ uri, mimeType, text: body }] };
   });
 
+  // ── completions ────────────────────────────────────────────────────────────
+  // The values a prompt argument or a resource template variable can take,
+  // where this server knows the set: zoo ids, rule ids, tool names. A client
+  // shows them as the person types, which beats a slash command that fails on
+  // a misspelled id.
+  server.setRequestHandler(CompleteRequestSchema, async (req) => {
+    const { ref, argument } = req.params;
+    let pool: string[] = [];
+    if (ref.type === 'ref/prompt') {
+      if (argument.name === 'architecture') pool = (await listZoo()).map(e => e.id);
+      else if (argument.name === 'rule') pool = ruleCatalogue().rules.map(r => r.id);
+      else if (argument.name === 'gpu') pool = GPU_HINTS;
+    } else if (ref.type === 'ref/resource') {
+      if (ref.uri === 'neurarch://zoo/{id}' && argument.name === 'id') pool = (await listZoo()).map(e => e.id);
+      else if (ref.uri === 'neurarch://docs/{tool}' && argument.name === 'tool') pool = allToolDefs().map(t => t.name);
+    }
+    const q = (argument.value ?? '').toLowerCase();
+    const hits = pool.filter(v => v.toLowerCase().startsWith(q)).concat(pool.filter(v => !v.toLowerCase().startsWith(q) && v.toLowerCase().includes(q)));
+    return { completion: { values: hits.slice(0, 100), total: hits.length, hasMore: hits.length > 100 } };
+  });
+
   return server;
+}
+
+/**
+ * Card ids from the vendored plan bundle's GPU table (server.test.ts checks
+ * each one is there). Offered as completions only, never enforced: the tools
+ * resolve their own `gpu` argument, prefixes included.
+ */
+export const GPU_HINTS = ['h100-sxm', 'h200', 'b200', 'gh200-96g', 'gh200-144g', 'a100-80g', 'a100-40g', 'l40s', 'a40', 'rtx-pro-6000', 'l4', 'a10g', 't4', 'v100', 'rtx-4090', 'rtx-3090'];
+
+/**
+ * Sent once at initialize (InitializeResult.instructions). Clients that read
+ * it put it in the system prompt, so it is the one place to say which tool
+ * answers which moment, and what kind of number comes back. Kept short: it is
+ * paid on every conversation the server is attached to.
+ */
+export const SERVER_INSTRUCTIONS = [
+  'Neurarch pre-checks a change to an open-weight model before it takes GPU time or traffic.',
+  'Before a training launch: size_training_job (peak memory at your batch, smallest card, max batch, cost).',
+  'Before a multi-GPU split: check_parallel_layout. Before a vLLM / SGLang / llama.cpp launch: check_serving_config.',
+  'After editing a config or architecture: check_edit. After a CUDA OOM: diagnose_oom, before changing the batch.',
+  'Hugging Face downloads: check_pins finds unpinned ones; model_changes says what changed upstream between revisions.',
+  'Structure: lint_model, then check_design. For a .py file, trace_model first: the static parser is the weak path.',
+  'Memory figures are calibrated estimates and times are predictions; each result labels its own, so quote the label.',
+  'No tool here predicts accuracy or model quality.',
+  'Offline except plan, history and model_changes (www.neurarch.com) and hf: models under --hf (huggingface.co).',
+].join(' ');
+
+/**
+ * notifications/progress for this call, when the client asked for them by
+ * sending a progressToken. Progress must increase, so a report that would not
+ * is dropped rather than sent out of order.
+ */
+function progressReporter(
+  token: string | number | undefined,
+  extra: { sendNotification: (n: { method: 'notifications/progress'; params: { progressToken: string | number; progress: number; total?: number; message?: string } }) => Promise<void> },
+): Pick<ToolContext, 'progress'> {
+  if (token === undefined) return {};
+  let last = -Infinity;
+  return {
+    progress: async (progress, total, message) => {
+      if (!(progress > last)) return;
+      last = progress;
+      await extra.sendNotification({
+        method: 'notifications/progress',
+        params: { progressToken: token, progress, ...(total !== undefined ? { total } : {}), ...(message ? { message } : {}) },
+      }).catch(() => undefined);
+    },
+  };
 }
 
 function allToolDefs(): ToolDef[] {

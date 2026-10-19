@@ -76,7 +76,7 @@ export const historyTool: ToolDef = {
     },
     additionalProperties: false,
   },
-  handler: async ({ fingerprint }: { fingerprint?: string }, model: ModelArchitecture | undefined) => {
+  handler: async ({ fingerprint }: { fingerprint?: string }, model: ModelArchitecture | undefined, ctx?: ToolContext) => {
     const given = fingerprint?.trim().toLowerCase();
     if (given !== undefined && !FINGERPRINT_RE.test(given)) {
       throw new Error(
@@ -100,7 +100,7 @@ export const historyTool: ToolDef = {
 
     const data = await apiRequest<{ fingerprint?: string; rows?: HistoryRow[] }>(
       `/api/v1/history?fingerprint=${encodeURIComponent(fp)}`,
-      { method: 'GET', key },
+      { method: 'GET', key, signal: ctx?.signal },
     );
     const rows = Array.isArray(data.rows) ? data.rows : [];
     if (!rows.length) {
@@ -209,9 +209,11 @@ export const planTool: ToolDef = {
 
     const base = base_path ? await loadModelCached(base_path) : undefined;
     const key = apiKey();
+    await ctx?.progress?.(0, 1, `asking ${apiBase()} for the plan`);
     const data = await apiRequest<PlanResponse>('/api/v1/plan', {
       method: 'POST',
       key,
+      signal: ctx?.signal,
       body: {
         model,
         ...(base ? { base } : {}),
