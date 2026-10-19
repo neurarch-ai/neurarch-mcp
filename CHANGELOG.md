@@ -6,6 +6,31 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **On the v2 MCP SDK** (`@modelcontextprotocol/server` and `client` 2.3.1, plus
+  `@modelcontextprotocol/node` 2.1.1 for the HTTP adapter), so the server speaks
+  protocol revision **2026-07-28** as well as the 2025 revisions it already
+  spoke. v1 (`@modelcontextprotocol/sdk`) only implements up to 2025-11-25 and
+  is maintained until about 2027-01.
+- **stdio** is `serveStdio`: the revision is negotiated per connection, from
+  the same factory for both eras.
+- **HTTP** routes by era with the SDK's own classifier. 2026-07-28 requests are
+  stateless, one server instance per request (`createMcpHandler`). 2025-era
+  requests keep the session flow they had (`Mcp-Session-Id`, GET for the SSE
+  stream, DELETE to close), because a per-request instance cannot know that a
+  2025 client declared elicitation at initialize. The bearer-token and Host
+  checks sit in front of both paths, unchanged.
+- **Elicitation** (`check_design` with `ask_user`): a 2025 connection gets the
+  pushed `elicitation/create` as before; a 2026-07-28 request gets
+  `input_required`, and the client retries the call with the answer. No
+  `requestState` is minted, because the retry recomputes the same decision from
+  the graph and nothing from the first round is carried.
+
+### Added
+- `src/eras.test.ts`: the same calls through the real HTTP server under a
+  2025 client and a client pinned to 2026-07-28, compared result for result,
+  plus elicitation (accept and decline), progress and cancellation on 2026.
+
 ## [0.21.0] - 2026-10-19
 
 ### Added

@@ -10,8 +10,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/client';
+import { InMemoryTransport } from '@modelcontextprotocol/server';
 import { createMcpServer } from './server.js';
 import { makeModel } from './test/fixtures.js';
 import { clearModelCache } from './models.js';
@@ -372,9 +372,8 @@ describe('docs resources and elicitation', () => {
     const model = JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../examples/tiny-gpt.neurarch.json', import.meta.url), 'utf-8'));
     const server = createMcpServer({ getModel: () => model, ctx: { modelPath: '' }, writeEnabled: false, version: '0.0.0-test' });
     const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: { elicitation: {} } });
-    const { ElicitRequestSchema } = await import('@modelcontextprotocol/sdk/types.js');
     let asked: string | undefined;
-    client.setRequestHandler(ElicitRequestSchema, async (req) => {
+    client.setRequestHandler('elicitation/create', async (req) => {
       asked = req.params.message;
       const choices = ((req.params as any).requestedSchema as { properties: { choice: { enum: string[] } } }).properties.choice.enum;
       return { action: 'accept', content: { choice: choices[choices.length - 1] } };

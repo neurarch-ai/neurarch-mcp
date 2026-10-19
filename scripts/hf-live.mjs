@@ -1,6 +1,6 @@
 // One real call through the built server with --hf, against a public repo.
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { Client } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 const transport = new StdioClientTransport({ command: 'node', args: ['dist/index.js', 'examples/tiny-gpt.neurarch.json', '--hf'] });
 const client = new Client({ name: 'live', version: '0' }, { capabilities: {} });
 await client.connect(transport);

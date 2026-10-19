@@ -22,19 +22,10 @@
  *              the rule provenance table. A resource is fetched once and
  *              pinned; a tool result scrolls away.
  */
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
-  ListResourcesRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  ReadResourceRequestSchema,
-  CompleteRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
+import { Server, inputRequired, type ServerContext, type Tool } from '@modelcontextprotocol/server';
 import type { ModelArchitecture } from './lib/types.js';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { TOOLS, type ToolContext, type ToolDef } from './tools.js';
 import { WRITE_TOOLS } from './writeTools.js';
 import { HF_TOOLS } from './extraTools.js';
@@ -97,9 +88,9 @@ export function createMcpServer(opts: McpServerOptions): Server {
     { capabilities: { tools: {}, prompts: {}, resources: {}, completions: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
+  server.setRequestHandler('tools/list', async () => ({ tools: tools as Tool[] }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (req, extra) => {
+  server.setRequestHandler('tools/call', async (req, extra) => {
     const { tool, errorText } = resolveToolCall(req.params.name, writeEnabled);
     if (!tool) {
       return {
@@ -177,13 +168,17 @@ export function createMcpServer(opts: McpServerOptions): Server {
       const base: ToolContext = wantsOtherModel && !/^(zoo|hf):/i.test(pathArg as string)
         ? { ...ctx, currentPath: resolve(pathArg as string) }
         : wantsOtherModel || wantsInline ? { ...ctx, currentPath: '' } : ctx;
-      // Elicitation is offered only when the client said it can answer.
+      // Elicitation is offered only when the client said it can answer. On a
+      // 2025-era connection the question is pushed (elicitation/create) and
+      // the handler waits for it; on 2026-07-28 there is no server-to-client
+      // request, so the call returns input_required and the client retries it
+      // with the answer. See elicit() below for why a retry is safe here.
       const canAsk = !!server.getClientCapabilities()?.elicitation;
       const callCtx: ToolContext = {
         ...base,
-        ...(canAsk ? { elicit: (q) => elicit(server, q) } : {}),
-        signal: extra.signal,
-        ...progressReporter(req.params._meta?.progressToken, extra),
+        ...(canAsk ? { elicit: (q) => elicit(server, extra, q) } : {}),
+        signal: extra.mcpReq.signal,
+        ...progressReporter(extra.mcpReq._meta?.progressToken ?? req.params._meta?.progressToken, extra),
       };
       const result = await tool.handler(args, model, callCtx);
       // Opt-in corpus row (NEURARCH_REPORT=1). Fire and forget: it can neither
@@ -237,6 +232,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
         ...(structured ? { structuredContent: structured } : {}),
       };
     } catch (e) {
+      if (e instanceof InputNeeded) return inputRequired({ inputRequests: { [e.key]: inputRequired.elicit(e.params) } });
       return {
         isError: true,
         content: [{ type: 'text', text: `${tool.name} failed: ${(e as Error).message}` }],
@@ -245,11 +241,11 @@ export function createMcpServer(opts: McpServerOptions): Server {
   });
 
   // ── prompts ────────────────────────────────────────────────────────────────
-  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+  server.setRequestHandler('prompts/list', async () => ({
     prompts: PROMPTS.map(p => ({ name: p.name, title: p.title, description: p.description, arguments: p.arguments })),
   }));
 
-  server.setRequestHandler(GetPromptRequestSchema, async (req) => {
+  server.setRequestHandler('prompts/get', async (req) => {
     const prompt = PROMPTS.find(p => p.name === req.params.name);
     if (!prompt) throw new Error(`Unknown prompt: ${req.params.name}. Available: ${PROMPTS.map(p => p.name).join(', ')}.`);
     const args = (req.params.arguments ?? {}) as Record<string, string>;
@@ -273,16 +269,16 @@ export function createMcpServer(opts: McpServerOptions): Server {
     { uri: 'neurarch://docs', name: 'Tool documentation', description: 'The long-form contract of every tool, including the ones --tools=core does not list. One read instead of 7k tokens on every turn.', mimeType: 'text/markdown' },
   ];
 
-  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: STATIC_RESOURCES }));
+  server.setRequestHandler('resources/list', async () => ({ resources: STATIC_RESOURCES }));
 
-  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+  server.setRequestHandler('resources/templates/list', async () => ({
     resourceTemplates: [
       { uriTemplate: 'neurarch://zoo/{id}', name: 'Reference architecture', description: 'One bundled architecture as .neurarch.json; ids come from neurarch://zoo.', mimeType: 'application/json' },
       { uriTemplate: 'neurarch://docs/{tool}', name: 'Tool documentation', description: 'The full description and input schema of one tool.', mimeType: 'text/markdown' },
     ],
   }));
 
-  server.setRequestHandler(ReadResourceRequestSchema, async (req) => {
+  server.setRequestHandler('resources/read', async (req) => {
     const uri = req.params.uri;
     const text = async (): Promise<{ mimeType: string; text: string }> => {
       if (uri === 'neurarch://model') return { mimeType: 'application/json', text: JSON.stringify(getModel(), null, 2) };
@@ -311,7 +307,7 @@ export function createMcpServer(opts: McpServerOptions): Server {
   // where this server knows the set: zoo ids, rule ids, tool names. A client
   // shows them as the person types, which beats a slash command that fails on
   // a misspelled id.
-  server.setRequestHandler(CompleteRequestSchema, async (req) => {
+  server.setRequestHandler('completion/complete', async (req) => {
     const { ref, argument } = req.params;
     let pool: string[] = [];
     if (ref.type === 'ref/prompt') {
@@ -362,7 +358,7 @@ export const SERVER_INSTRUCTIONS = [
  */
 function progressReporter(
   token: string | number | undefined,
-  extra: { sendNotification: (n: { method: 'notifications/progress'; params: { progressToken: string | number; progress: number; total?: number; message?: string } }) => Promise<void> },
+  extra: { mcpReq: { notify: (n: { method: 'notifications/progress'; params: { progressToken: string | number; progress: number; total?: number; message?: string } }) => Promise<void> } },
 ): Pick<ToolContext, 'progress'> {
   if (token === undefined) return {};
   let last = -Infinity;
@@ -370,7 +366,7 @@ function progressReporter(
     progress: async (progress, total, message) => {
       if (!(progress > last)) return;
       last = progress;
-      await extra.sendNotification({
+      await extra.mcpReq.notify({
         method: 'notifications/progress',
         params: { progressToken: token, progress, ...(total !== undefined ? { total } : {}), ...(message ? { message } : {}) },
       }).catch(() => undefined);
@@ -391,22 +387,59 @@ function renderToolDocs(defs: ToolDef[]): string {
   }).join('\n');
 }
 
+/** The 2026-07-28 protocol revision: no server-to-client requests, input arrives as a retried call. */
+export const MODERN_PROTOCOL = '2026-07-28';
+
+/** Whether this connection (2025 era) or this request (2026 era) speaks the 2026-07-28 revision. */
+function servesModernEra(server: Server): boolean {
+  return (server.getNegotiatedProtocolVersion() ?? '') >= MODERN_PROTOCOL;
+}
+
+/**
+ * Thrown by elicit() on a 2026-07-28 request whose answer has not arrived
+ * yet, and turned into an input_required result by the tools/call handler.
+ * Not an error the agent ever sees.
+ */
+class InputNeeded extends Error {
+  constructor(readonly key: string, readonly params: ElicitForm) {
+    super('input required');
+  }
+}
+
+type ElicitForm = Parameters<typeof inputRequired.elicit>[0];
+
+/** A stable input key per question, so the retried call finds its own answer. */
+function questionKey(message: string): string {
+  return `choice_${createHash('sha256').update(message).digest('hex').slice(0, 12)}`;
+}
+
 /**
  * One elicitation, shaped as a single-choice form. `value` comes back only on
  * accept; decline and cancel are answers too and are passed through, because
  * "the user did not want to decide" is information the tool should report.
+ *
+ * Two eras. A 2025-era connection gets the push request and the handler waits
+ * on it. A 2026-07-28 request cannot push: the first entry throws InputNeeded
+ * (the call answers input_required), the client asks the person and retries
+ * the same call with the answer in inputResponses, and the handler runs again
+ * from the top. Re-running is safe because the only tool that asks
+ * (check_design with ask_user) does nothing before the question but read the
+ * graph, so the retry recomputes the same decision. No requestState is
+ * minted: nothing the first round learned is carried, so there is nothing a
+ * client could forge.
  */
 async function elicit(
   server: Server,
+  ctx: ServerContext,
   q: { message: string; options: Array<{ value: string; label: string; hint?: string }> },
 ): Promise<{ action: 'accept' | 'decline' | 'cancel'; value?: string }> {
-  const res = await server.elicitInput({
+  const form = {
     message: q.message,
     requestedSchema: {
-      type: 'object',
+      type: 'object' as const,
       properties: {
         choice: {
-          type: 'string',
+          type: 'string' as const,
           title: 'Your choice',
           enum: q.options.map(o => o.value),
           enumNames: q.options.map(o => (o.hint ? `${o.label}: ${o.hint}` : o.label)),
@@ -414,7 +447,18 @@ async function elicit(
       },
       required: ['choice'],
     },
-  });
+  };
+  let res: { action: 'accept' | 'decline' | 'cancel'; content?: unknown };
+  if (servesModernEra(server)) {
+    const key = questionKey(q.message);
+    const answer = ctx.mcpReq.inputResponses?.[key] as { action?: unknown; content?: unknown } | undefined;
+    if (!answer || (answer.action !== 'accept' && answer.action !== 'decline' && answer.action !== 'cancel')) {
+      throw new InputNeeded(key, form as ElicitForm);
+    }
+    res = { action: answer.action, content: answer.content };
+  } else {
+    res = await ctx.mcpReq.elicitInput(form);
+  }
   const value = res.action === 'accept' ? String((res.content as Record<string, unknown> | undefined)?.choice ?? '') : undefined;
   return { action: res.action, ...(value ? { value } : {}) };
 }
