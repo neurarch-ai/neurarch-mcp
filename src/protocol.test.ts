@@ -145,8 +145,8 @@ describe('progress and cancellation', () => {
       { onprogress: (p) => { seen.push({ progress: p.progress, total: p.total }); } },
     );
     expect(r.isError).toBeFalsy();
-    expect(seen.map(s => s.progress)).toEqual([0, 1, 2]);
-    expect(seen.every(s => s.total === 2)).toBe(true);
+    expect(seen.map(s => s.progress)).toEqual([0, 1, 2, 3]);
+    expect(seen.every(s => s.total === 3)).toBe(true);
   });
 
   it('a cancelled call aborts the fetch it was waiting on', async () => {

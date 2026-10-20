@@ -25,6 +25,14 @@ export const INDEX = {
   ],
 };
 
+/** Shape of /changes/lineage.json (neurarch #387); acme/demo is made up. */
+export const LINEAGE = {
+  checked: 2,
+  findings: [
+    { id: 'acme/demo', base: 'acme/base', kinds: ['edit-declared-as-quantization'], basis: ['Declares itself a quantization of acme/base, whose id names no edit, while its own id or tags say "abliterated".'], sha: 'c', at: '2026-10-19T00:00:00Z' },
+  ],
+};
+
 const RELEASES: Record<string, unknown> = {
   'Qwen/Qwen3-8B': {
     changelogUrl: `${BASE}/models/Qwen/Qwen3-8B.html`,
@@ -64,6 +72,7 @@ export function feedFetch(opts: { delayMs?: number; fail?: boolean } = {}): Feed
     }
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     if (url === `${BASE}/advisories/index.json`) return json(INDEX);
+    if (url === 'https://www.neurarch.com/changes/lineage.json') return json(LINEAGE);
     const rel = /\/renovate\/(.+)\.json$/.exec(url);
     if (rel) return RELEASES[rel[1]] ? json(RELEASES[rel[1]]) : json({ error: 'not found' }, 404);
     const adv = /\/advisories\/(x_NXMC-[\d-]+)\.json$/.exec(url);
