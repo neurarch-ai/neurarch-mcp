@@ -50,10 +50,38 @@ interface IndexRow {
 interface AdvisoryIndex { count: number; license?: string; breaking_rule?: string; advisories: IndexRow[] }
 interface Releases { changelogUrl?: string; releases: Array<{ version: string; digest: string; releaseTimestamp: string }> }
 
+interface LineageFile { checked?: number; findings: Array<{ id: string; base: string; kinds: string[]; basis: string[] }> }
+
 let indexCache: { at: number; base: string; data: AdvisoryIndex } | null = null;
+let lineageCache: { at: number; url: string; data: LineageFile | null } | null = null;
 
 /** For tests: forget the cached index. */
-export function clearChangeCache(): void { indexCache = null; }
+export function clearChangeCache(): void { indexCache = null; lineageCache = null; }
+
+/** `/changes/lineage.json` on the same host as the feeds. */
+export function lineageUrl(): string {
+  return (process.env.NEURARCH_FEEDS || DEFAULT_FEEDS).replace(/\/+$/, '') + '/changes/lineage.json';
+}
+
+/**
+ * Tracked models whose card disagrees with the base it declares. Supplementary:
+ * a missing or unreachable file leaves `lineage` null in the result rather than
+ * failing the call, because the change list is the answer and this is context.
+ */
+async function lineageFile(ctx: ToolContext): Promise<LineageFile | null> {
+  const url = lineageUrl();
+  if (lineageCache && lineageCache.url === url && Date.now() - lineageCache.at < INDEX_TTL_MS) return lineageCache.data;
+  let data: LineageFile | null = null;
+  try {
+    data = await getJson<LineageFile>(url, ctx, true);
+    if (data && !Array.isArray(data.findings)) data = null;
+  } catch (e) {
+    if (ctx.signal?.aborted) throw e;
+    data = null;
+  }
+  lineageCache = { at: Date.now(), url, data };
+  return data;
+}
 
 async function getJson<T>(url: string, ctx: ToolContext, allow404 = false): Promise<T | null> {
   const signals = [AbortSignal.timeout(TIMEOUT_MS), ...(ctx.signal ? [ctx.signal] : [])];
@@ -92,7 +120,7 @@ interface ChangeArgs {
 export const modelChangesTool: ToolDef = {
   name: 'model_changes',
   description:
-    'Reaches the network: GETs two public files from www.neurarch.com (no key, nothing about your code is sent). '
+    'Reaches the network: GETs three public files from www.neurarch.com (no key, nothing about your code is sent). '
     + 'What changed in a tracked open-weight model on the Hugging Face Hub, revision by revision: config, tokenizer, '
     + 'chat template, generation defaults or weights, with the keys that changed, whether the change touches memory, '
     + 'serving or the tokenizer, and whether it is breaking under the published rule. Call it before moving a pinned '
@@ -100,7 +128,9 @@ export const modelChangesTool: ToolDef = {
     + 'since_revision (a commit, 7+ hex characters) to list only changes after your pin. detail "full" adds each '
     + 'change\'s keys before and after (one extra GET per change on the page). A change record says what a revision '
     + 'does mechanically, not that anything broke; an untracked model has no record, which is not the same as no '
-    + 'change. Not for scanning your code for unpinned downloads: use check_pins.',
+    + 'change. lineage lists where the model\'s card disagrees with the base it declares (an edit declared as a '
+    + 'quantization, a licence outside the base\'s family): statements about the card and tags, not the weights. '
+    + 'Not for scanning your code for unpinned downloads: use check_pins.',
   modelOptional: true,
   annotations: { openWorldHint: true, idempotentHint: true },
   inputSchema: {
@@ -121,11 +151,18 @@ export const modelChangesTool: ToolDef = {
     if (a.since_revision != null && !/^[0-9a-f]{7,40}$/i.test(a.since_revision)) {
       throw new Error(`model_changes: since_revision "${a.since_revision}" is not a commit. Pass 7 to 40 hex characters; a branch or tag name moves, which is the problem this tool exists for.`);
     }
-    await ctx.progress?.(0, 2, 'reading the advisory index');
+    await ctx.progress?.(0, 3, 'reading the advisory index');
     const index = await advisoryIndex(ctx);
-    await ctx.progress?.(1, 2, `reading the revision list for ${id}`);
+    await ctx.progress?.(1, 3, `reading the revision list for ${id}`);
     const releases = await getJson<Releases>(`${feedsBase()}/renovate/${id}.json`, ctx, true);
-    await ctx.progress?.(2, 2);
+    await ctx.progress?.(2, 3, 'reading the lineage record');
+    const lin = await lineageFile(ctx);
+    await ctx.progress?.(3, 3);
+    const linHit = lin?.findings.find(f => f.id.toLowerCase() === id.toLowerCase());
+    // null: the record could not be read, so nothing is claimed either way.
+    const lineage = lin == null ? null : linHit
+      ? { base: linHit.base, findings: linHit.kinds.map((kind, i) => ({ kind, basis: linHit.basis[i] ?? '' })) }
+      : { base: null, findings: [] as Array<{ kind: string; basis: string }> };
 
     const lower = id.toLowerCase();
     let rows = index.advisories.filter(r => r.model.toLowerCase() === lower && !r.withdrawn);
@@ -142,6 +179,7 @@ export const modelChangesTool: ToolDef = {
         changes: [],
         total: 0,
         nextCursor: null,
+        lineage,
         changelog,
         license: index.license ?? 'CC-BY-4.0',
         basis: 'Neurarch model change record. A model is recorded only once it is tracked.',
@@ -185,6 +223,7 @@ export const modelChangesTool: ToolDef = {
       changes,
       total: page.total,
       nextCursor: page.nextCursor,
+      lineage,
       changelog,
       license: index.license ?? 'CC-BY-4.0',
       basis: 'Neurarch model change record (OSV format). It says what a revision does mechanically, not that anything broke for anyone.',

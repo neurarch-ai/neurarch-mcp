@@ -37,6 +37,20 @@ describe('model_changes', () => {
     expect(f.urls.filter(u => /x_NXMC-2026-9001\.json$/.test(u))).toHaveLength(1);
   });
 
+  it('carries the lineage finding for the model, empty when it has none, null when the record cannot be read', async () => {
+    vi.stubGlobal('fetch', feedFetch());
+    const hit = await call({ hf_id: 'acme/demo' });
+    expect(hit.lineage).toEqual({ base: 'acme/base', findings: [{ kind: 'edit-declared-as-quantization', basis: expect.stringMatching(/quantization of acme\/base/) }] });
+    const none = await call({ hf_id: 'Qwen/Qwen3-8B' });
+    expect(none.lineage).toEqual({ base: null, findings: [] });
+    clearChangeCache();
+    const f = feedFetch();
+    vi.stubGlobal('fetch', (async (u: string, i?: RequestInit) => (String(u).endsWith('/changes/lineage.json') ? new Response('nope', { status: 500 }) : f(u, i))) as typeof fetch);
+    const down = await call({ hf_id: 'acme/demo' });
+    expect(down.lineage).toBeNull();
+    expect(down.changes).toHaveLength(2); // the change list still answers
+  });
+
   it('an untracked model is not "no change"', async () => {
     vi.stubGlobal('fetch', feedFetch());
     const r = await call({ hf_id: 'nobody/untracked' });

@@ -138,7 +138,7 @@ describe('both protocol eras from one factory', () => {
     const seen: number[] = [];
     const r = await c.callTool({ name: 'model_changes', arguments: { hf_id: 'Qwen/Qwen3-8B' } }, { onprogress: (p) => { seen.push(p.progress); } });
     expect(r.isError).toBeFalsy();
-    expect(seen).toEqual([0, 1, 2]);
+    expect(seen).toEqual([0, 1, 2, 3]);
   });
 
   it('a cancelled 2026 call aborts the fetch it was waiting on', async () => {
