@@ -12641,6 +12641,9 @@ function convertHFConfigToModel(modelId, config) {
       connections.push({ id: generateConnId(), from: finalNormId, to: lmHeadId, fromPort: "bottom", toPort: "top" });
       lastId = lmHeadId;
       yPos += verticalSpacing;
+    } else {
+      const emb = components.find((c) => c.id === embeddingId);
+      if (emb) emb.params = { ...emb.params, tiedHead: true };
     }
   } else if (archLower.includes("vit") || typeLower.includes("vit") || isCLIP || typeLower.includes("swin") || typeLower.includes("deit") || typeLower.includes("beit")) {
     const visionConfig = config.vision_config || config;

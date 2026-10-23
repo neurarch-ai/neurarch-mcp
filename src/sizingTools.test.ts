@@ -72,7 +72,10 @@ describe('size_training_job, the tool', () => {
     // Sized at 2048 tokens, not at the 32,768-token context the config declares.
     expect(r.job.seqLen).toBe(2048);
     expect(r.memory.peakGb).toBeGreaterThan(5);
-    expect(r.memory.peakGb).toBeLessThan(40);
+    // The logits of a tied-embedding model are counted since neurarch #409: 8 x 2,048
+    // tokens over a 151,936 vocab. Qwen3-0.6B measured 70.4 GB at the same 16,384
+    // tokens per step, so the old < 40 GB bound only held while logits were missing.
+    expect(r.memory.peakGb).toBeLessThan(80);
     const longer = await call({ hf_id: id, batch_size: 8, gpu: 'L4', seq_len: 4096 });
     expect(longer.memory.peakGb).toBeGreaterThan(r.memory.peakGb);
   });

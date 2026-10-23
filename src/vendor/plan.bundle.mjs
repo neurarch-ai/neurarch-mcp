@@ -1,3 +1,49 @@
+// src/utils/tiedHead.ts
+var num = (v) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+function tiedHeadSource(model) {
+  const emb = model.components.find((c) => c.type === "embedding" && c.params?.tiedHead === true);
+  if (!emb) return null;
+  const p = emb.params;
+  const vocab = num(p.vocabSize);
+  const dim = num(p.embeddingDim);
+  if (vocab == null || dim == null) return null;
+  const hasHead = model.components.some((c) => {
+    if (!/^(linear|lmHead)$/.test(c.type)) return false;
+    const q = c.params ?? {};
+    return num(q.outFeatures) === vocab;
+  });
+  return hasHead ? null : { embedding: emb, vocab, dim };
+}
+function withTiedHead(model, shapes) {
+  const src = tiedHeadSource(model);
+  if (!src) return { model, shapes, added: false };
+  const hasChildren = new Set((model.connections ?? []).map((e) => e.from));
+  const output = model.components.find((c) => c.type === "output");
+  const feedEdge = output ? (model.connections ?? []).find((e) => e.to === output.id) : void 0;
+  const feeder = feedEdge ? model.components.find((c) => c.id === feedEdge.from) : [...model.components].reverse().find((c) => c.type !== "stickyNote" && !hasChildren.has(c.id));
+  if (!feeder) return { model, shapes, added: false };
+  const inShape = shapes.get(feeder.id)?.out ?? null;
+  if (!inShape || !inShape.length || inShape[inShape.length - 1] !== src.dim) return { model, shapes, added: false };
+  const head = {
+    id: `${src.embedding.id}::tied-head`,
+    type: "linear",
+    name: "LM_Head (tied)",
+    position: { x: 0, y: 0 },
+    params: { inFeatures: src.dim, outFeatures: src.vocab, bias: false, tied: true },
+    inputs: [],
+    outputs: []
+  };
+  const outShape = [...inShape.slice(0, -1), src.vocab];
+  const connections = (model.connections ?? []).map((e) => feedEdge && e === feedEdge ? { ...e, from: head.id } : e);
+  connections.push({ id: `${head.id}::in`, from: feeder.id, to: head.id, fromPort: "bottom", toPort: "top" });
+  const at = output ? model.components.indexOf(output) : model.components.length;
+  const components = [...model.components.slice(0, at), head, ...model.components.slice(at)];
+  const next = new Map(shapes);
+  next.set(head.id, { in: inShape, out: outShape });
+  if (output) next.set(output.id, { ...shapes.get(output.id) ?? {}, in: outShape, out: outShape });
+  return { model: { ...model, components, connections }, shapes: next, added: true };
+}
+
 // src/components/MLComponents/componentRegistry.ts
 var convDim = (v, i, fallback) => {
   const raw = Array.isArray(v) ? v[i] ?? v[0] : v;
@@ -4093,15 +4139,15 @@ function downstreamOfInferredEdges(model) {
 }
 
 // src/utils/paramEstimator.ts
-function num(v, fallback = 0) {
+function num2(v, fallback = 0) {
   const n2 = typeof v === "number" ? v : Number(v);
   return isFinite(n2) && n2 >= 0 ? n2 : fallback;
 }
 function gqaParams(p) {
-  const D = num(p.embedDim, 4096);
-  const H = num(p.numHeads, 32);
-  const Hkv = num(p.numKVHeads, H);
-  const headDim = num(p.headDim, H > 0 ? Math.floor(D / H) : 128);
+  const D = num2(p.embedDim, 4096);
+  const H = num2(p.numHeads, 32);
+  const Hkv = num2(p.numKVHeads, H);
+  const headDim = num2(p.headDim, H > 0 ? Math.floor(D / H) : 128);
   const qDim = H * headDim;
   const kvDim = Hkv * headDim;
   return D > 0 && headDim > 0 ? D * qDim + qDim * D + 2 * (D * kvDim) : 0;
@@ -4115,61 +4161,61 @@ function estimateLayerParams(type, params, inputShape) {
   switch (type) {
     // ── Basic ────────────────────────────────────────────────────────────────
     case "linear": {
-      const inF = num(p.inFeatures ?? lastDim);
-      const outF = num(p.outFeatures);
+      const inF = num2(p.inFeatures ?? lastDim);
+      const outF = num2(p.outFeatures);
       return inF > 0 && outF > 0 ? inF * outF + outF : 0;
     }
     case "flatten":
       return 0;
     // ── Convolution ──────────────────────────────────────────────────────────
     case "conv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k * k + outC : 0;
     }
     case "conv1d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k + outC : 0;
     }
     case "conv3d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k * k * k + outC : 0;
     }
     case "depthwiseConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const k = num(p.kernelSize, 3);
-      const dm = num(p.depthMultiplier, 1);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const k = num2(p.kernelSize, 3);
+      const dm = num2(p.depthMultiplier, 1);
       return inC * dm * k * k + inC * dm;
     }
     case "separableConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels, inC);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels, inC);
+      const k = num2(p.kernelSize, 3);
       return inC * k * k + inC * outC + outC;
     }
     case "transposeConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k * k + outC : 0;
     }
     case "deformableConv2d":
     case "dilatedConv2d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k * k + outC : 0;
     }
     case "invResidualBlock": {
-      const inC = num(p.inChannels ?? ch, 32);
-      const outC = num(p.outChannels, inC);
-      const e = num(p.expandRatio, 6);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 32);
+      const outC = num2(p.outChannels, inC);
+      const e = num2(p.expandRatio, 6);
+      const k = num2(p.kernelSize, 3);
       const mid = inC * e;
       return mid > 0 ? inC * mid + mid + mid * k * k + mid + mid * outC + outC : 0;
     }
@@ -4183,47 +4229,47 @@ function estimateLayerParams(type, params, inputShape) {
     // ── NLP ─────────────────────────────────────────────────────────────────
     case "embedding":
     case "embeddingBag": {
-      const V = num(p.vocabSize ?? p.numEmbeddings);
-      const D = num(p.embeddingDim ?? p.embedDim);
+      const V = num2(p.vocabSize ?? p.numEmbeddings);
+      const D = num2(p.embeddingDim ?? p.embedDim);
       return V > 0 && D > 0 ? V * D : 0;
     }
     case "learnedPositionalEmbedding": {
-      const L = num(p.maxLen ?? p.maxPositions ?? p.numPositions);
-      const D = num(p.embedDim ?? p.embeddingDim);
+      const L = num2(p.maxLen ?? p.maxPositions ?? p.numPositions);
+      const D = num2(p.embedDim ?? p.embeddingDim);
       return L > 0 && D > 0 ? L * D : 0;
     }
     case "segmentEmbedding": {
-      const S = num(p.numSegments ?? p.numTypes, 2);
-      const D = num(p.embeddingDim ?? p.embedDim);
+      const S = num2(p.numSegments ?? p.numTypes, 2);
+      const D = num2(p.embeddingDim ?? p.embedDim);
       return S > 0 && D > 0 ? S * D : 0;
     }
     case "lstm": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
+      const H = num2(p.hiddenSize, 128);
+      const I = num2(p.inputSize ?? lastDim, H);
+      const L = num2(p.numLayers, 1);
       const dirs = p.bidirectional === true ? 2 : 1;
       const layer0 = dirs * 4 * (I * H + H * H + 2 * H);
       const layerRest = L > 1 ? (L - 1) * dirs * 4 * (dirs * H * H + H * H + 2 * H) : 0;
       return layer0 + layerRest;
     }
     case "gru": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
+      const H = num2(p.hiddenSize, 128);
+      const I = num2(p.inputSize ?? lastDim, H);
+      const L = num2(p.numLayers, 1);
       const dirs = p.bidirectional === true ? 2 : 1;
       const layer0 = dirs * 3 * (I * H + H * H + 2 * H);
       const layerRest = L > 1 ? (L - 1) * dirs * 3 * (dirs * H * H + H * H + 2 * H) : 0;
       return layer0 + layerRest;
     }
     case "rnn": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
+      const H = num2(p.hiddenSize, 128);
+      const I = num2(p.inputSize ?? lastDim, H);
       return I * H + H * H + 2 * H;
     }
     case "bidirectionalLSTM": {
-      const H = num(p.hiddenSize, 128);
-      const I = num(p.inputSize ?? lastDim, H);
-      const L = num(p.numLayers, 1);
+      const H = num2(p.hiddenSize, 128);
+      const I = num2(p.inputSize ?? lastDim, H);
+      const L = num2(p.numLayers, 1);
       const layer0 = 2 * 4 * (I * H + H * H + 2 * H);
       const layerRest = L > 1 ? (L - 1) * 2 * 4 * (2 * H * H + H * H + 2 * H) : 0;
       return layer0 + layerRest;
@@ -4231,7 +4277,7 @@ function estimateLayerParams(type, params, inputShape) {
     case "attention":
     case "selfAttention":
     case "multiHeadAttention": {
-      const d = num(p.hiddenDim ?? p.embedDim);
+      const d = num2(p.hiddenDim ?? p.embedDim);
       return d > 0 ? 4 * d * d + 4 * d : 0;
     }
     case "crossModalAttention":
@@ -4242,19 +4288,19 @@ function estimateLayerParams(type, params, inputShape) {
       if (type === "localAttention" && (p.numKVHeads != null || p.headDim != null)) {
         return gqaParams(p);
       }
-      const d = num(p.embedDim ?? p.hiddenDim);
+      const d = num2(p.embedDim ?? p.hiddenDim);
       return d > 0 ? 4 * d * d + 4 * d : 0;
     }
     // ── LLM ─────────────────────────────────────────────────────────────────
     case "feedForward": {
-      const d = num(p.hiddenDim ?? p.embedDim);
-      const ff = num(p.ffDim, d > 0 ? d * 4 : 0);
+      const d = num2(p.hiddenDim ?? p.embedDim);
+      const ff = num2(p.ffDim, d > 0 ? d * 4 : 0);
       const b = p.bias === false ? 0 : ff + d;
       return d > 0 && ff > 0 ? d * ff + ff * d + b : 0;
     }
     case "transformerBlock": {
-      const d = num(p.embedDim ?? p.hiddenDim ?? p.dModel);
-      const ff = num(p.ffDim ?? p.dFf, d > 0 ? d * 4 : 0);
+      const d = num2(p.embedDim ?? p.hiddenDim ?? p.dModel);
+      const ff = num2(p.ffDim ?? p.dFf, d > 0 ? d * 4 : 0);
       if (d <= 0) return 0;
       return 4 * d * d + 4 * d + d * ff + ff + ff * d + d + 4 * d;
     }
@@ -4267,70 +4313,70 @@ function estimateLayerParams(type, params, inputShape) {
     case "batchNorm":
     case "instanceNorm": {
       const feat = p.normalizedShape ?? p.numFeatures ?? lastDim;
-      const f = num(Array.isArray(feat) ? feat[0] : feat);
+      const f = num2(Array.isArray(feat) ? feat[0] : feat);
       return f > 0 ? 2 * f : 0;
     }
     case "groupNorm": {
-      const c = num(p.numChannels ?? ch);
+      const c = num2(p.numChannels ?? ch);
       return c > 0 ? 2 * c : 0;
     }
     // ── RL ───────────────────────────────────────────────────────────────────
     case "policyNetwork":
     case "valueNetwork": {
-      const H = num(p.hiddenSize, 256);
-      const inF = num(lastDim, H);
+      const H = num2(p.hiddenSize, 256);
+      const inF = num2(lastDim, H);
       return inF * H + H + H * H + H;
     }
     case "dqnHead": {
-      const H = num(p.hiddenSize ?? lastDim, 512);
-      const A = num(p.numActions, 18);
+      const H = num2(p.hiddenSize ?? lastDim, 512);
+      const A = num2(p.numActions, 18);
       return H * A + A;
     }
     case "actorHead": {
-      const H = num(lastDim, 256);
-      const A = num(p.numActions, 6);
+      const H = num2(lastDim, 256);
+      const A = num2(p.numActions, 6);
       return H * A + A;
     }
     case "criticHead": {
-      const H = num(lastDim, 256);
-      const O = num(p.outputDim, 1);
+      const H = num2(lastDim, 256);
+      const O = num2(p.outputDim, 1);
       return H * O + O;
     }
     // ── Graph ────────────────────────────────────────────────────────────────
     case "graphConv":
     case "gcn": {
-      const inC = num(p.inChannels ?? p.inFeatures);
-      const outC = num(p.outChannels ?? p.outFeatures);
+      const inC = num2(p.inChannels ?? p.inFeatures);
+      const outC = num2(p.outChannels ?? p.outFeatures);
       return inC > 0 && outC > 0 ? inC * outC + outC : 0;
     }
     case "graphAttention":
     case "gat": {
-      const inC = num(p.inChannels ?? p.inFeatures ?? lastDim);
-      const outC = num(p.outChannels ?? p.outFeatures);
-      const heads = num(p.numHeads ?? p.heads, 1);
+      const inC = num2(p.inChannels ?? p.inFeatures ?? lastDim);
+      const outC = num2(p.outChannels ?? p.outFeatures);
+      const heads = num2(p.numHeads ?? p.heads, 1);
       return inC > 0 && outC > 0 ? heads * (inC * outC + 2 * outC) : 0;
     }
     case "graphSAGE": {
-      const inC = num(p.inChannels ?? p.inFeatures);
-      const outC = num(p.outChannels ?? p.outFeatures);
+      const inC = num2(p.inChannels ?? p.inFeatures);
+      const outC = num2(p.outChannels ?? p.outFeatures);
       return inC > 0 && outC > 0 ? inC * 2 * outC + outC : 0;
     }
     // ── Multimodal ───────────────────────────────────────────────────────────
     case "fusion": {
-      const inD = num(lastDim);
-      const d = num(p.fusionDim, 256);
+      const inD = num2(lastDim);
+      const d = num2(p.fusionDim, 256);
       return d > 0 && inD > 0 ? inD * d + d : 0;
     }
     case "projection": {
-      const inD = num(p.inDim ?? lastDim);
-      const outD = num(p.outDim);
+      const inD = num2(p.inDim ?? lastDim);
+      const outD = num2(p.outDim);
       return inD > 0 && outD > 0 ? inD * outD + outD : 0;
     }
     // ── Tabular ──────────────────────────────────────────────────────────────
     case "tabnet": {
-      const fd = num(p.featureDim, 64);
-      const dd = num(p.decisionDim, 64);
-      const inF = num(p.inputDim ?? lastDim, fd);
+      const fd = num2(p.featureDim, 64);
+      const dd = num2(p.decisionDim, 64);
+      const inF = num2(p.inputDim ?? lastDim, fd);
       const w = fd + dd;
       return w > 0 ? inF * w + w + 4 * w * w : 0;
     }
@@ -4338,9 +4384,9 @@ function estimateLayerParams(type, params, inputShape) {
       return 0;
     // ── Audio ────────────────────────────────────────────────────────────────
     case "audioConv": {
-      const inC = num(p.inChannels ?? 1, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? 1, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k + outC : 0;
     }
     case "melSpectrogram":
@@ -4349,13 +4395,13 @@ function estimateLayerParams(type, params, inputShape) {
       return 0;
     // ── New attention types ──────────────────────────────────────────────────
     case "windowAttention": {
-      const D = num(p.embedDim, 96);
+      const D = num2(p.embedDim, 96);
       return D > 0 ? 4 * D * D : 0;
     }
     case "groupedQueryAttention":
       return gqaParams(p);
     case "causalAttention": {
-      const D = num(p.embedDim, 512);
+      const D = num2(p.embedDim, 512);
       return D > 0 ? 4 * D * D : 0;
     }
     case "adaptiveMaxPool2d":
@@ -4363,68 +4409,68 @@ function estimateLayerParams(type, params, inputShape) {
     // no learnable params
     // ── New activations ──────────────────────────────────────────────────────
     case "prelu": {
-      return num(p.numParameters, 1);
+      return num2(p.numParameters, 1);
     }
     case "rmsNorm": {
-      const ns = num(p.normalizedShape ?? lastDim, 512);
+      const ns = num2(p.normalizedShape ?? lastDim, 512);
       return ns;
     }
     // ── Transformer extras ───────────────────────────────────────────────────
     case "swiglu": {
-      const D = num(p.embedDim ?? p.inFeatures, 4096);
-      const I = num(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(D * 8 / 3));
+      const D = num2(p.embedDim ?? p.inFeatures, 4096);
+      const I = num2(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(D * 8 / 3));
       return D > 0 && I > 0 ? 3 * D * I : 0;
     }
     case "moeLayer": {
-      const D = num(p.embedDim, 512);
-      const E = num(p.numExperts, 8);
-      const I = num(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
+      const D = num2(p.embedDim, 512);
+      const E = num2(p.numExperts, 8);
+      const I = num2(p.expertDim ?? p.ffDim, Math.round(D * 8 / 3));
       const m = p.gatedExperts === false ? 2 : 3;
       return D > 0 && I > 0 ? D * E + E * m * D * I : 0;
     }
     case "patchEmbed": {
-      const inC = num(p.inChans ?? p.inChannels, 3);
-      const D = num(p.embedDim, 768);
-      const P = num(p.patchSize, 16);
-      const R = Math.max(0, Math.floor(num(p.registerTokens, 0)));
+      const inC = num2(p.inChans ?? p.inChannels, 3);
+      const D = num2(p.embedDim, 768);
+      const P = num2(p.patchSize, 16);
+      const R = Math.max(0, Math.floor(num2(p.registerTokens, 0)));
       return inC * D * P * P + D + (p.clsToken ? D : 0) + R * D;
     }
     case "seBlock": {
-      const C = num(p.channels, 64);
-      const r = num(p.reductionRatio ?? p.reduction, 16);
+      const C = num2(p.channels, 64);
+      const r = num2(p.reductionRatio ?? p.reduction, 16);
       const mid = Math.max(1, Math.floor(C / r));
       return C * mid + mid + mid * C + C;
     }
     case "layerScale":
-      return num(p.dim, 512);
+      return num2(p.dim, 512);
     case "alibi":
     case "dropPath":
       return 0;
     // ── Frontier architectures (2024-2025) ────────────────────────────────────
     case "mla": {
-      const D = num(p.embedDim, 512);
-      const kv = num(p.kvLatentDim, 128);
-      const H = num(p.numHeads);
-      const nope = num(p.qkNopeHeadDim);
-      const vd = num(p.vHeadDim);
+      const D = num2(p.embedDim, 512);
+      const kv = num2(p.kvLatentDim, 128);
+      const H = num2(p.numHeads);
+      const nope = num2(p.qkNopeHeadDim);
+      const vd = num2(p.vHeadDim);
       if (D > 0 && H > 0 && nope > 0 && vd > 0) {
-        const rope = num(p.ropeHeadDim);
+        const rope = num2(p.ropeHeadDim);
         const qk = nope + rope;
-        const qLora = num(p.qLoraRank);
+        const qLora = num2(p.qLoraRank);
         const q = qLora > 0 ? D * qLora + qLora + qLora * H * qk : D * H * qk;
         return q + D * (kv + rope) + kv + kv * H * (nope + vd) + H * vd * D;
       }
       return D > 0 ? 2 * D * D + 2 * D * kv : 0;
     }
     case "mamba2": {
-      const D = num(p.dModel, 512);
-      const E = num(p.expand, 2);
-      const S = num(p.dState, 128);
-      const H = num(p.numHeads);
+      const D = num2(p.dModel, 512);
+      const E = num2(p.expand, 2);
+      const S = num2(p.dState, 128);
+      const H = num2(p.numHeads);
       if (D > 0 && H > 0) {
-        const di = H * num(p.headDim, 64);
-        const G = num(p.nGroups, 1);
-        const K = num(p.dConv, 4);
+        const di = H * num2(p.headDim, 64);
+        const G = num2(p.nGroups, 1);
+        const K = num2(p.dConv, 4);
         const convDim2 = di + 2 * G * S;
         const inOut = 2 * di + 2 * G * S + H;
         const pb = p.projBias === true;
@@ -4435,73 +4481,73 @@ function estimateLayerParams(type, params, inputShape) {
     }
     case "differentialAttention":
     case "retention": {
-      const D = num(p.embedDim ?? p.dModel, 512);
+      const D = num2(p.embedDim ?? p.dModel, 512);
       return D > 0 ? 4 * D * D : 0;
     }
     case "rgLru": {
-      const D = num(p.dModel, 512);
-      const E = num(p.expand, 1);
+      const D = num2(p.dModel, 512);
+      const E = num2(p.expand, 1);
       const inner = D * E;
       return D > 0 ? 2 * D * inner + 2 * inner : 0;
     }
     case "hyena": {
-      const D = num(p.dModel, 512);
-      const fo = num(p.filterOrder, 64);
-      const order = num(p.order, 2);
+      const D = num2(p.dModel, 512);
+      const fo = num2(p.filterOrder, 64);
+      const order = num2(p.order, 2);
       return D > 0 ? 2 * D * D + order * (D * fo + fo) : 0;
     }
     case "rwkv":
     case "xlstm": {
-      const D = num(p.dModel, 512);
+      const D = num2(p.dModel, 512);
       return D > 0 ? 4 * D * D : 0;
     }
     case "mixtureOfDepths": {
-      const D = num(p.dModel, 512);
+      const D = num2(p.dModel, 512);
       return D > 0 ? D : 0;
     }
     case "tttLayer":
     case "titansMemory": {
-      const D = num(p.dModel, 512);
-      const depth = num(p.memoryDepth, 2);
+      const D = num2(p.dModel, 512);
+      const depth = num2(p.memoryDepth, 2);
       return D > 0 ? depth * D * D : 0;
     }
     case "multiTokenPrediction": {
-      const D = num(p.dModel, 512);
-      const V = num(p.vocabSize, 32e3);
-      const k = num(p.numFutureTokens, 2);
+      const D = num2(p.dModel, 512);
+      const V = num2(p.vocabSize, 32e3);
+      const k = num2(p.numFutureTokens, 2);
       return D > 0 && V > 0 ? k * D * V : 0;
     }
     case "kan": {
-      const inF = num(p.inFeatures, 128);
-      const outF = num(p.outFeatures, 128);
-      const grid = num(p.gridSize, 5);
-      const order = num(p.splineOrder, 3);
+      const inF = num2(p.inFeatures, 128);
+      const outF = num2(p.outFeatures, 128);
+      const grid = num2(p.gridSize, 5);
+      const order = num2(p.splineOrder, 3);
       return inF > 0 && outF > 0 ? inF * outF * (grid + order + 1) : 0;
     }
     case "geglu": {
-      const D = num(p.dim, 512);
-      const I = num(p.hiddenDim, D > 0 ? D * 4 : 0);
+      const D = num2(p.dim, 512);
+      const I = num2(p.hiddenDim, D > 0 ? D * 4 : 0);
       return D > 0 && I > 0 ? 3 * D * I : 0;
     }
     case "grn": {
-      const C = num(p.channels, 256);
+      const C = num2(p.channels, 256);
       return C > 0 ? 2 * C : 0;
     }
     case "qkNorm": {
-      const d = num(p.dim, 64);
+      const d = num2(p.dim, 64);
       return d > 0 ? 2 * d : 0;
     }
     // ── Frontier architectures (new batch) ────────────────────────────────────
     case "deltaNet":
     case "gatedDeltaNet":
     case "gatedLinearAttention": {
-      const d = num(p.dModel, 512);
-      const Hk = num(p.numKeyHeads);
+      const d = num2(p.dModel, 512);
+      const Hk = num2(p.numKeyHeads);
       if (type === "gatedDeltaNet" && d > 0 && Hk > 0) {
-        const Hv = num(p.numHeads, Hk);
-        const dv = num(p.headDim, 128);
-        const dk = num(p.keyHeadDim, dv);
-        const K = num(p.convKernel, 4);
+        const Hv = num2(p.numHeads, Hk);
+        const dv = num2(p.headDim, 128);
+        const dk = num2(p.keyHeadDim, dv);
+        const K = num2(p.convKernel, 4);
         const keyDim = Hk * dk;
         const valDim = Hv * dv;
         return d * (2 * keyDim + 2 * valDim) + d * 2 * Hv + (2 * keyDim + valDim) * K + 2 * Hv + dv + valDim * d;
@@ -4509,102 +4555,102 @@ function estimateLayerParams(type, params, inputShape) {
       return d > 0 ? 4 * d * d : 0;
     }
     case "nativeSparseAttention": {
-      const d = num(p.embedDim, 512);
+      const d = num2(p.embedDim, 512);
       return d > 0 ? 4 * d * d : 0;
     }
     case "sharedExpertMoE": {
-      const d = num(p.embedDim, 4096);
-      const e = num(p.numExperts, 64);
-      const s = num(p.numSharedExperts, 2);
-      const I = num(p.expertDim, 1408);
-      const Is = num(p.sharedExpertDim, I);
+      const d = num2(p.embedDim, 4096);
+      const e = num2(p.numExperts, 64);
+      const s = num2(p.numSharedExperts, 2);
+      const I = num2(p.expertDim, 1408);
+      const Is = num2(p.sharedExpertDim, I);
       const m = p.gatedExperts === false ? 2 : 3;
-      const lat = num(p.latentDim);
+      const lat = num2(p.latentDim);
       if (d > 0 && I > 0 && lat > 0) return d * e + 2 * d * lat + e * m * lat * I + s * m * d * Is;
       return d > 0 && I > 0 ? d * e + e * m * d * I + s * m * d * Is : 0;
     }
     case "ditBlock": {
-      const d = num(p.hiddenDim, 1152);
-      const cond = num(p.condDim, 1152);
+      const d = num2(p.hiddenDim, 1152);
+      const cond = num2(p.condDim, 1152);
       return d > 0 ? 4 * d * d + 8 * d * d + 6 * cond * d : 0;
     }
     case "vectorQuantizer": {
-      const cb = num(p.codebookSize, 8192);
-      const d = num(p.embedDim, 256);
+      const cb = num2(p.codebookSize, 8192);
+      const d = num2(p.embedDim, 256);
       return cb > 0 && d > 0 ? cb * d : 0;
     }
     case "residualVQ": {
-      const q = num(p.numQuantizers, 8);
-      const cb = num(p.codebookSize, 1024);
-      const d = num(p.embedDim, 256);
+      const q = num2(p.numQuantizers, 8);
+      const cb = num2(p.codebookSize, 1024);
+      const d = num2(p.embedDim, 256);
       return q > 0 && cb > 0 && d > 0 ? q * cb * d : 0;
     }
     case "perceiverLatent": {
-      const nL = num(p.numLatents, 64);
-      const lD = num(p.latentDim, 768);
+      const nL = num2(p.numLatents, 64);
+      const lD = num2(p.latentDim, 768);
       return lD > 0 ? nL * lD + 4 * lD * lD : 0;
     }
     case "convNeXtBlock": {
-      const dim = num(p.dim, 96);
-      const k = num(p.kernelSize, 7);
-      const ex = num(p.expandRatio, 4);
+      const dim = num2(p.dim, 96);
+      const k = num2(p.kernelSize, 7);
+      const ex = num2(p.expandRatio, 4);
       return dim > 0 ? dim * k * k + dim + 2 * dim * (dim * ex) : 0;
     }
     case "s4Layer": {
-      const d = num(p.dModel, 512);
-      const s = num(p.dState, 64);
+      const d = num2(p.dModel, 512);
+      const s = num2(p.dState, 64);
       return d > 0 ? d * s * 2 + d * 2 : 0;
     }
     case "dyt": {
-      const dim = num(p.dim, 512);
+      const dim = num2(p.dim, 512);
       return dim > 0 ? 2 * dim + 1 : 0;
     }
     case "film": {
-      const f = num(p.numFeatures, 256);
+      const f = num2(p.numFeatures, 256);
       return f > 0 ? 2 * f : 0;
     }
     case "crossNetworkDCN": {
-      const nL = num(p.numLayers, 3);
-      const d = num(p.inputDim, 256);
+      const nL = num2(p.numLayers, 3);
+      const d = num2(p.inputDim, 256);
       return d > 0 ? nL * (d * d + d) : 0;
     }
     case "ftTransformerBlock": {
-      const d = num(p.dModel, 192);
-      const ff = num(p.ffMult, 4);
+      const d = num2(p.dModel, 192);
+      const ff = num2(p.ffMult, 4);
       return d > 0 ? 4 * d * d + 2 * d * (d * ff) : 0;
     }
     case "deformableAttention": {
-      const d = num(p.embedDim, 256);
-      const h = num(p.numHeads, 8);
-      const pts = num(p.numPoints, 4);
-      const lv = num(p.numLevels, 4);
+      const d = num2(p.embedDim, 256);
+      const h = num2(p.numHeads, 8);
+      const pts = num2(p.numPoints, 4);
+      const lv = num2(p.numLevels, 4);
       return d > 0 ? 2 * d * d + d * (h * lv * pts * 2) + d * (h * lv * pts) : 0;
     }
     case "attentionPool": {
-      const dim = num(p.dim, 512);
-      const seeds = num(p.numSeeds, 1);
+      const dim = num2(p.dim, 512);
+      const seeds = num2(p.numSeeds, 1);
       return dim > 0 ? seeds * dim + 4 * dim * dim : 0;
     }
     // ── Recommendation: sequential / generative ──────────────────────────────
     case "targetAttention": {
-      const d = num(p.embedDim ?? lastDim, 64);
-      const h = num(p.hiddenDim, 36);
+      const d = num2(p.embedDim ?? lastDim, 64);
+      const h = num2(p.hiddenDim, 36);
       return d > 0 ? 4 * d * h + h + h + 1 : 0;
     }
     case "behaviorRetrieval": {
       if (String(p.mode ?? "soft") === "hard") return 0;
-      const d = num(p.embedDim ?? lastDim, 64);
+      const d = num2(p.embedDim ?? lastDim, 64);
       return d > 0 ? d * d : 0;
     }
     case "multiInterest": {
-      const d = num(p.embedDim ?? lastDim, 64);
+      const d = num2(p.embedDim ?? lastDim, 64);
       return d > 0 ? d * d : 0;
     }
     case "hstuBlock": {
-      const d = num(p.embedDim, 512);
-      const h = num(p.numHeads, 4);
-      const dv = num(p.linearDim, 128);
-      const dqk = num(p.attnDim, 128);
+      const d = num2(p.embedDim, 512);
+      const h = num2(p.numHeads, 4);
+      const dv = num2(p.linearDim, 128);
+      const dqk = num2(p.attnDim, 128);
       if (d <= 0) return 0;
       const inProj = d * h * (2 * dv + 2 * dqk);
       const outProj = h * dv * d;
@@ -4612,18 +4658,18 @@ function estimateLayerParams(type, params, inputShape) {
     }
     // ── Video latents / world models ─────────────────────────────────────────
     case "causalConv3d": {
-      const inC = num(p.inChannels ?? ch, 1);
-      const outC = num(p.outChannels);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels ?? ch, 1);
+      const outC = num2(p.outChannels);
+      const k = num2(p.kernelSize, 3);
       return outC > 0 ? inC * outC * k * k * k + outC : 0;
     }
     case "rssm": {
-      const det = num(p.deterDim, 512);
-      const st = num(p.stochDim, 32);
-      const cls = Math.max(1, num(p.stochClasses, 1));
-      const hid = num(p.hiddenDim, 512);
+      const det = num2(p.deterDim, 512);
+      const st = num2(p.stochDim, 32);
+      const cls = Math.max(1, num2(p.stochClasses, 1));
+      const hid = num2(p.hiddenDim, 512);
       const stochFlat = st * cls;
-      const embed = num(lastDim, 0);
+      const embed = num2(lastDim, 0);
       if (det <= 0) return 0;
       const gru = 3 * (det + stochFlat) * det + 3 * det;
       const prior = det * hid + hid + hid * stochFlat + stochFlat;
@@ -4631,16 +4677,16 @@ function estimateLayerParams(type, params, inputShape) {
       return gru + prior + post;
     }
     case "latentActionModel": {
-      const inD = num(lastDim, 512);
-      const hid = num(p.hiddenDim, 512);
-      const lat = num(p.latentDim, 32);
-      const code = num(p.codebookSize, 8);
+      const inD = num2(lastDim, 512);
+      const hid = num2(p.hiddenDim, 512);
+      const lat = num2(p.latentDim, 32);
+      const code = num2(p.codebookSize, 8);
       return 2 * inD * hid + hid + hid * lat + lat + code * lat;
     }
     case "jepaPredictor": {
-      const d = num(p.embedDim, 768);
-      const pd = num(p.predictorDim, 384);
-      const depth = num(p.depth, 6);
+      const d = num2(p.embedDim, 768);
+      const pd = num2(p.predictorDim, 384);
+      const depth = num2(p.depth, 6);
       if (d <= 0 || pd <= 0) return 0;
       const blocks = depth * (4 * pd * pd + 2 * pd * (4 * pd));
       return d * pd + pd + pd * d + d + blocks;
@@ -4649,16 +4695,16 @@ function estimateLayerParams(type, params, inputShape) {
       return 0;
     // ── Multimodal connectors / retrieval objectives ─────────────────────────
     case "patchMerger": {
-      const k = Math.max(1, num(p.mergeSize, 2));
-      const inD = num(p.inDim ?? lastDim, 1280);
-      const outD = num(p.outDim, 3584);
+      const k = Math.max(1, num2(p.mergeSize, 2));
+      const inD = num2(p.inDim ?? lastDim, 1280);
+      const outD = num2(p.outDim, 3584);
       const merged = inD * k * k;
       if (merged <= 0) return 0;
       return 2 * merged + merged * merged + merged + merged * outD + outD;
     }
     case "contrastiveHead": {
-      const inD = num(lastDim, 0);
-      const outD = num(p.projDim, 512);
+      const inD = num2(lastDim, 0);
+      const outD = num2(p.projDim, 512);
       if (inD <= 0 || outD <= 0) return 0;
       return inD * outD + (p.learnableTemp === false ? 0 : 1);
     }
@@ -4668,13 +4714,13 @@ function estimateLayerParams(type, params, inputShape) {
       return 0;
     case "revIN": {
       if (p.affine === false) return 0;
-      const f = num(p.numFeatures, 7);
+      const f = num2(p.numFeatures, 7);
       return f > 0 ? 2 * f : 0;
     }
     case "seriesDecomp":
       return 0;
     case "setAbstraction": {
-      const mlp = Array.isArray(p.mlp) ? p.mlp.map((x) => num(x, 0)) : [64, 64, 128];
+      const mlp = Array.isArray(p.mlp) ? p.mlp.map((x) => num2(x, 0)) : [64, 64, 128];
       let inC = 3 + 3;
       let total = 0;
       for (const outC of mlp) {
@@ -4684,43 +4730,43 @@ function estimateLayerParams(type, params, inputShape) {
       return total;
     }
     case "sparseConv3d": {
-      const inC = num(p.inChannels, 32);
-      const outC = num(p.outChannels, 64);
-      const k = num(p.kernelSize, 3);
+      const inC = num2(p.inChannels, 32);
+      const outC = num2(p.outChannels, 64);
+      const k = num2(p.kernelSize, 3);
       return inC > 0 && outC > 0 ? inC * outC * k * k * k + outC : 0;
     }
     case "nerfPositionalEncoding":
       return 0;
     case "dividedSpaceTimeAttention": {
-      const d = num(p.embedDim, 768);
+      const d = num2(p.embedDim, 768);
       return d > 0 ? 2 * (4 * d * d) : 0;
     }
     case "tubeletEmbed": {
-      const D = num(p.embedDim, 768);
-      const t = Array.isArray(p.tubeletSize) ? p.tubeletSize.map((x) => num(x, 1)) : [2, 16, 16];
-      const inC = num(p.inChans ?? p.inChannels, 3);
+      const D = num2(p.embedDim, 768);
+      const t = Array.isArray(p.tubeletSize) ? p.tubeletSize.map((x) => num2(x, 1)) : [2, 16, 16];
+      const inC = num2(p.inChans ?? p.inChannels, 3);
       const kvol = (t[0] || 1) * (t[1] || 1) * (t[2] || 1);
       return D > 0 ? inC * D * kvol + D : 0;
     }
     // ── Non-LLM coverage (audio / SSM / vision / diffusion) ──────────────────
     case "conformerBlock": {
-      const d = num(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
-      const k = num(p.kernelSize, 31);
+      const d = num2(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
+      const k = num2(p.kernelSize, 31);
       if (d <= 0) return 0;
-      const ff = p.ffDim != null ? num(p.ffDim, d * 4) : d * num(p.ffMult, 4);
+      const ff = p.ffDim != null ? num2(p.ffDim, d * 4) : d * num2(p.ffMult, 4);
       const ffn = 2 * (2 * d * ff);
       const mha = 4 * d * d;
       const conv = 2 * d * d + d * k + d * d;
       return ffn + mha + conv + 6 * d;
     }
     case "mamba": {
-      const d = num(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
-      const e = num(p.expand, 2);
-      const dState = num(p.dState, 16);
-      const dConv = num(p.dConv, 4);
+      const d = num2(p.dModel ?? p.embedDim ?? p.hiddenDim, 256);
+      const e = num2(p.expand, 2);
+      const dState = num2(p.dState, 16);
+      const dConv = num2(p.dConv, 4);
       if (d <= 0) return 0;
       const di = d * e;
-      const dtRank = num(p.dtRank);
+      const dtRank = num2(p.dtRank);
       if (dtRank > 0) {
         const pb = p.projBias === true;
         return d * 2 * di + (pb ? 2 * di : 0) + di * dConv + (p.convBias === false ? 0 : di) + di * (dtRank + 2 * dState) + dtRank * di + di + di * dState + di + di * d + (pb ? d : 0);
@@ -4728,13 +4774,13 @@ function estimateLayerParams(type, params, inputShape) {
       return d * (2 * di) + di * dConv + di * (2 * dState) + di * dState + di * d;
     }
     case "relativePositionBias": {
-      const h = num(p.numHeads, 8);
-      const b = num(p.numBuckets, 32);
+      const h = num2(p.numHeads, 8);
+      const b = num2(p.numBuckets, 32);
       return h * b;
     }
     case "fpn": {
-      const outC = num(p.outChannels, 256);
-      const ins = Array.isArray(p.inChannels) ? p.inChannels.map((x) => num(x)) : [num(p.inChannels, outC)];
+      const outC = num2(p.outChannels, 256);
+      const ins = Array.isArray(p.inChannels) ? p.inChannels.map((x) => num2(x)) : [num2(p.inChannels, outC)];
       if (outC <= 0) return 0;
       let total = 0;
       for (const inC of ins) total += inC * outC + outC;
@@ -4742,17 +4788,17 @@ function estimateLayerParams(type, params, inputShape) {
       return total;
     }
     case "timeEmbedding": {
-      const d = num(p.dim ?? p.embedDim ?? p.hiddenDim, 256);
+      const d = num2(p.dim ?? p.embedDim ?? p.hiddenDim, 256);
       return d > 0 ? 2 * d * d + 2 * d : 0;
     }
     case "lmHead": {
-      const V = num(p.vocabSize ?? p.numEmbeddings);
-      const d = num(p.inFeatures ?? p.hiddenSize ?? p.embedDim ?? lastDim);
+      const V = num2(p.vocabSize ?? p.numEmbeddings);
+      const d = num2(p.inFeatures ?? p.hiddenSize ?? p.embedDim ?? lastDim);
       const bias = p.bias === true ? V : 0;
       return V > 0 && d > 0 ? d * V + bias : 0;
     }
     case "adaIN": {
-      const f = num(p.numFeatures ?? p.embedDim ?? lastDim);
+      const f = num2(p.numFeatures ?? p.embedDim ?? lastDim);
       return f > 0 ? 2 * f : 0;
     }
     // ── No learnable params ──────────────────────────────────────────────────
@@ -5471,7 +5517,7 @@ var EMBED_LIKE = /^(embedding|embeddingBag|timeEmbedding|positionEmbedding)$/;
 var RECURRENT = { lstm: 4, gru: 3, rnn: 1, bidirectionalLSTM: 4 };
 var prod = (s) => s && s.length ? s.reduce((a, b) => a * b, 1) : 0;
 var finiteShape = (s) => !!s && s.length > 0 && s.every((d) => Number.isFinite(d) && d > 0);
-var num2 = (v, d) => {
+var num3 = (v, d) => {
   const x = typeof v === "number" ? v : Number(v);
   return Number.isFinite(x) && x > 0 ? x : d;
 };
@@ -5535,7 +5581,7 @@ function nodeSave(c, ins, shapes, params, ctx) {
   if (ATTENTION_MHA.test(t) && finiteShape(inShape) && inShape.length >= 2) {
     const T = inShape[inShape.length - 2];
     const d = inShape[inShape.length - 1];
-    const heads = num2(p.numHeads ?? p.num_heads ?? p.nhead, 8);
+    const heads = num3(p.numHeads ?? p.num_heads ?? p.nhead, 8);
     const Tk = ins[1] && ins[1].bytes > 0 ? Math.round(ins[1].bytes / BYTES[ins[1].dtype] / d) || T : T;
     const xin = castIn(x, ctx, c.id);
     const kvIn = ins[1] ? castIn(ins[1], ctx, `${c.id}:kv`) : null;
@@ -5547,7 +5593,7 @@ function nodeSave(c, ins, shapes, params, ctx) {
     let scratch = 0;
     let fscratch = 0;
     if (ctx.storesScores(c)) {
-      const window = t === "windowAttention" ? Math.min(Tk, num2(p.windowSize, 7) ** 2) : Tk;
+      const window = t === "windowAttention" ? Math.min(Tk, num3(p.windowSize, 7) ** 2) : Tk;
       const scores = heads * T * window;
       saved2.push(make(id("probs32"), scores, ctx.mixed ? "f32" : ctx.low));
       if (ctx.mixed) saved2.push(make(id("probs16"), scores, ctx.low));
@@ -5562,8 +5608,8 @@ function nodeSave(c, ins, shapes, params, ctx) {
   if (GQA_LIKE.test(t) && finiteShape(inShape) && inShape.length >= 2 && t === "groupedQueryAttention") {
     const T = inShape[inShape.length - 2];
     const d = inShape[inShape.length - 1];
-    const heads = num2(p.numHeads, 32);
-    const kvHeads = num2(p.numKVHeads, 8);
+    const heads = num3(p.numHeads, 32);
+    const kvHeads = num3(p.numKVHeads, 8);
     const hd = d / heads;
     const xin = castIn(x, ctx, c.id);
     const saved2 = [
@@ -5578,22 +5624,22 @@ function nodeSave(c, ins, shapes, params, ctx) {
   if (t === "feedForward" && finiteShape(inShape)) {
     const d = inShape[inShape.length - 1];
     const T = prod(inShape) / d;
-    const ff = num2(p.ffDim ?? p.dFf ?? p.hiddenFeatures, 4 * d);
+    const ff = num3(p.ffDim ?? p.dFf ?? p.hiddenFeatures, 4 * d);
     const saved2 = [castIn(x, ctx, c.id), make(id("h"), T * ff, ctx.low)];
     return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
   }
   if ((t === "swiglu" || t === "geglu") && finiteShape(inShape)) {
     const d = inShape[inShape.length - 1];
     const T = prod(inShape) / d;
-    const I = num2(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(d * 8 / 3));
+    const I = num3(p.intermediateSize ?? p.hiddenFeatures ?? p.ffDim, Math.round(d * 8 / 3));
     const saved2 = [castIn(x, ctx, c.id), make(id("gate"), T * I, ctx.low), make(id("up"), T * I, ctx.low), make(id("act"), T * I, ctx.low), make(id("prod"), T * I, ctx.low)];
     return { saved: saved2, out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
   }
   if (t === "transformerBlock" && finiteShape(inShape) && inShape.length >= 2) {
     const T = inShape[inShape.length - 2];
-    const d = num2(p.embedDim ?? p.hiddenDim ?? p.dModel, inShape[inShape.length - 1]);
-    const heads = num2(p.numHeads, 8);
-    const ff = num2(p.ffDim ?? p.dFf, 4 * d);
+    const d = num3(p.embedDim ?? p.hiddenDim ?? p.dModel, inShape[inShape.length - 1]);
+    const heads = num3(p.numHeads, 8);
+    const ff = num3(p.ffDim ?? p.dFf, 4 * d);
     const decoder = ins.length >= 2;
     const f32 = ctx.mixed ? "f32" : ctx.low;
     const saved2 = [
@@ -5627,8 +5673,8 @@ function nodeSave(c, ins, shapes, params, ctx) {
   const gates = RECURRENT[t];
   if (gates && finiteShape(inShape)) {
     const steps = inShape.length >= 2 ? inShape[inShape.length - 2] : 1;
-    const hidden = num2(p.hiddenSize ?? p.hidden_size, 128);
-    const layers = num2(p.numLayers ?? p.num_layers, 1);
+    const hidden = num3(p.hiddenSize ?? p.hidden_size, 128);
+    const layers = num3(p.numLayers ?? p.num_layers, 1);
     const dirs = p.bidirectional || t === "bidirectionalLSTM" ? 2 : 1;
     const elems = steps * hidden * (gates + 2) * layers * dirs;
     return { saved: [castIn(x, ctx, c.id), make(id("rnn"), elems, ctx.low)], out: make(id("out"), O, ctx.low), backwardScratch: 0, weightCopyBytes: weightCopy, fallback: false };
@@ -5638,7 +5684,7 @@ function nodeSave(c, ins, shapes, params, ctx) {
   if (din >= 2 && tokens > 0 && !/embed|positional|^ema/i.test(t)) {
     let pp = params;
     if (/moe/i.test(t)) {
-      const e = num2(p.numExperts, 8), k = num2(p.topK, 2), s = Number(p.numSharedExperts ?? 0);
+      const e = num3(p.numExperts, 8), k = num3(p.topK, 2), s = Number(p.numSharedExperts ?? 0);
       pp *= Math.min(1, (k + s) / (e + s));
     }
     internal = Math.max(0, tokens * pp / din - O);
@@ -5675,13 +5721,13 @@ function topo(model) {
   for (const c of model.components) if (!seen.has(c.id)) out.push(c);
   return out;
 }
-function trainingMemoryFor(model, opts = {}, shapesIn) {
+function trainingMemoryFor(modelIn, opts = {}, shapesIn) {
+  const { model, shapes } = withTiedHead(modelIn, shapesIn ?? propagateShapes(modelIn).shapes);
   const batch = Math.max(1, Math.round(opts.batchSize ?? 32));
   const precision = opts.precision ?? DEFAULT_PRECISION;
   const optimizer = opts.optimizer ?? DEFAULT_OPTIMIZER;
   const mixed = precision === "bf16-mixed" || precision === "fp16-mixed";
   const ctx = { low: precision === "fp32" ? "f32" : "half", mixed, storesScores: opts.storesScores ?? (() => false) };
-  const shapes = shapesIn ?? propagateShapes(model).shapes;
   const order = topo(model).filter((c) => c.type !== "stickyNote");
   const index = new Map(order.map((c, i) => [c.id, i]));
   const parents = new Map(order.map((c) => [c.id, []]));
@@ -6670,7 +6716,7 @@ var EDIT_RULE_SEEN_IN = {
   "lora-target-partial": ["https://github.com/huggingface/peft/issues/3533"],
   "lora-target-wrapper": ["https://github.com/huggingface/peft/issues/3129"]
 };
-var num3 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var num4 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
 var plural = (n2, w) => `${n2} ${w}${n2 === 1 ? "" : "s"}`;
 var list = (xs, max = 6) => xs.slice(0, max).join(", ") + (xs.length > max ? `, and ${xs.length - max} more` : "");
 var VOCAB_ROW_TYPES = /* @__PURE__ */ new Set(["embedding", "embeddingBag", "lmHead"]);
@@ -6678,13 +6724,13 @@ function vocabField(c) {
   const p = c.params ?? {};
   if (!VOCAB_ROW_TYPES.has(c.type)) return null;
   for (const k of ["vocabSize", "numEmbeddings"]) {
-    const v = num3(p[k]);
+    const v = num4(p[k]);
     if (v != null) return [k, v];
   }
   return null;
 }
 function linearOut(c) {
-  return c.type === "linear" ? num3((c.params ?? {}).outFeatures) : null;
+  return c.type === "linear" ? num4((c.params ?? {}).outFeatures) : null;
 }
 function byName(m) {
   const out = /* @__PURE__ */ new Map();
@@ -6702,7 +6748,7 @@ function inputEmbedding(m) {
 }
 function embedDimOf(c) {
   const p = c.params ?? {};
-  return num3(p.embeddingDim) ?? num3(p.embedDim);
+  return num4(p.embeddingDim) ?? num4(p.embedDim);
 }
 function checkGraphEdit(base, head) {
   const out = [];
@@ -6770,8 +6816,8 @@ function checkGraphEdit(base, head) {
     for (const c of m.components ?? []) {
       if ((c.params ?? {}).tied !== true || c === emb) continue;
       const p = c.params ?? {};
-      const out2 = num3(p.outFeatures) ?? num3(p.vocabSize);
-      const inn = num3(p.inFeatures) ?? num3(p.hiddenSize) ?? num3(p.embedDim);
+      const out2 = num4(p.outFeatures) ?? num4(p.vocabSize);
+      const inn = num4(p.inFeatures) ?? num4(p.hiddenSize) ?? num4(p.embedDim);
       if (out2 != null && V != null && out2 !== V || inn != null && D != null && inn !== D) bad.push(c.name);
     }
     return bad;
@@ -6791,7 +6837,7 @@ function checkGraphEdit(base, head) {
   const baseTied = (base.components ?? []).filter((c) => (c.params ?? {}).tied === true && !h.has(c.name));
   if (baseTied.length && !untied.length) {
     const V = inputEmbedding(head) ? vocabField(inputEmbedding(head))?.[1] : null;
-    const added = (head.components ?? []).filter((c) => !b.has(c.name) && (c.params ?? {}).tied !== true && (c.type === "linear" && num3((c.params ?? {}).outFeatures) === V || c.type === "lmHead"));
+    const added = (head.components ?? []).filter((c) => !b.has(c.name) && (c.params ?? {}).tied !== true && (c.type === "linear" && num4((c.params ?? {}).outFeatures) === V || c.type === "lmHead"));
     if (V != null && added.length) {
       out.push({
         rule: "weight-tying-lost",
@@ -6818,14 +6864,14 @@ var VOCAB_TENSOR = {
 function vocabPaths(c) {
   const out = /* @__PURE__ */ new Map();
   for (const k of VOCAB_KEYS) {
-    const v = num3(c[k]);
+    const v = num4(c[k]);
     if (v != null) out.set(k, v);
   }
   for (const s of NESTED) {
     const sub = c[s];
     if (!isObj(sub)) continue;
     for (const k of VOCAB_KEYS) {
-      const v = num3(sub[k]);
+      const v = num4(sub[k]);
       if (v != null) out.set(`${s}.${k}`, v);
     }
   }
@@ -6842,7 +6888,7 @@ function ropeFactor(c) {
   const found = [];
   const scan = (v, depth) => {
     if (!isObj(v) || depth > 2) return;
-    const f = num3(v.factor);
+    const f = num4(v.factor);
     if (f != null) found.push(f);
     for (const x of Object.values(v)) scan(x, depth + 1);
   };
@@ -6900,7 +6946,7 @@ function checkConfigEdit(baseIn, headIn) {
       });
     }
   }
-  const g = (c, k) => num3(textKey(c, k));
+  const g = (c, k) => num4(textKey(c, k));
   const H0 = g(base, "num_attention_heads");
   const H1 = g(head, "num_attention_heads");
   const K0 = g(base, "num_key_value_heads");
@@ -7605,7 +7651,7 @@ function readPolicy(input) {
   const raw = input;
   const policy = {};
   const problems = [];
-  const num6 = (k) => {
+  const num7 = (k) => {
     const v = raw[k];
     if (v == null) return void 0;
     const n2 = typeof v === "string" ? Number(v) : v;
@@ -7633,11 +7679,11 @@ function readPolicy(input) {
     if (typeof raw.must_fit !== "string") problems.push("must_fit: expected a GPU name like A100-40GB");
     else policy.must_fit = raw.must_fit;
   }
-  const mm = num6("max_memory_gb");
+  const mm = num7("max_memory_gb");
   if (mm != null) policy.max_memory_gb = mm;
-  const ml = num6("max_layers");
+  const ml = num7("max_layers");
   if (ml != null) policy.max_layers = ml;
-  const mc = num6("max_cost_usd");
+  const mc = num7("max_cost_usd");
   if (mc != null) policy.max_cost_usd = mc;
   const ft = list2("forbid_types");
   if (ft) policy.forbid_types = ft;
@@ -7843,7 +7889,8 @@ function layerMemoryTerms(c, shapes, storesScores) {
   }
   return { outputs, scores, internal, recurrent };
 }
-function memoryTermsFor(model, shapes, storesScores) {
+function memoryTermsFor(modelIn, shapesIn, storesScores) {
+  const { model, shapes } = withTiedHead(modelIn, shapesIn);
   const t = { outputs: 0, scores: 0, internal: 0, recurrent: 0, largest: 0 };
   let seen = false;
   for (const c of model.components) {
@@ -8749,12 +8796,12 @@ function renderPlanMarkdown(plan) {
 
 // src/utils/oomDiagnosis.ts
 var UNIT = { b: 1e-9, kib: 1024 / 1e9, kb: 1e-6, mib: 1024 ** 2 / 1e9, mb: 1e-3, gib: 1024 ** 3 / 1e9, gb: 1, tib: 1024 ** 4 / 1e9 };
-var num4 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
+var num5 = (v, unit) => Number(v.replace(/,/g, "")) * (UNIT[unit.toLowerCase()] ?? NaN);
 var SIZE = String.raw`([\d.,]+)\s*(B|KiB|KB|MiB|MB|GiB|GB|TiB)`;
 function grab(text, re) {
   const m = re.exec(text);
   if (!m) return null;
-  const v = num4(m[1], m[2]);
+  const v = num5(m[1], m[2]);
   return Number.isFinite(v) ? v : null;
 }
 function parseOomMessage(text) {
@@ -8767,7 +8814,7 @@ function parseOomMessage(text) {
     const reservedUnallocatedGb = grab(t, new RegExp(String.raw`${SIZE} is reserved by PyTorch but unallocated`, "i"));
     let other = 0;
     for (const m of t.matchAll(new RegExp(String.raw`Process \d+ has ${SIZE} memory in use`, "gi"))) {
-      const v = num4(m[1], m[2]);
+      const v = num5(m[1], m[2]);
       if (Number.isFinite(v)) other += v;
     }
     const processInUseGb = grab(t, new RegExp(String.raw`this process has ${SIZE} memory in use`, "i"));
@@ -9342,7 +9389,7 @@ function nonGemmOf(c, out, stack, qkNorm) {
   const width = out[out.length - 1] || 1;
   const tokens = elems / width;
   const p = c.params ?? {};
-  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num7 = (v) => typeof v === "number" && v > 0 ? v : null;
   const op = (r, n2) => ({ bytes: r.bytes * n2, kernels: r.kernels });
   switch (c.type) {
     case "rmsNorm":
@@ -9352,33 +9399,33 @@ function nonGemmOf(c, out, stack, qkNorm) {
     case "add":
       return op(R.add, elems);
     case "dropout": {
-      const pr = num6(p.p) ?? num6(p.rate) ?? 0;
+      const pr = num7(p.p) ?? num7(p.rate) ?? 0;
       return pr > 0 ? op(R.dropout, elems) : { bytes: 0, kernels: 0 };
     }
     case "swiglu":
     case "geglu": {
-      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
+      const I = num7(p.intermediateSize) ?? num7(p.ffDim) ?? num7(p.hiddenFeatures);
       const g = I ? op(R.swiglu, tokens * I) : { bytes: 0, kernels: 0 };
       return { bytes: g.bytes, kernels: g.kernels + 3 * GEMM_KERNELS };
     }
     case "feedForward": {
-      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
+      const I = num7(p.intermediateSize) ?? num7(p.ffDim) ?? num7(p.hiddenFeatures);
       const g = I ? op(R.gelu, tokens * I) : { bytes: 0, kernels: 0 };
       return { bytes: g.bytes, kernels: g.kernels + 2 * GEMM_KERNELS };
     }
     case "linear":
       return { bytes: 0, kernels: GEMM_KERNELS };
     case "embedding": {
-      const V = num6(p.vocabSize), D = num6(p.embeddingDim) ?? width;
+      const V = num7(p.vocabSize), D = num7(p.embeddingDim) ?? width;
       return { bytes: (V ? V * D * 2 : 0) + tokens * D * 10, kernels: 3 };
     }
     default: {
       if (!ATTN.test(c.type)) return { bytes: 0, kernels: 0 };
-      const E = num6(p.embedDim) ?? num6(p.hiddenDim) ?? width;
-      const H = num6(p.numHeads);
+      const E = num7(p.embedDim) ?? num7(p.hiddenDim) ?? width;
+      const H = num7(p.numHeads);
       if (!H) return { bytes: 0, kernels: 4 * GEMM_KERNELS + ATTN_KERNELS };
-      const hd = num6(p.headDim) ?? E / H;
-      const kv = num6(p.numKVHeads) ?? H;
+      const hd = num7(p.headDim) ?? E / H;
+      const kv = num7(p.numKVHeads) ?? H;
       const qk = tokens * (H + kv) * hd;
       let bytes = R.attnLayout.bytes * tokens * (H + 2 * kv) * hd;
       let kernels = 4 * GEMM_KERNELS + ATTN_KERNELS + R.attnLayout.kernels;
@@ -9394,13 +9441,13 @@ function nonGemmOf(c, out, stack, qkNorm) {
 function ropeOf(c, out, stack) {
   if (!out.length || !ATTN.test(c.type)) return { bytes: 0, kernels: 0 };
   const p = c.params ?? {};
-  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num7 = (v) => typeof v === "number" && v > 0 ? v : null;
   const width = out[out.length - 1] || 1;
   const tokens = out.reduce((a, b) => a * b, 1) / width;
-  const H = num6(p.numHeads);
+  const H = num7(p.numHeads);
   if (!H) return { bytes: 0, kernels: 0 };
-  const hd = num6(p.headDim) ?? (num6(p.embedDim) ?? width) / H;
-  const kv = num6(p.numKVHeads) ?? H;
+  const hd = num7(p.headDim) ?? (num7(p.embedDim) ?? width) / H;
+  const kv = num7(p.numKVHeads) ?? H;
   const r = NONGEMM_RATES[stack].rope;
   return { bytes: r.bytes * tokens * (H + kv) * hd, kernels: r.kernels };
 }
@@ -10075,22 +10122,22 @@ function blocksOf(model) {
 var ATTN2 = /attention|^mla$/i;
 function geometryOf(model) {
   const g = { numHeads: null, numKVHeads: null, hidden: null, ffn: null, numExperts: null, vocab: null };
-  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num7 = (v) => typeof v === "number" && v > 0 ? v : null;
   for (const c of model.components) {
     const p = c.params ?? {};
     if (g.numHeads == null && ATTN2.test(c.type)) {
-      g.numHeads = num6(p.numHeads);
-      g.numKVHeads = num6(p.numKVHeads) ?? g.numHeads;
-      g.hidden = g.hidden ?? num6(p.embedDim);
+      g.numHeads = num7(p.numHeads);
+      g.numKVHeads = num7(p.numKVHeads) ?? g.numHeads;
+      g.hidden = g.hidden ?? num7(p.embedDim);
     }
-    if (g.ffn == null && /^(swiglu|feedForward|geglu|mlp)$/i.test(c.type)) g.ffn = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
+    if (g.ffn == null && /^(swiglu|feedForward|geglu|mlp)$/i.test(c.type)) g.ffn = num7(p.intermediateSize) ?? num7(p.ffDim) ?? num7(p.hiddenFeatures);
     if (/moe/i.test(c.type)) {
-      g.numExperts = g.numExperts ?? num6(p.numExperts);
-      g.ffn = g.ffn ?? num6(p.expertDim) ?? num6(p.ffDim);
+      g.numExperts = g.numExperts ?? num7(p.numExperts);
+      g.ffn = g.ffn ?? num7(p.expertDim) ?? num7(p.ffDim);
     }
     if (c.type === "embedding" && g.vocab == null) {
-      g.vocab = num6(p.vocabSize);
-      g.hidden = g.hidden ?? num6(p.embeddingDim);
+      g.vocab = num7(p.vocabSize);
+      g.hidden = g.hidden ?? num7(p.embeddingDim);
     }
   }
   return g;
@@ -10106,7 +10153,7 @@ function memBoundBytes(c, shapes, hasRope) {
   const width = outS[outS.length - 1] || 1;
   const tokens = elems / width;
   const p = c.params ?? {};
-  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num7 = (v) => typeof v === "number" && v > 0 ? v : null;
   const B = MEM_BYTES_PER_ELEM;
   switch (c.type) {
     case "rmsNorm":
@@ -10117,23 +10164,23 @@ function memBoundBytes(c, shapes, hasRope) {
       return elems * B.add;
     case "swiglu":
     case "geglu": {
-      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
+      const I = num7(p.intermediateSize) ?? num7(p.ffDim) ?? num7(p.hiddenFeatures);
       return I ? tokens * I * B.swiglu : 0;
     }
     case "feedForward": {
-      const I = num6(p.intermediateSize) ?? num6(p.ffDim) ?? num6(p.hiddenFeatures);
+      const I = num7(p.intermediateSize) ?? num7(p.ffDim) ?? num7(p.hiddenFeatures);
       return I ? tokens * I * B.gelu : 0;
     }
     case "embedding": {
-      const V = num6(p.vocabSize), D = num6(p.embeddingDim) ?? width;
+      const V = num7(p.vocabSize), D = num7(p.embeddingDim) ?? width;
       return (V ? V * D * ACT_BYTES : 0) + tokens * D * 10;
     }
     default:
       if (hasRope && ATTN2.test(c.type)) {
-        const H = num6(p.numHeads), E = num6(p.embedDim) ?? width;
+        const H = num7(p.numHeads), E = num7(p.embedDim) ?? width;
         if (!H) return 0;
-        const hd = num6(p.headDim) ?? E / H;
-        const kv = num6(p.numKVHeads) ?? H;
+        const hd = num7(p.headDim) ?? E / H;
+        const kv = num7(p.numKVHeads) ?? H;
         return tokens * (H + kv) * hd * B.rope;
       }
       return 0;
@@ -10150,15 +10197,15 @@ function gemmShapesOf(c, shapes, macs) {
   const outS = sh?.out ?? [];
   const T = inS.length >= 2 ? inS[inS.length - 2] : 1;
   const p = c.params ?? {};
-  const num6 = (v) => typeof v === "number" && v > 0 ? v : null;
+  const num7 = (v) => typeof v === "number" && v > 0 ? v : null;
   const parts = [];
   const mm = (m, n2, k) => ({ macs: m * n2 * k, m, n: n2, k });
   if (c.type === "groupedQueryAttention" || c.type === "multiHeadAttention" || c.type === "causalAttention" || c.type === "selfAttention" || c.type === "attention") {
-    const D = num6(p.embedDim) ?? num6(p.hiddenDim) ?? (inS[inS.length - 1] || null);
+    const D = num7(p.embedDim) ?? num7(p.hiddenDim) ?? (inS[inS.length - 1] || null);
     if (D) {
       if (c.type === "groupedQueryAttention") {
-        const H = num6(p.numHeads) ?? 32, kv = num6(p.numKVHeads) ?? H;
-        const hd = num6(p.headDim) ?? Math.floor(D / H);
+        const H = num7(p.numHeads) ?? 32, kv = num7(p.numKVHeads) ?? H;
+        const hd = num7(p.headDim) ?? Math.floor(D / H);
         parts.push(
           mm(T, H * hd, D),
           mm(T, kv * hd, D),
@@ -10167,15 +10214,15 @@ function gemmShapesOf(c, shapes, macs) {
           mm(T, D, H * hd)
         );
       } else {
-        const H = num6(p.numHeads) ?? 1;
+        const H = num7(p.numHeads) ?? 1;
         parts.push(mm(T, D, D), mm(T, D, D), mm(T, D, D), { macs: T * T * D, m: T, n: T, k: Math.max(1, Math.floor(D / H)), batch: H, attn: true }, mm(T, D, D));
       }
     }
   } else if (c.type === "swiglu" || c.type === "geglu") {
-    const D = num6(p.embedDim) ?? num6(p.inFeatures), I = num6(p.intermediateSize) ?? num6(p.hiddenFeatures) ?? num6(p.ffDim);
+    const D = num7(p.embedDim) ?? num7(p.inFeatures), I = num7(p.intermediateSize) ?? num7(p.hiddenFeatures) ?? num7(p.ffDim);
     if (D && I) parts.push(mm(T, I, D), mm(T, I, D), mm(T, D, I));
   } else if (c.type === "feedForward") {
-    const D = num6(p.embedDim) ?? num6(p.hiddenDim), I = num6(p.ffDim) ?? (D ? 4 * D : null);
+    const D = num7(p.embedDim) ?? num7(p.hiddenDim), I = num7(p.ffDim) ?? (D ? 4 * D : null);
     if (D && I && Math.abs(2 * T * D * I - macs) <= macs * 1e-6) parts.push(mm(T, I, D), mm(T, D, I));
   } else if (c.type === "linear") {
     const K = inS[inS.length - 1], N = outS[outS.length - 1];
@@ -11349,14 +11396,14 @@ function tokenize(source, options = {}) {
             break;
           default: {
             ++cursorPosition;
-            let num6 = consumeWhile(isInteger);
-            if (num6.length > 0 && src[cursorPosition] === "." && isInteger(src[cursorPosition + 1])) {
+            let num7 = consumeWhile(isInteger);
+            if (num7.length > 0 && src[cursorPosition] === "." && isInteger(src[cursorPosition + 1])) {
               ++cursorPosition;
               const frac = consumeWhile(isInteger);
-              num6 = `${num6}.${frac}`;
+              num7 = `${num7}.${frac}`;
             }
             tokens.push(
-              new Token(`${char}${num6}`, num6.length > 0 ? TOKEN_TYPES.NumericLiteral : TOKEN_TYPES.UnaryOperator)
+              new Token(`${char}${num7}`, num7.length > 0 ? TOKEN_TYPES.NumericLiteral : TOKEN_TYPES.UnaryOperator)
             );
             continue;
           }
@@ -11388,13 +11435,13 @@ function tokenize(source, options = {}) {
         continue;
       }
       if (isInteger(char)) {
-        let num6 = consumeWhile(isInteger);
+        let num7 = consumeWhile(isInteger);
         if (tokens.at(-1)?.type !== TOKEN_TYPES.Dot && src[cursorPosition] === "." && isInteger(src[cursorPosition + 1])) {
           ++cursorPosition;
           const frac = consumeWhile(isInteger);
-          num6 = `${num6}.${frac}`;
+          num7 = `${num7}.${frac}`;
         }
-        tokens.push(new Token(num6, TOKEN_TYPES.NumericLiteral));
+        tokens.push(new Token(num7, TOKEN_TYPES.NumericLiteral));
         continue;
       }
       if (isWord(char)) {
@@ -12125,8 +12172,8 @@ function parse(tokens) {
     const token = tokens[current++];
     switch (token.type) {
       case TOKEN_TYPES.NumericLiteral: {
-        const num6 = token.value;
-        return num6.includes(".") ? new FloatLiteral(Number(num6)) : new IntegerLiteral(Number(num6));
+        const num7 = token.value;
+        return num7.includes(".") ? new FloatLiteral(Number(num7)) : new IntegerLiteral(Number(num7));
       }
       case TOKEN_TYPES.StringLiteral: {
         let value = token.value;
@@ -15451,12 +15498,12 @@ function readHumanBytes(v) {
   const n2 = Math.round(Number(m[1]) * base ** pow);
   return n2 > 0 ? n2 : null;
 }
-var num5 = (v) => {
+var num6 = (v) => {
   const n2 = typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN;
   return Number.isFinite(n2) ? n2 : null;
 };
 var posInt3 = (v) => {
-  const n2 = num5(v);
+  const n2 = num6(v);
   return n2 != null && Number.isInteger(n2) && n2 > 0 ? n2 : null;
 };
 function parseJsonObject(v) {
@@ -15569,7 +15616,7 @@ function parseServeCommand(cmd, engineHint) {
       if (has("--enable-expert-parallel")) args.expertParallel = true;
       setNum("maxModelLen", get("--max-model-len"), readTokenCount);
       setNum("maxNumSeqs", get("--max-num-seqs"));
-      setNum("gpuMemoryUtilization", get("--gpu-memory-utilization"), num5);
+      setNum("gpuMemoryUtilization", get("--gpu-memory-utilization"), num6);
       const rope = parseJsonObject(get("--rope-scaling"));
       const hfo = parseJsonObject(get("--hf-overrides"));
       if (rope) args.ropeScaling = rope;
@@ -15615,12 +15662,12 @@ function parseServeCommand(cmd, engineHint) {
       if (has("--enable-ep-moe") || args.epSize != null && args.epSize > 1) args.expertParallel = true;
       setNum("maxModelLen", get("--context-length"), readTokenCount);
       setNum("maxNumSeqs", get("--max-running-requests"));
-      setNum("memFractionStatic", get("--mem-fraction-static"), num5);
+      setNum("memFractionStatic", get("--mem-fraction-static"), num6);
       const over = parseJsonObject(get("--json-model-override-args"));
       if (over?.rope_scaling && typeof over.rope_scaling === "object") args.ropeScaling = over.rope_scaling;
       if (over && posInt3(over.max_position_embeddings) != null) args.maxPositionOverride = posInt3(over.max_position_embeddings);
       args.generationConfigMode = get("--sampling-defaults");
-      setNum("chunkedPrefillSize", get("--chunked-prefill-size"), num5);
+      setNum("chunkedPrefillSize", get("--chunked-prefill-size"), num6);
       if (has("--disable-cuda-graph")) args.enforceEager = true;
       if (has("--enable-dp-attention")) args.dpAttention = true;
       if (/deepep/i.test(get("--moe-a2a-backend") ?? "")) args.deepep = true;
@@ -15639,14 +15686,14 @@ function parseServeCommand(cmd, engineHint) {
     args.ggufFile = hff ?? m ?? (hf ? hf.includes(":") ? hf : `${hf}:Q4_K_M` : void 0);
     const c = get("-c", "--ctx-size");
     if (c != null) {
-      const n2 = num5(c);
+      const n2 = num6(c);
       if (n2 != null && n2 >= 0) args.ctxSize = n2;
     }
     const ngl = get("-ngl", "--gpu-layers", "--n-gpu-layers");
-    if (ngl != null) args.nGpuLayers = ngl === "all" || ngl === "auto" ? ngl : posInt3(ngl) ?? (num5(ngl) === 0 ? 0 : "auto");
+    if (ngl != null) args.nGpuLayers = ngl === "all" || ngl === "auto" ? ngl : posInt3(ngl) ?? (num6(ngl) === 0 ? 0 : "auto");
     const np = get("-np", "--parallel", "--n-parallel");
     if (np != null) {
-      const n2 = num5(np);
+      const n2 = num6(np);
       if (n2 != null && n2 > 0) args.nParallel = n2;
     }
     if (has("-kvu", "--kv-unified")) args.kvUnified = true;
@@ -15654,17 +15701,17 @@ function parseServeCommand(cmd, engineHint) {
     args.cacheTypeK = get("-ctk", "--cache-type-k");
     args.cacheTypeV = get("-ctv", "--cache-type-v");
     args.ropeScalingType = get("--rope-scaling");
-    setNum("ropeScale", get("--rope-scale"), num5);
+    setNum("ropeScale", get("--rope-scale"), num6);
     setNum("yarnOrigCtx", get("--yarn-orig-ctx"));
     args.chatTemplate = get("--chat-template", "--chat-template-file");
     const s = {};
-    const t = num5(get("--temp", "--temperature"));
+    const t = num6(get("--temp", "--temperature"));
     if (t != null) s.temperature = t;
-    const tp = num5(get("--top-p"));
+    const tp = num6(get("--top-p"));
     if (tp != null) s.top_p = tp;
-    const tk = num5(get("--top-k"));
+    const tk = num6(get("--top-k"));
     if (tk != null) s.top_k = tk;
-    const rp = num5(get("--repeat-penalty"));
+    const rp = num6(get("--repeat-penalty"));
     if (rp != null) s.repetition_penalty = rp;
     if (Object.keys(s).length) args.samplerFlags = s;
     setNum("nUbatch", get("-ub", "--ubatch-size"));
@@ -15681,7 +15728,7 @@ function readSampler(raw) {
   const out = {};
   const pick = (k, ...names) => {
     for (const n2 of names) {
-      const v = num5(r[n2]);
+      const v = num6(r[n2]);
       if (v != null) {
         out[k] = v;
         return;
@@ -15826,7 +15873,7 @@ function derivedMaxLen(config, ropeOverride, maxPosOverride, graphMax, rule = "v
   if (!rope) return { len: native, native, rope: null, scaledByFactor: false };
   const unscaled = { len: native, native, rope, scaledByFactor: false };
   const type = String(rope.rope_type ?? rope.type ?? "").toLowerCase();
-  const factor = num5(rope.factor);
+  const factor = num6(rope.factor);
   if (rule === "sglang") {
     if (!factor || rope.original_max_position_embeddings != null || type === "llama3") return unscaled;
     return { len: Math.floor(native * factor), native, rope, scaledByFactor: true };
@@ -15998,7 +16045,7 @@ function kvLayoutFromConfig(config, opts) {
       const inter2 = nh * hd;
       return (inter2 + 2 * ng * state) / tp * (conv - 1) * opts.modelBytes + nh / tp * hd * state * ssmBytes;
     }
-    const expand = num5(c.mamba_expand) ?? num5(c.expand) ?? 2;
+    const expand = num6(c.mamba_expand) ?? num6(c.expand) ?? 2;
     const inter = posInt3(c.intermediate_size) && /^(falcon_)?mamba$/.test(mt) ? posInt3(c.intermediate_size) : hidden ? hidden * expand : null;
     if (inter && state) return inter / tp * (conv - 1) * opts.modelBytes + inter / tp * state * ssmBytes;
     return null;
@@ -16022,7 +16069,7 @@ function kvLayoutFromConfig(config, opts) {
     const k = posInt3(c.full_attention_interval);
     kinds = Array.from({ length: n2 }, (_, i) => (i + 1) % k === 0 ? "attn" : "mamba");
   } else if (posInt3(c.attn_layer_period) != null) {
-    const per = posInt3(c.attn_layer_period), off = num5(c.attn_layer_offset) ?? 0;
+    const per = posInt3(c.attn_layer_period), off = num6(c.attn_layer_offset) ?? 0;
     kinds = Array.from({ length: n2 }, (_, i) => i % per === off ? "attn" : "mamba");
   } else if (/^(mamba|mamba2|falcon_mamba)$/.test(mt)) {
     kinds = Array.from({ length: n2 }, () => "mamba");
@@ -16690,7 +16737,7 @@ function engineMemory(x) {
     let kvAlloc = 0;
     const swaNotes = [];
     const tcfg = textConfigOf(x.config);
-    const lora = num5(tcfg.kv_lora_rank) ?? 0, ropeD = num5(tcfg.qk_rope_head_dim) ?? 0;
+    const lora = num6(tcfg.kv_lora_rank) ?? 0, ropeD = num6(tcfg.qk_rope_head_dim) ?? 0;
     const mlaFactor = lora ? (2 * lora + ropeD) / (lora + ropeD) : 1;
     for (const l of stage.layers) {
       if (l.kind === "mamba") {
