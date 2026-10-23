@@ -6149,7 +6149,7 @@ var DEEP_NO_NORM_MIN_LAYERS = 7;
 var VANISHING_MIN_LAYERS = 5;
 var LARGE_ACTIVATION_MAX_ELEMENTS = 5e7;
 var SWIGLU_RATIO_MIN = 2;
-var SWIGLU_RATIO_MAX = 5;
+var SWIGLU_RATIO_MAX = 6;
 var LARGE_LINEAR_MAX_PARAMS = 1e9;
 var KV_BUDGET_CONTEXT_TOKENS = 8192;
 var KV_BUDGET_MAX_GB = 4;
@@ -11654,7 +11654,7 @@ function buildModalityTower(a) {
   });
   connect(cur, projId);
   y += SP;
-  const tokens = kind === "vision" ? mcfg.num_soft_tokens || Math.floor((imgSize / patchSize) ** 2) || 256 : mcfg.num_soft_tokens || 256;
+  const tokens = a.tokensPerItem || (kind === "vision" ? mcfg.num_soft_tokens || Math.floor((imgSize / patchSize) ** 2) || 256 : mcfg.num_soft_tokens || 256);
   const rsId = generateId();
   components.push({
     id: rsId,
@@ -12386,7 +12386,8 @@ function convertHFConfigToModel(modelId, config) {
         generateId,
         generateConnId,
         xPos: xPos - 520,
-        yStart: yPos
+        yStart: yPos,
+        tokensPerItem: posInt(config.mm_tokens_per_image) ?? posInt(config.vision_soft_tokens_per_image)
       }));
     }
     if (audioCfg && typeof audioCfg === "object") {
@@ -12399,7 +12400,8 @@ function convertHFConfigToModel(modelId, config) {
         generateId,
         generateConnId,
         xPos: xPos + 520,
-        yStart: yPos
+        yStart: yPos,
+        tokensPerItem: posInt(config.audio_soft_tokens_per_image)
       }));
     }
     if (towerOuts.length > 0) {

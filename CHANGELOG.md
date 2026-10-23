@@ -6,6 +6,24 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.2] - 2026-10-22
+
+### Fixed
+- **Vendored engine and plan bundles refreshed** from neurarch main (after #408):
+  - **Legal TP sizes are the intersection of every TP rule** (neurarch #405):
+    attention heads, KV heads (divides or is divided, as vLLM requires), FFN
+    width, vision tower heads and quantization blocks. Qwen2.5-7B-Instruct was
+    listed as 1, 2, 4, 7; TP 7 fails the 4 KV heads and the 18,944 FFN, so the
+    list is now 1, 2, 4.
+  - **Multimodal token counts** (neurarch #406): image tokens are read from
+    `mm_tokens_per_image` (and the vision/audio soft-token keys) before falling
+    back to patch counts. gemma-3-12b-it LoRA training was sized at 548.5 GB
+    with 4,096 patch tokens per image instead of 256 pooled tokens.
+  - **Layout check on multimodal graphs** (neurarch #406): vision and audio
+    encoder layers no longer reset the block numbering, so per-stage memory is
+    computed instead of skipped.
+  - **`swiglu-dim-convention`** no longer flags published SwiGLU ratios up to 6.
+
 ## [0.21.1] - 2026-10-22
 
 ### Fixed

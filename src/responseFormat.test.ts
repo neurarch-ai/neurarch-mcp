@@ -16,7 +16,11 @@ describe('response_format', () => {
     expect(Object.values(c.infoByRule as Record<string, number>).reduce((a, b) => a + b, 0)).toBe(c.counts.info);
     expect(c.omitted.how).toMatch(/response_format: "detailed"/);
     expect(d.omitted).toBeUndefined();
-    expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(d).length / 3);
+    // Shorter, not a fixed ratio: the ratio tracked how many info findings the
+    // model raised, and dropping the swiglu false positive (neurarch #405)
+    // took most of Qwen2.5-7B's away.
+    expect(c.omitted.count).toBeGreaterThan(0);
+    expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(d).length);
   });
 
   it('find_layers concise drops per-row fields, says so, and keeps paging', async () => {
