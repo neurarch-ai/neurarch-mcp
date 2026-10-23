@@ -6,6 +6,21 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.4] - 2026-10-23
+
+### Changed
+- **A checkpoint larger than its config, explained** (neurarch #411): when a
+  tied-embedding model's repo also stores a separate `lm_head` and that
+  accounts for the gap (within 10%), `check_serving_config` reports a note
+  saying so instead of a warning. Qwen3-0.6B (1.19 GB from config, 1.50 GB
+  stored) now reads as clear. Gaps that cannot be explained stay warnings.
+
+### Notes
+- The training-memory estimate this release carries was checked on the
+  Hugging Face loading path for the first time (neurarch #412): 21 runs on an
+  L4 across seven small models, median absolute error 4.4% on the seven that
+  fit, and all 14 out-of-memory runs called correctly.
+
 ## [0.21.3] - 2026-10-22
 
 ### Fixed

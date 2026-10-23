@@ -16882,6 +16882,16 @@ function textLengthConfig(tc) {
   return d ? { ...tc, max_position_embeddings: d[1] } : tc;
 }
 var PUBLISHED_WEIGHTS_TOLERANCE = 0.1;
+function explainCheckpointGap(derivedBytes, storedBytes, cfg, textCfg, bytesPerParam) {
+  if (!(storedBytes > derivedBytes)) return null;
+  const tied = (textCfg?.tie_word_embeddings ?? cfg?.tie_word_embeddings) === true;
+  const vocab = Number(textCfg?.vocab_size ?? cfg?.vocab_size);
+  const hidden = Number(textCfg?.hidden_size ?? cfg?.hidden_size);
+  if (!tied || !(vocab > 0) || !(hidden > 0)) return null;
+  const head = vocab * hidden * bytesPerParam;
+  if (Math.abs(derivedBytes + head - storedBytes) / storedBytes > PUBLISHED_WEIGHTS_TOLERANCE) return null;
+  return `The config ties the embedding and the output head (tie_word_embeddings), so it describes one ${vocab.toLocaleString("en-US")} x ${hidden.toLocaleString("en-US")} matrix; the repo also stores lm_head separately, ${gbs(head / 1e9)} that the engine loads once. Expected, not a misread.`;
+}
 var STORED_FLOAT_BYTES = { F64: 8, F32: 4, F16: 2, BF16: 2 };
 function checkServeConfig(input) {
   const { engine, args, model } = input;
@@ -17393,12 +17403,13 @@ function checkServeConfig(input) {
         }
         const off = w.bytes / loaded - 1;
         if (Math.abs(off) > PUBLISHED_WEIGHTS_TOLERANCE) {
+          const why = quant == null && !gguf ? explainCheckpointGap(w.bytes, loaded, config, tc, DTYPE_BYTES[dtype]) : null;
           add({
             rule: "weights-vs-checkpoint",
             area: "memory",
-            severity: "warn",
+            severity: why ? "info" : "warn",
             title: `Weights read from config.json come to ${gbs(w.bytes / 1e9)}; the checkpoint itself is ${gbs(loaded / 1e9)} (${off > 0 ? "+" : ""}${(off * 100).toFixed(0)}%): memory below uses the checkpoint's size`,
-            detail: `Derived: ${w.basis}. Published: ${how}${pub.saveFormat ? `, save_format ${pub.saveFormat}` : ""}. A gap past ${PUBLISHED_WEIGHTS_TOLERANCE * 100}% means the config does not describe the stored tensors the way this check reads them (a storage format the quantization_config does not name, modules kept 16-bit, a tower or expert set the reading missed). The published size counts every tensor in the repo, including any the engine skips (MTP layers, a speech talker), so for those it is an upper bound.`,
+            detail: `${why ? `${why} ` : ""}Derived: ${w.basis}. Published: ${how}${pub.saveFormat ? `, save_format ${pub.saveFormat}` : ""}. A gap past ${PUBLISHED_WEIGHTS_TOLERANCE * 100}% means the config does not describe the stored tensors the way this check reads them (a storage format the quantization_config does not name, modules kept 16-bit, a tower or expert set the reading missed). The published size counts every tensor in the repo, including any the engine skips (MTP layers, a speech talker), so for those it is an upper bound.`,
             fix: "Nothing to change in the launch; the verdict below is sized on the published bytes.",
             source: pub.source
           });

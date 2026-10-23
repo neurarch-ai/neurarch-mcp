@@ -1,6 +1,6 @@
 {
   "name": "neurarch",
-  "version": "0.21.3",
+  "version": "0.21.4",
   "description": "Know what a GPU job needs before it takes a reservation. Bundles the neurarch-mcp server (size_training_job, diagnose_oom, check_edit, check_parallel_layout, check_serving_config, check_pins, model_changes, lint_model, check_design and the rest), a PreToolUse hook that blocks a training launch whose job will not fit the card it names and a vLLM or SGLang launch with a blocking config finding, and the neurarch skill.",
   "author": {
     "name": "neurarch-ai",
