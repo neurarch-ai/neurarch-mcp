@@ -2268,7 +2268,7 @@ var DEEP_NO_NORM_MIN_LAYERS = 7;
 var VANISHING_MIN_LAYERS = 5;
 var LARGE_ACTIVATION_MAX_ELEMENTS = 5e7;
 var SWIGLU_RATIO_MIN = 2;
-var SWIGLU_RATIO_MAX = 5;
+var SWIGLU_RATIO_MAX = 6;
 var LARGE_LINEAR_MAX_PARAMS = 1e9;
 var KV_BUDGET_CONTEXT_TOKENS = 8192;
 var KV_BUDGET_MAX_GB = 4;
@@ -10033,6 +10033,7 @@ var BLOCK_TYPES = /^(transformerBlock|transformerEncoder|transformerDecoder|tran
 function blocksOf(model) {
   const order = topoOrder2(model).filter((c) => !SKIP_TYPES2.has(c.type));
   const numOf = (c) => {
+    if (/^(Vision|Audio)_/.test(c.name ?? "")) return null;
     const m = /_(\d+)(?=_|$)/.exec(c.name ?? "");
     return m ? Number(m[1]) : null;
   };
@@ -10473,6 +10474,15 @@ function checkParallelLayout(model, layout, opts = {}) {
       });
     }
   } else skipped.push({ check: "world-size", reason: "numGpus not given; the product tp x pp x dp x cp is taken as the world size." });
+  const legalTp = [];
+  for (let d = 1; d <= NODE_SIZE; d++) {
+    if (geo.numHeads != null && geo.numHeads % d !== 0) continue;
+    if (geo.numKVHeads != null && geo.numKVHeads % d !== 0 && d % geo.numKVHeads !== 0) continue;
+    if (geo.hidden != null && geo.hidden % d !== 0) continue;
+    if (geo.ffn != null && geo.ffn % d !== 0) continue;
+    legalTp.push(d);
+  }
+  const legalTpText = legalTp.length ? legalTp.join(", ") : `none up to ${NODE_SIZE}`;
   if (geo.numHeads != null) {
     checked.push("tp-heads");
     if (geo.numHeads % tp !== 0) {
@@ -10481,7 +10491,7 @@ function checkParallelLayout(model, layout, opts = {}) {
         severity: "block",
         title: `TP ${tp} does not divide ${geo.numHeads} attention heads`,
         detail: "Megatron-style TP gives each rank whole heads; a remainder fails at model construction.",
-        fix: `Use a TP degree dividing ${geo.numHeads}: ${divisors(geo.numHeads).filter((d) => d <= NODE_SIZE).join(", ")}.`
+        fix: `Use a TP degree that passes every TP rule for this model: ${legalTpText}.`
       });
     }
     if (geo.numKVHeads != null && geo.numKVHeads !== geo.numHeads) {
@@ -10501,7 +10511,7 @@ function checkParallelLayout(model, layout, opts = {}) {
             severity: "block",
             title: `TP ${tp} neither divides nor is a multiple of ${geo.numKVHeads} KV heads`,
             detail: "Grouped-query attention needs whole KV heads per rank or an exact replication factor.",
-            fix: `Use a TP degree that divides ${geo.numKVHeads} or is a multiple of it.`
+            fix: `Use a TP degree that passes every TP rule for this model: ${legalTpText}.`
           });
         }
       }
@@ -10509,11 +10519,11 @@ function checkParallelLayout(model, layout, opts = {}) {
   } else skipped.push({ check: "tp-heads", reason: "no attention layer with a head count in the graph." });
   if (geo.hidden != null) {
     checked.push("tp-hidden");
-    if (geo.hidden % tp !== 0) add({ rule: "tp-hidden", severity: "block", title: `TP ${tp} does not divide hidden size ${geo.hidden}`, detail: "Column- and row-parallel linears split the hidden dimension evenly across ranks.", fix: `Use a TP degree dividing ${geo.hidden}.` });
+    if (geo.hidden % tp !== 0) add({ rule: "tp-hidden", severity: "block", title: `TP ${tp} does not divide hidden size ${geo.hidden}`, detail: "Column- and row-parallel linears split the hidden dimension evenly across ranks.", fix: `Use a TP degree that passes every TP rule for this model: ${legalTpText}.` });
   }
   if (geo.ffn != null) {
     checked.push("tp-ffn");
-    if (geo.ffn % tp !== 0) add({ rule: "tp-ffn", severity: "block", title: `TP ${tp} does not divide FFN width ${geo.ffn}`, detail: "The MLP up and down projections are split along the intermediate dimension.", fix: `Use a TP degree dividing ${geo.ffn}.` });
+    if (geo.ffn % tp !== 0) add({ rule: "tp-ffn", severity: "block", title: `TP ${tp} does not divide FFN width ${geo.ffn}`, detail: "The MLP up and down projections are split along the intermediate dimension.", fix: `Use a TP degree that passes every TP rule for this model: ${legalTpText}.` });
   }
   checked.push("tp-node");
   if (tp > NODE_SIZE) {
@@ -10987,11 +10997,6 @@ function memoryFix(zero, ac, micro, tp, pp) {
   if (tp < NODE_SIZE) opts.push(`TP ${tp * 2}`);
   opts.push(`PP ${pp * 2}`);
   return `Options, cheapest first: ${opts.join("; ")}.`;
-}
-function divisors(n2) {
-  const out = [];
-  for (let d = 1; d <= n2; d++) if (n2 % d === 0) out.push(d);
-  return out;
 }
 function fmtFlops2(f) {
   if (f >= 1e12) return `${(f / 1e12).toFixed(2)} TFLOP`;
@@ -16737,11 +16742,34 @@ function findRecipe(modelId) {
   return null;
 }
 var gbs = (x) => `${x.toFixed(x < 10 ? 2 : 1)} GB`;
-var divisors2 = (n2) => {
-  const d = [];
-  for (let i = 1; i <= n2; i++) if (n2 % i === 0) d.push(i);
-  return d;
-};
+function tpGeometryOf(config) {
+  const c = config ? textConfigOf(config) : {};
+  const n2 = (v) => typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null;
+  const experts = n2(c.num_experts) ?? n2(c.num_local_experts) ?? n2(c.n_routed_experts);
+  const vc = config?.vision_config ?? null;
+  const q = c.quantization_config ?? config?.quantization_config ?? null;
+  const wbs = q && Array.isArray(q.weight_block_size) ? n2(q.weight_block_size[0]) : null;
+  const mla = n2(c.kv_lora_rank) != null;
+  return {
+    numHeads: n2(c.num_attention_heads) ?? n2(c.n_head),
+    numKVHeads: mla ? null : n2(c.num_key_value_heads) ?? n2(c.num_attention_heads),
+    visionHeads: vc ? n2(vc.num_heads) ?? n2(vc.num_attention_heads) : null,
+    ffn: experts != null ? n2(c.moe_intermediate_size) ?? n2(c.intermediate_size) : n2(c.intermediate_size) ?? n2(c.ffn_dim),
+    blockN: wbs
+  };
+}
+function legalTpSizes(g, max = 8) {
+  const out = [];
+  for (let d = 1; d <= max; d++) {
+    if (g.numHeads != null && g.numHeads % d !== 0) continue;
+    if (g.numKVHeads != null && g.numKVHeads % d !== 0 && d % g.numKVHeads !== 0) continue;
+    if (d > 1 && g.visionHeads != null && g.visionHeads % d !== 0) continue;
+    if (d > 1 && g.ffn != null && g.ffn % d !== 0) continue;
+    if (d > 1 && g.ffn != null && g.blockN != null && g.ffn / d % g.blockN !== 0) continue;
+    out.push(d);
+  }
+  return out;
+}
 function visionKeptSplit(split, config, quant) {
   if (!quant || !config?.vision_config) return split;
   const qc = config.quantization_config ?? textConfigOf(config).quantization_config ?? null;
@@ -16865,6 +16893,17 @@ function checkServeConfig(input) {
   if (lc) {
     skipped.push({ check: "parallel", reason: "llama.cpp splits whole layers (and their KV) across GPUs by default (--split-mode layer), so no head or width divisibility applies." });
   } else {
+    const vcTp = config?.vision_config ?? null;
+    const vHeadsTp = vcTp ? posInt3(vcTp.num_heads) ?? posInt3(vcTp.num_attention_heads) : null;
+    const splitFfnTp = geo.numExperts == null || !ep;
+    const legal = legalTpSizes({
+      numHeads: geo.numHeads ?? null,
+      numKVHeads: !hasMla ? geo.numKVHeads ?? null : null,
+      visionHeads: args.mmEncoderTpMode === "data" ? null : vHeadsTp,
+      ffn: splitFfnTp ? geo.ffn ?? null : null,
+      blockN: splitFfnTp ? ckpt.blockN ?? null : null
+    });
+    const legalText = legal.length ? legal.join(", ") : "none up to 8";
     checked.push("gpu-count");
     if (input.gpus != null && world > input.gpus) {
       add({
@@ -16894,7 +16933,7 @@ function checkServeConfig(input) {
           severity: "block",
           title: `TP ${tp} does not divide ${geo.numHeads} attention heads`,
           detail: `${engine === "vllm" ? "vLLM" : "SGLang"} gives each TP rank whole heads and asserts the division at load ("Total number of attention heads (${geo.numHeads}) must be divisible by tensor parallel size (${tp})").`,
-          fix: `Use a TP size dividing ${geo.numHeads}: ${divisors2(geo.numHeads).filter((d) => d <= 8).join(", ")}.`
+          fix: `Use a TP size that passes every TP rule for this model: ${legalText}.`
         });
       }
       if (!hasMla && geo.numKVHeads != null) {
@@ -16916,7 +16955,7 @@ function checkServeConfig(input) {
               severity: "block",
               title: `TP ${tp} neither divides nor is a multiple of ${geo.numKVHeads} KV heads`,
               detail: "Grouped-query attention needs whole KV heads per rank or an exact replication factor; the engine asserts this at load.",
-              fix: `Use a TP size dividing ${geo.numKVHeads} or a multiple of it.`
+              fix: `Use a TP size that passes every TP rule for this model: ${legalText}.`
             });
           }
         }
@@ -16929,14 +16968,13 @@ function checkServeConfig(input) {
       const dataMode = args.mmEncoderTpMode === "data";
       if (!dataMode && vHeads % tp !== 0) {
         const known = engine === "vllm" && /^(qwen2_vl|qwen2_5_vl|qwen3_vl|qwen3_vl_moe|gemma3|paligemma|idefics3|smolvlm)$/.test(modelType);
-        const ok = divisors2(vHeads).filter((d) => d <= 8 && (geo.numHeads == null || geo.numHeads % d === 0));
         add({
           rule: "tp-vision-heads",
           area: "parallel",
           severity: known ? "block" : "warn",
           title: `TP ${tp} does not divide the vision tower's ${vHeads} attention heads`,
           detail: `${known ? `vLLM splits this tower's heads across TP ranks and asserts the division at load ("` + vHeads + " is not divisible by " + tp + `"), even when the language model's heads divide.` : "Engines that shard the vision tower with the language model split its heads across TP ranks and assert the division at load; whether this architecture does depends on the engine's implementation."}`,
-          fix: `${engine === "vllm" ? "Add --mm-encoder-tp-mode data (the tower runs whole on every rank, which costs its weights once per GPU), or use" : "Use"} a TP size dividing both: ${ok.join(", ") || "none up to 8"}.`,
+          fix: `${engine === "vllm" ? "Add --mm-encoder-tp-mode data (the tower runs whole on every rank, which costs its weights once per GPU), or use" : "Use"} a TP size that passes every TP rule for this model: ${legalText}.`,
           source: "vllm/model_executor/models/qwen2_5_vl.py, qwen3_vl.py, siglip.py (vllm-project/vllm@9499c949): num_heads divided by the TP size unless the ViT runs data-parallel; vllm-project/vllm#55517"
         });
       }
@@ -16953,7 +16991,7 @@ function checkServeConfig(input) {
           severity: "block",
           title: `TP ${tp} does not divide the ${what} ${geo.ffn}`,
           detail: "Column-parallel linears split the intermediate dimension evenly across ranks and assert the division.",
-          fix: `Use a TP size dividing ${geo.ffn}${geo.numExperts != null ? ", or enable expert parallelism so experts stay whole" : ""}.`
+          fix: `Use a TP size that passes every TP rule for this model: ${legalText}${geo.numExperts != null ? "; or enable expert parallelism so experts stay whole" : ""}.`
         });
       } else if (splitFfn && ckpt.blockN != null && geo.ffn / tp % ckpt.blockN !== 0) {
         add({
@@ -16962,7 +17000,7 @@ function checkServeConfig(input) {
           severity: "block",
           title: `TP ${tp} leaves ${geo.ffn / tp} columns of the ${what} per rank, not a multiple of the checkpoint's ${ckpt.blockN}-wide quant block`,
           detail: `The checkpoint is block-quantized (weight_block_size [${ckpt.blockN}, ...]); each rank's slice must hold whole blocks, and vLLM refuses at load ("... is not divisible by weight quantization block_n = ${ckpt.blockN}").`,
-          fix: `Use a TP size where ${geo.ffn} / TP is a multiple of ${ckpt.blockN} (${divisors2(geo.ffn).filter((d) => d <= 8 && geo.ffn / d % ckpt.blockN === 0 && (geo.numHeads == null || geo.numHeads % d === 0)).join(", ") || "none up to 8"})${geo.numExperts != null ? ", or enable expert parallelism so experts stay whole" : ""}.`,
+          fix: `Use a TP size where ${geo.ffn} / TP is a multiple of ${ckpt.blockN} and every other TP rule passes: ${legalText}${geo.numExperts != null ? "; or enable expert parallelism so experts stay whole" : ""}.`,
           source: "Qwen deployment docs, vLLM FP8 troubleshooting: the same block_n = 128 error, fixed by lower TP or expert parallelism (qwen.readthedocs.io/en/latest/deployment/vllm.html)"
         });
       }
@@ -17993,6 +18031,7 @@ export {
   inferencePeakFor,
   inputContractOf,
   layerMemoryTerms,
+  legalTpSizes,
   looksLikeHFConfig,
   loraTargetsFor,
   maxBatchFor,
@@ -18023,6 +18062,7 @@ export {
   smallestSafeCardFor,
   storesScoresUnder,
   tokenSeqLenOf,
+  tpGeometryOf,
   trainingPeakFor,
   upperBoundPhrase,
   upperPeakGb,
