@@ -6,6 +6,18 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.3] - 2026-10-22
+
+### Fixed
+- **Training memory for tied-embedding models** (neurarch #409): models with
+  `tie_word_embeddings` (Qwen3-0.6B and 1.7B, Llama-3.2-1B, gemma) had no
+  output head in the training estimate, so the logits tensor, the largest one
+  in a small language model, was never counted. Qwen3-0.6B at 2,048 tokens,
+  micro-batch 1 was estimated at 3.46 GB against 10.90 GB measured; it is now
+  7.79 GB. The remaining gap on the eight tied whole-model measurements is 13
+  to 45% low and is not fitted away. Parameter counts and structural
+  fingerprints are unchanged.
+
 ## [0.21.2] - 2026-10-22
 
 ### Fixed
