@@ -6,32 +6,42 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
-### Changed
-- **On the v2 MCP SDK** (`@modelcontextprotocol/server` and `client` 2.3.1, plus
-  `@modelcontextprotocol/node` 2.1.1 for the HTTP adapter), so the server speaks
-  protocol revision **2026-07-28** as well as the 2025 revisions it already
-  spoke. v1 (`@modelcontextprotocol/sdk`) only implements up to 2025-11-25 and
-  is maintained until about 2027-01.
-- **stdio** is `serveStdio`: the revision is negotiated per connection, from
-  the same factory for both eras.
-- **HTTP** routes by era with the SDK's own classifier. 2026-07-28 requests are
-  stateless, one server instance per request (`createMcpHandler`). 2025-era
-  requests keep the session flow they had (`Mcp-Session-Id`, GET for the SSE
-  stream, DELETE to close), because a per-request instance cannot know that a
-  2025 client declared elicitation at initialize. The bearer-token and Host
-  checks sit in front of both paths, unchanged.
-- **Elicitation** (`check_design` with `ask_user`): a 2025 connection gets the
-  pushed `elicitation/create` as before; a 2026-07-28 request gets
-  `input_required`, and the client retries the call with the answer. No
-  `requestState` is minted, because the retry recomputes the same decision from
-  the graph and nothing from the first round is carried.
+## [0.21.1] - 2026-10-22
+
+### Fixed
+- **Vendored engine, verifier and plan bundles refreshed** from neurarch main
+  (after #399), so the tools carry these fixes:
+  - **Derived max length per engine and release** (neurarch #386): a
+    `deepseek_yarn` (and similar) rope config no longer multiplies
+    `max_position_embeddings` by the factor on vLLM 0.30+; sarvam-105b was
+    reported as 5,242,880 tokens. vLLM below 0.30 and SGLang keep their own rules.
+  - **ModelOpt checkpoints** (neurarch #393): `hf_quant_config.json` is read
+    and merged the way vLLM does, so NVIDIA FP8 / NVFP4 checkpoints are no
+    longer sized at 16 bits, and `--kv-cache-dtype auto` resolves to the
+    checkpoint's fp8 KV cache.
+  - **Vision tower TP** (neurarch #388): `tp-vision-heads` blocks a TP size
+    that does not divide the vision encoder's heads (Qwen2.5-VL, Qwen3-VL,
+    SigLIP), unless `--mm-encoder-tp-mode data`.
+  - **Chat template portability** (neurarch #384): `template-undefined-call`
+    warns when a template calls a macro it never defines.
+  - **YaRN on vLLM 0.30+**: following vllm-project/vllm#56446, the derived
+    length is `max_position_embeddings`, never multiplied by the YaRN factor.
+    Adding only `rope_scaling` to Qwen3-8B as its model card shows now refuses
+    131072; the fix names raising `max_position_embeddings` in the same override.
+  - **The vendored verifier carries no network call again** (neurarch #400):
+    the Data stage's dataset-metadata fetch had been bundled in.
+  - **LoRA change specs say what they assumed**: the batch and sequence length
+    a change spec was sized at are carried in the result.
 
 ### Added
-- `src/eras.test.ts`: the same calls through the real HTTP server under a
-  2025 client and a client pinned to 2026-07-28, compared result for result,
-  plus elicitation (accept and decline), progress and cancellation on 2026.
+- `model_changes` returns a `lineage` field: where a derivative's model card
+  disagrees with the base it declares (#50).
+- First `eval:tools` baseline committed (#49).
 
 ## [0.21.0] - 2026-10-19
+
+> The v2 SDK entries below shipped in the 0.21.0 package (its dependencies are `@modelcontextprotocol/server` 2.3.1 and `@modelcontextprotocol/node` 2.1.1) but were left under Unreleased; moved here on 2026-10-22.
+
 
 ### Added
 - **`--toolsets=GROUP[,GROUP]`** advertises only the named groups: `sizing`,
@@ -60,6 +70,32 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 ### Changed
 - The core listing is about 5.5k tokens a turn (was 5.4k) and the full one 7.8k
   (was 7.7k): the new `response_format` argument on five tools.
+
+
+### Changed (v2 SDK)
+- **On the v2 MCP SDK** (`@modelcontextprotocol/server` and `client` 2.3.1, plus
+  `@modelcontextprotocol/node` 2.1.1 for the HTTP adapter), so the server speaks
+  protocol revision **2026-07-28** as well as the 2025 revisions it already
+  spoke. v1 (`@modelcontextprotocol/sdk`) only implements up to 2025-11-25 and
+  is maintained until about 2027-01.
+- **stdio** is `serveStdio`: the revision is negotiated per connection, from
+  the same factory for both eras.
+- **HTTP** routes by era with the SDK's own classifier. 2026-07-28 requests are
+  stateless, one server instance per request (`createMcpHandler`). 2025-era
+  requests keep the session flow they had (`Mcp-Session-Id`, GET for the SSE
+  stream, DELETE to close), because a per-request instance cannot know that a
+  2025 client declared elicitation at initialize. The bearer-token and Host
+  checks sit in front of both paths, unchanged.
+- **Elicitation** (`check_design` with `ask_user`): a 2025 connection gets the
+  pushed `elicitation/create` as before; a 2026-07-28 request gets
+  `input_required`, and the client retries the call with the answer. No
+  `requestState` is minted, because the retry recomputes the same decision from
+  the graph and nothing from the first round is carried.
+
+### Added (v2 SDK)
+- `src/eras.test.ts`: the same calls through the real HTTP server under a
+  2025 client and a client pinned to 2026-07-28, compared result for result,
+  plus elicitation (accept and decline), progress and cancellation on 2026.
 
 ## [0.20.0] - 2026-10-19
 

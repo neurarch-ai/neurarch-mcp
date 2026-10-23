@@ -43,7 +43,7 @@ var init_paramEstimator = __esm({
   }
 });
 
-// ../Neurarch/node_modules/react/cjs/react.production.min.js
+// node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
   "../Neurarch/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
@@ -316,7 +316,7 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/react/cjs/react.development.js
+// node_modules/react/cjs/react.development.js
 var require_react_development = __commonJS({
   "../Neurarch/node_modules/react/cjs/react.development.js"(exports, module) {
     "use strict";
@@ -2190,7 +2190,7 @@ var require_react_development = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/react/index.js
+// node_modules/react/index.js
 var require_react = __commonJS({
   "../Neurarch/node_modules/react/index.js"(exports, module) {
     "use strict";
@@ -2202,7 +2202,7 @@ var require_react = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js
+// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js
 var require_use_sync_external_store_shim_production = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js"(exports) {
     "use strict";
@@ -2255,7 +2255,7 @@ var require_use_sync_external_store_shim_production = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
+// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
 var require_use_sync_external_store_shim_development = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js"(exports) {
     "use strict";
@@ -2319,7 +2319,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/shim/index.js
+// node_modules/use-sync-external-store/shim/index.js
 var require_shim = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/shim/index.js"(exports, module) {
     "use strict";
@@ -2331,7 +2331,7 @@ var require_shim = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js
+// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js
 var require_with_selector_production = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js"(exports) {
     "use strict";
@@ -2400,7 +2400,7 @@ var require_with_selector_production = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js
+// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js
 var require_with_selector_development = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js"(exports) {
     "use strict";
@@ -2467,7 +2467,7 @@ var require_with_selector_development = __commonJS({
   }
 });
 
-// ../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js
+// node_modules/use-sync-external-store/shim/with-selector.js
 var require_with_selector = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js"(exports, module) {
     "use strict";
@@ -10528,7 +10528,7 @@ function topologicalSort(components, _model) {
   return result;
 }
 
-// ../Neurarch/node_modules/zustand/esm/vanilla.mjs
+// node_modules/zustand/esm/vanilla.mjs
 var createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -10560,7 +10560,7 @@ var createStoreImpl = (createState) => {
 };
 var createStore = (createState) => createState ? createStoreImpl(createState) : createStoreImpl;
 
-// ../Neurarch/node_modules/zustand/esm/index.mjs
+// node_modules/zustand/esm/index.mjs
 var import_react = __toESM(require_react(), 1);
 var import_with_selector = __toESM(require_with_selector(), 1);
 var { useDebugValue } = import_react.default;
@@ -10692,14 +10692,14 @@ var PROVIDER_DEFS = {
     // throttling like the ":free" models). Proxy overrides the served model by
     // plan anyway; this default matters for BYOK users + the dropdown.
     defaultModel: "deepseek/deepseek-chat",
-    // IDs verified live on openrouter.ai/api/v1/models (2026-06-02). NOTE:
-    // DeepSeek / Qwen-2.5 have no ":free" variant on OpenRouter — only list
-    // free ids that actually exist or requests 404. (The proxy overrides the
+    // IDs verified live on openrouter.ai/api/v1/models (2026-10-19). Only list
+    // free ids that actually exist or requests 404; the same three are the
+    // proxy's fallbacks in api/proxy/[provider].ts. (The proxy overrides the
     // served model by plan anyway; this list is mostly for BYOK users.)
     models: [
-      { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", contextK: 128, tier: "free" },
-      { id: "qwen/qwen3-next-80b-a3b-instruct:free", label: "Qwen3 Next 80B (free)", contextK: 32, tier: "free" },
-      { id: "meta-llama/llama-3.2-3b-instruct:free", label: "Llama 3.2 3B (free, fast)", contextK: 128, tier: "free" },
+      { id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (free)", contextK: 256, tier: "free" },
+      { id: "google/gemma-4-31b-it:free", label: "Gemma 4 31B (free)", contextK: 256, tier: "free" },
+      { id: "google/gemma-4-26b-a4b-it:free", label: "Gemma 4 26B A4B (free, fast)", contextK: 256, tier: "free" },
       { id: "deepseek/deepseek-chat", label: "DeepSeek V3 (cheap, paid)", contextK: 64, tier: "pro" }
     ]
   },

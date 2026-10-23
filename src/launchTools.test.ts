@@ -199,11 +199,29 @@ describe('check_serving_config on Qwen3-8B (real config, tokenizer and generatio
     expect(out.source).toBe(`hf:${QWEN3_8B} (config.json)`);
   });
 
+  // vLLM 0.30+ (vllm-project/vllm#56446, merged 2026-09-11) no longer multiplies
+  // max_position_embeddings by a YaRN factor: the derived length is
+  // max_position_embeddings itself. Adding only `rope_scaling` to Qwen3-8B
+  // (40,960) as its model card shows now refuses 131072; the override must also
+  // raise max_position_embeddings. Both halves are pinned here.
+  it('a local checkpoint with only YaRN added still refuses 131072 on vLLM 0.30+', async () => {
+    const dir = join(cache, 'qwen3-8b-yarn-only');
+    await mkdir(dir, { recursive: true });
+    const cfg = JSON.parse((await fixtureFile('Qwen3-8B', 'config.json'))!);
+    cfg.rope_scaling = { rope_type: 'yarn', factor: 4.0, original_max_position_embeddings: 32768 };
+    await writeFile(join(dir, 'config.json'), JSON.stringify(cfg));
+    await writeFile(join(dir, 'tokenizer_config.json'), (await fixtureFile('Qwen3-8B', 'tokenizer_config.json'))!);
+    await writeFile(join(dir, 'generation_config.json'), (await fixtureFile('Qwen3-8B', 'generation_config.json'))!);
+    const out = await serve({ command: `vllm serve ${dir} --max-model-len 131072`, gpu: 'h100' });
+    expect(out.findings.map((f: any) => f.rule)).toContain('context-over-derived');
+  });
+
   it('diffs against the model it replaces: a local checkpoint with YaRN to 131072', async () => {
     const dir = join(cache, 'qwen3-8b-long');
     await mkdir(dir, { recursive: true });
     const cfg = JSON.parse((await fixtureFile('Qwen3-8B', 'config.json'))!);
     cfg.rope_scaling = { rope_type: 'yarn', factor: 4.0, original_max_position_embeddings: 32768 };
+    cfg.max_position_embeddings = 131072;
     await writeFile(join(dir, 'config.json'), JSON.stringify(cfg));
     await writeFile(join(dir, 'tokenizer_config.json'), (await fixtureFile('Qwen3-8B', 'tokenizer_config.json'))!);
     await writeFile(join(dir, 'generation_config.json'), (await fixtureFile('Qwen3-8B', 'generation_config.json'))!);
