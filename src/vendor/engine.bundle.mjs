@@ -43,7 +43,7 @@ var init_paramEstimator = __esm({
   }
 });
 
-// node_modules/react/cjs/react.production.min.js
+// ../Neurarch/node_modules/react/cjs/react.production.min.js
 var require_react_production_min = __commonJS({
   "../Neurarch/node_modules/react/cjs/react.production.min.js"(exports) {
     "use strict";
@@ -316,7 +316,7 @@ var require_react_production_min = __commonJS({
   }
 });
 
-// node_modules/react/cjs/react.development.js
+// ../Neurarch/node_modules/react/cjs/react.development.js
 var require_react_development = __commonJS({
   "../Neurarch/node_modules/react/cjs/react.development.js"(exports, module) {
     "use strict";
@@ -2190,7 +2190,7 @@ var require_react_development = __commonJS({
   }
 });
 
-// node_modules/react/index.js
+// ../Neurarch/node_modules/react/index.js
 var require_react = __commonJS({
   "../Neurarch/node_modules/react/index.js"(exports, module) {
     "use strict";
@@ -2202,7 +2202,7 @@ var require_react = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js
 var require_use_sync_external_store_shim_production = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js"(exports) {
     "use strict";
@@ -2255,7 +2255,7 @@ var require_use_sync_external_store_shim_production = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js
 var require_use_sync_external_store_shim_development = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.development.js"(exports) {
     "use strict";
@@ -2319,7 +2319,7 @@ var require_use_sync_external_store_shim_development = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/shim/index.js
+// ../Neurarch/node_modules/use-sync-external-store/shim/index.js
 var require_shim = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/shim/index.js"(exports, module) {
     "use strict";
@@ -2331,7 +2331,7 @@ var require_shim = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js
 var require_with_selector_production = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js"(exports) {
     "use strict";
@@ -2400,7 +2400,7 @@ var require_with_selector_production = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js
+// ../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js
 var require_with_selector_development = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.development.js"(exports) {
     "use strict";
@@ -2467,7 +2467,7 @@ var require_with_selector_development = __commonJS({
   }
 });
 
-// node_modules/use-sync-external-store/shim/with-selector.js
+// ../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js
 var require_with_selector = __commonJS({
   "../Neurarch/node_modules/use-sync-external-store/shim/with-selector.js"(exports, module) {
     "use strict";
@@ -10528,7 +10528,7 @@ function topologicalSort(components, _model) {
   return result;
 }
 
-// node_modules/zustand/esm/vanilla.mjs
+// ../Neurarch/node_modules/zustand/esm/vanilla.mjs
 var createStoreImpl = (createState) => {
   let state;
   const listeners = /* @__PURE__ */ new Set();
@@ -10560,7 +10560,7 @@ var createStoreImpl = (createState) => {
 };
 var createStore = (createState) => createState ? createStoreImpl(createState) : createStoreImpl;
 
-// node_modules/zustand/esm/index.mjs
+// ../Neurarch/node_modules/zustand/esm/index.mjs
 var import_react = __toESM(require_react(), 1);
 var import_with_selector = __toESM(require_with_selector(), 1);
 var { useDebugValue } = import_react.default;
@@ -11145,6 +11145,7 @@ var ARCH_DEFAULTS = {
   deit: { hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12 },
   beit: { hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12 }
 };
+var ROTARY_GATED_ENCODERS = /* @__PURE__ */ new Set(["modernbert", "nomic_bert", "new", "gte", "eurobert", "jina_embeddings_v5"]);
 function normalizeAndAugmentConfig(config, modelId) {
   const mIdLower = modelId.toLowerCase();
   const className = config._class_name;
@@ -11153,6 +11154,23 @@ function normalizeAndAugmentConfig(config, modelId) {
     if (!config.architectures || config.architectures.length === 0) config.architectures = [className];
     if (/unet|transformer2dmodel|transformer3dmodel|dit|denois|vae|autoencoder/i.test(className)) {
       config._diffusion = true;
+    }
+  }
+  {
+    const c = config;
+    const CH = { mamba: "M", attention: "*", moe: "E", mlp: "-" };
+    const fold = (list) => {
+      if (!Array.isArray(list) || !list.length) return null;
+      const out = list.map((x) => CH[String(x).toLowerCase()]);
+      return out.every(Boolean) ? out.join("") : null;
+    };
+    if (typeof c.hybrid_override_pattern !== "string") {
+      const p = fold(c.layers_block_type);
+      if (p) c.hybrid_override_pattern = p;
+    }
+    if (typeof c.mtp_hybrid_override_pattern !== "string") {
+      const p = fold(c.mtp_layers_block_type);
+      if (p) c.mtp_hybrid_override_pattern = p;
     }
   }
   {
@@ -11680,7 +11698,16 @@ function decoderLayerSchedule(config, numLayers, layerIsMoE) {
   const widthAt = (i) => widths ? posInt(widths[i]) ?? void 0 : void 0;
   const pattern = typeof c.hybrid_override_pattern === "string" ? c.hybrid_override_pattern : null;
   if (pattern && /^[M*\-E]+$/.test(pattern)) {
-    return [...pattern].map((ch) => ch === "M" ? { mixer: "mamba2", ffn: null } : ch === "*" ? { mixer: "attention", ffn: null } : ch === "E" ? { mixer: null, ffn: "moe" } : { mixer: null, ffn: "mlp" });
+    const blocks = Array.isArray(c.block_configs) && c.block_configs.length === pattern.length ? c.block_configs : null;
+    return [...pattern].map((ch, i) => {
+      if (ch === "M") return { mixer: "mamba2", ffn: null };
+      if (ch === "*") return { mixer: "attention", ffn: null };
+      if (ch === "E") {
+        const w = posInt(blocks?.[i]?.moe_intermediate_size);
+        return w != null ? { mixer: null, ffn: "moe", expertWidth: w } : { mixer: null, ffn: "moe" };
+      }
+      return { mixer: null, ffn: "mlp" };
+    });
   }
   if (isType("mamba") || isType("falcon_mamba")) return Array.from({ length: numLayers }, () => ({ mixer: "mamba", ffn: null }));
   if (isType("mamba2")) return Array.from({ length: numLayers }, () => ({ mixer: "mamba2", ffn: null }));
@@ -12201,13 +12228,16 @@ function convertHFConfigToModel(modelId, config) {
     });
     lastId = embeddingId;
     yPos += verticalSpacing;
+    const encCfg = config;
+    const encRotary = ROTARY_GATED_ENCODERS.has(String(encCfg.model_type ?? "").toLowerCase()) && (encCfg.global_rope_theta != null || encCfg.rope_theta != null || encCfg.rotary_emb_base != null || encCfg.rotary_emb_fraction != null);
+    const encHeads = Number(encCfg.num_attention_heads) || 12;
     const bertPosId = generateId();
     components.push({
       id: bertPosId,
-      type: "learnedPositionalEmbedding",
-      name: "Positional_Embedding",
+      type: encRotary ? "rope" : "learnedPositionalEmbedding",
+      name: encRotary ? "RoPE" : "Positional_Embedding",
       position: { x: xPos, y: yPos },
-      params: { maxLen: config.max_position_embeddings || 512, embedDim: hiddenSize },
+      params: encRotary ? { headDim: encCfg.head_dim ?? Math.round(hiddenSize / encHeads), theta: encCfg.global_rope_theta ?? encCfg.rope_theta ?? encCfg.rotary_emb_base ?? 1e4 } : { maxLen: config.max_position_embeddings || 512, embedDim: hiddenSize },
       inputs: [],
       outputs: []
     });
@@ -12282,12 +12312,13 @@ function convertHFConfigToModel(modelId, config) {
         toPort: "top"
       });
       const ffId = generateId();
+      const gatedKind = ROTARY_GATED_ENCODERS.has(String(config.model_type ?? "").toLowerCase()) ? /silu|swish|swiglu/i.test(String(config.hidden_act ?? config.activation_function ?? "")) ? "swiglu" : "geglu" : null;
       components.push({
         id: ffId,
-        type: "feedForward",
+        type: gatedKind ?? "feedForward",
         name: `FFN_${i + 1}`,
         position: { x: xPos, y: layerStartY + componentSpacing * 3 },
-        params: {
+        params: gatedKind === "swiglu" ? { embedDim: hiddenSize, dim: hiddenSize, intermediateSize } : gatedKind === "geglu" ? { dim: hiddenSize, hiddenDim: intermediateSize } : {
           hiddenDim: hiddenSize,
           ffDim: intermediateSize
         },
@@ -12496,12 +12527,13 @@ function convertHFConfigToModel(modelId, config) {
           };
       }
     };
-    const ffnNode = (kind, label, width) => {
+    const ffnNode = (kind, label, width, expertWidth) => {
       if (kind === "moe") {
-        const params = numSharedExperts > 0 ? { embedDim: hiddenSize, numExperts, numSharedExperts, expertDim, topK } : { embedDim: hiddenSize, numExperts, expertDim, topK };
+        const eDim = expertWidth ?? expertDim;
+        const params = numSharedExperts > 0 ? { embedDim: hiddenSize, numExperts, numSharedExperts, expertDim: eDim, topK } : { embedDim: hiddenSize, numExperts, expertDim: eDim, topK };
         if (nemotronH && String(cfgAny.mlp_hidden_act ?? "").toLowerCase() === "relu2") params.gatedExperts = false;
         const sharedDim = cfgAny.moe_shared_expert_intermediate_size ?? cfgAny.shared_expert_intermediate_size;
-        if (numSharedExperts > 0 && posInt(sharedDim) != null && sharedDim !== expertDim) params.sharedExpertDim = sharedDim;
+        if (numSharedExperts > 0 && posInt(sharedDim) != null && sharedDim !== eDim) params.sharedExpertDim = sharedDim;
         if (numSharedExperts > 0 && posInt(cfgAny.moe_latent_size) != null) params.latentDim = cfgAny.moe_latent_size;
         return { type: numSharedExperts > 0 ? "sharedExpertMoE" : "moeLayer", name: `MoE_${label}`, params };
       }
@@ -12554,7 +12586,7 @@ function convertHFConfigToModel(modelId, config) {
     const decoderBlock = (spec, label) => {
       const layerStartY = yPos;
       if (spec.mixer) sublayer(mixerNode(spec.mixer, label, spec.window), `${normLabel}_${label}_1`, `Add_${label}_attn`, layerStartY);
-      if (spec.ffn) sublayer(ffnNode(spec.ffn, label, spec.ffnWidth), `${normLabel}_${label}_2`, `Add_${label}_ffn`, layerStartY + componentSpacing * 3);
+      if (spec.ffn) sublayer(ffnNode(spec.ffn, label, spec.ffnWidth, spec.expertWidth), `${normLabel}_${label}_2`, `Add_${label}_ffn`, layerStartY + componentSpacing * 3);
       yPos = layerStartY + layerSpacing;
     };
     for (let i = 0; i < schedule.length; i++) decoderBlock(schedule[i], String(i + 1));
