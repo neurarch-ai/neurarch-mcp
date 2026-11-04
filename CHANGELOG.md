@@ -6,6 +6,23 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.5] - 2026-11-04
+
+### Changed
+- **Hybrid stacks are no longer rejected** (neurarch #444): the import gate
+  counted attention blocks only, so every Nemotron-H, Jamba and Qwen3-Next
+  config came back as "the fallback reconstruction likely ran short". It now
+  counts Mamba, Mamba-2, Gated DeltaNet and MLA blocks too.
+- **Nemotron-H in the transformers-native spelling** (neurarch #437): a
+  `layers_block_type` list is read like the `hybrid_override_pattern` string it
+  replaced (NVIDIA-Nemotron-3.5-Lightning had come back at 105.1B instead of
+  32.9B), and Puzzle's per-block expert widths are read from `block_configs`.
+- **Rotary, gated encoders** (neurarch #442, #449): ModernBERT, GTE, nomic,
+  EuroBERT and jina-embeddings-v5 get rotary positions and a gated MLP instead
+  of a learned position table and a plain FFN. ModernBERT-base and gte-base
+  now land within 0.4% of their published totals (they were 9 to 16% low).
+  ESM-2 was measured, got worse, and is left as it was.
+
 ## [0.21.4] - 2026-10-23
 
 ### Changed
