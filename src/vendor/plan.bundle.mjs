@@ -15393,9 +15393,9 @@ var GGUF_KV_BYTES = {
 };
 var ENGINE_SAMPLER_DEFAULTS = {
   // OpenAI-compatible defaults used when --generation-config vllm turns the model's file off.
-  vllm: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, source: "vLLM SamplingParams defaults (temperature 1.0, top_p 1.0, top_k off, repetition_penalty 1.0)" },
-  sglang: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, source: "SGLang sampling defaults when not taken from the model (temperature 1.0, top_p 1.0, top_k off)" },
-  llamacpp: { temperature: 0.8, top_p: 0.95, top_k: 40, repetition_penalty: 1, source: "llama.cpp tools/server/README.md: --temp 0.80, --top-k 40, --top-p 0.95, --repeat-penalty 1.00 (and --min-p 0.05)" }
+  vllm: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, presence_penalty: 0, source: "vLLM SamplingParams defaults (temperature 1.0, top_p 1.0, top_k off, repetition_penalty 1.0)" },
+  sglang: { temperature: 1, top_p: 1, top_k: 0, repetition_penalty: 1, presence_penalty: 0, source: "SGLang sampling defaults when not taken from the model (temperature 1.0, top_p 1.0, top_k off)" },
+  llamacpp: { temperature: 0.8, top_p: 0.95, top_k: 40, repetition_penalty: 1, presence_penalty: 0, source: "llama.cpp tools/server/README.md: --temp 0.80, --top-k 40, --top-p 0.95, --repeat-penalty 1.00 (and --min-p 0.05)" }
 };
 var KNOWN_SERVE_ISSUES = [
   {
@@ -15428,6 +15428,39 @@ var KNOWN_SERVE_ISSUES = [
     fix: "Use the model card's values (thinking: temperature 0.6, top_p 0.95, top_k 20).",
     source: 'Qwen3 model card, "Best Practices" (huggingface.co/Qwen/Qwen3-8B)',
     when: ({ sampler }) => sampler.temperature === 0
+  },
+  {
+    id: "qwen35-small-thinking-loops",
+    match: /qwen3\.?5[-_ ]?(0\.8|2)b/i,
+    engines: ["vllm"],
+    severity: "warn",
+    title: "A small Qwen3.5 is launched with thinking on, which its model card warns about",
+    detail: "The 0.8B and 2B cards say these sizes run non-thinking by default and are more prone to thinking loops than the other Qwen3.5 models, even at the recommended sampling, which can stop generation terminating. In the published weight-space logs, 93% of unedited 0.8B MATH-500 answers with thinking on ran to the 32,768-token cap.",
+    fix: "Drop enable_thinking from --default-chat-template-kwargs unless you measured it on your own traffic, and set a max_tokens you can afford per request.",
+    source: "huggingface.co/Qwen/Qwen3.5-0.8B and Qwen3.5-2B; github.com/RikiyaT/lm_understand-logs (exp8_math/eval/unedited/merged.json, math500.cut_share)",
+    when: ({ args }) => args.chatTemplateKwargs?.enable_thinking === true
+  }
+];
+var CARD_SAMPLERS = [
+  {
+    id: "qwen3.5-small",
+    match: /qwen3\.?5[-_ ]?(0\.8|2)b/i,
+    thinkingByDefault: false,
+    thinking: [
+      { temperature: 1, top_p: 0.95, top_k: 20, presence_penalty: 1.5, repetition_penalty: 1 },
+      // text
+      { temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 0, repetition_penalty: 1 },
+      // VL or precise coding
+      { temperature: 0.6, top_p: 0.95, top_k: 20, presence_penalty: 1.5, repetition_penalty: 1 }
+      // the benchmark footnote
+    ],
+    nonThinking: [
+      { temperature: 1, top_p: 1, top_k: 20, presence_penalty: 2, repetition_penalty: 1 },
+      // text
+      { temperature: 0.7, top_p: 0.8, top_k: 20, presence_penalty: 1.5, repetition_penalty: 1 }
+      // VL
+    ],
+    source: "huggingface.co/Qwen/Qwen3.5-0.8B and Qwen3.5-2B, best practices and benchmark footnote"
   }
 ];
 function tokenizeCommand(cmd) {
@@ -15625,6 +15658,8 @@ function parseServeCommand(cmd, engineHint) {
       args.generationConfigMode = get("--generation-config");
       const ogc = parseJsonObject(get("--override-generation-config"));
       if (ogc) args.samplerFlags = readSampler(ogc);
+      const ctk = parseJsonObject(get("--default-chat-template-kwargs"));
+      if (ctk) args.chatTemplateKwargs = ctk;
       if (has("--enable-auto-tool-choice")) args.enableAutoToolChoice = true;
       setNum("maxNumBatchedTokens", get("--max-num-batched-tokens"), readTokenCount);
       if (has("--enforce-eager")) args.enforceEager = true;
@@ -15713,6 +15748,8 @@ function parseServeCommand(cmd, engineHint) {
     if (tk != null) s.top_k = tk;
     const rp = num6(get("--repeat-penalty"));
     if (rp != null) s.repetition_penalty = rp;
+    const pp = num6(get("--presence-penalty"));
+    if (pp != null) s.presence_penalty = pp;
     if (Object.keys(s).length) args.samplerFlags = s;
     setNum("nUbatch", get("-ub", "--ubatch-size"));
     if (has("--swa-full")) args.swaFull = true;
@@ -15739,6 +15776,7 @@ function readSampler(raw) {
   pick("top_p", "top_p", "topP");
   pick("top_k", "top_k", "topK");
   pick("repetition_penalty", "repetition_penalty", "repetitionPenalty", "repeat_penalty");
+  pick("presence_penalty", "presence_penalty", "presencePenalty");
   return out;
 }
 function readServeSpec(raw) {
@@ -17761,18 +17799,43 @@ function checkServeConfig(input) {
     else add({ rule: k.id, area: "template", severity: "info", title: `${k.title} (not ${engine === "vllm" ? "vLLM" : engine})`, detail: k.detail, fix: "No change needed on this engine; keep it in mind if the deployment moves.", source: k.source });
   }
   const gen = input.generationConfig ?? null;
-  if (!gen) skipped.push({ check: "sampler", reason: "no generation_config.json (fetched for a Hugging Face id)." });
-  else {
-    checked.push("sampler");
-    const rec = readSampler(gen);
+  const samplerDiffs = (rec) => {
     const diffs = [];
-    for (const k of ["temperature", "top_p", "top_k", "repetition_penalty"]) {
+    for (const k of SAMPLER_KEYS) {
       const want = rec[k];
       const got = effSampler.values[k];
       if (want == null || got == null) continue;
       const norm = (x) => k === "top_k" && x < 0 ? 0 : x;
       if (Math.abs(norm(want) - norm(got)) > 1e-9) diffs.push(`${k} ${got} (recommended ${want}, from ${effSampler.origin[k]})`);
     }
+    return diffs;
+  };
+  if (!gen) {
+    const card2 = CARD_SAMPLERS.find((c) => c.match.test(input.modelId ?? "") || c.match.test(model.name ?? ""));
+    if (card2) {
+      checked.push("sampler-card");
+      const set = args.chatTemplateKwargs?.enable_thinking;
+      const thinkingOn = typeof set === "boolean" ? set : card2.thinkingByDefault;
+      const diffs = (thinkingOn ? card2.thinking : card2.nonThinking).map(samplerDiffs).reduce((a, b) => b.length < a.length ? b : a);
+      if (diffs.length) {
+        add({
+          rule: "sampler-differs-card",
+          area: "sampler",
+          severity: "warn",
+          title: `Sampling defaults differ from the model card's ${thinkingOn ? "thinking" : "non-thinking"} values: ${diffs.map((d) => d.split(" (")[0]).join(", ")}`,
+          detail: `${diffs.join("; ")}. The repo ships no generation_config.json, so nothing corrects this at load, and it applies to every request that does not send its own value.`,
+          fix: `Pass the card's values in --override-generation-config, or set them in the gateway.`,
+          source: card2.source
+        });
+      }
+    } else {
+      const set = SAMPLER_KEYS.filter((k) => effSampler.origin[k] !== "engine default" && effSampler.values[k] != null).map((k) => `${k} ${effSampler.values[k]}`);
+      skipped.push({ check: "sampler", reason: set.length ? `no generation_config.json (fetched for a Hugging Face id), so ${set.join(", ")} from this launch has no recommended value to compare with.` : "no generation_config.json (fetched for a Hugging Face id)." });
+    }
+  } else {
+    checked.push("sampler");
+    const rec = readSampler(gen);
+    const diffs = samplerDiffs(rec);
     if (diffs.length) {
       add({
         rule: "sampler-differs",
@@ -17840,11 +17903,12 @@ function checkServeConfig(input) {
     basis: memory?.method === "upper-bound" ? `${SERVE_BASIS} ${SERVE_BASIS_UPPER_BOUND}` : SERVE_BASIS
   };
 }
+var SAMPLER_KEYS = ["temperature", "top_p", "top_k", "repetition_penalty", "presence_penalty"];
 function effectiveSampler(input) {
   const { engine, args } = input;
   const def = ENGINE_SAMPLER_DEFAULTS[engine];
-  const values = { temperature: def.temperature, top_p: def.top_p, top_k: def.top_k, repetition_penalty: def.repetition_penalty };
-  const origin = { temperature: "engine default", top_p: "engine default", top_k: "engine default", repetition_penalty: "engine default" };
+  const values = { temperature: def.temperature, top_p: def.top_p, top_k: def.top_k, repetition_penalty: def.repetition_penalty, presence_penalty: def.presence_penalty };
+  const origin = { temperature: "engine default", top_p: "engine default", top_k: "engine default", repetition_penalty: "engine default", presence_penalty: "engine default" };
   const readsModel = engine === "vllm" ? !/^vllm$/i.test(args.generationConfigMode ?? "auto") : engine === "sglang" ? !/^openai$/i.test(args.generationConfigMode ?? "model") : false;
   if (readsModel && input.generationConfig) {
     const m = readSampler(input.generationConfig);

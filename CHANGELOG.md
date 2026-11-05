@@ -7,6 +7,11 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- `check_serving_config` reads the thinking flag and `presence_penalty`
+  (neurarch #472, #474). `--default-chat-template-kwargs` is no longer ignored,
+  `enable_thinking: true` on Qwen3.5-0.8B or 2B warns as their cards do, and
+  with no `generation_config.json` those models are compared with every sampling
+  row their cards list instead of skipping the check.
 - `model_changes.weights` understands the two verdicts neurarch #463 added:
   `recast` (every changed tensor also changed dtype, so the hashes cannot
   compare values) and `requantized` (one side stores some layers quantized).
