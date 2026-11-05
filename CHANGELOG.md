@@ -15,6 +15,9 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
   and how many changed at the same dtype. `vsBase.casts` lists the dtype pairs.
   The note says a cast or a re-encoded layer cannot hash equal and is not
   evidence of an edit.
+- `unquantized.direction` can also be `converted` (neurarch #466): both sides
+  quantized, in different encodings, as in nvidia/MiniMax-M2.5-NVFP4 against
+  the FP8 MiniMaxAI/MiniMax-M2.5.
 
 ### Fixed
 - Every statement of when this server opens a socket now names all three tools

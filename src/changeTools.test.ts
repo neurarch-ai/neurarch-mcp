@@ -60,7 +60,7 @@ describe('model_changes', () => {
     expect(b.weights.vsBase).toBeNull();
     expect(b.weights.derivatives).toEqual([{ id: 'unsloth/Llama-3.2-1B-Instruct', verdict: 'identical', changed: 0, common: 146, sha: '5a8abab4a5d6f164389b1079fb721cfab8d7126c', baseSha: '9213176726f574b556790deb65791e0c5aa438b6' }]);
     const none = await call({ hf_id: 'acme/demo' });
-    expect(none.weights).toEqual({ vsBase: null, derivatives: [], note: expect.stringMatching(/Not fingerprinted \(4 tracked derivatives are\)\. No comparison is not the same as identical weights/) });
+    expect(none.weights).toEqual({ vsBase: null, derivatives: [], note: expect.stringMatching(/Not fingerprinted \(5 tracked derivatives are\)\. No comparison is not the same as identical weights/) });
     clearChangeCache();
     const f = feedFetch();
     vi.stubGlobal('fetch', (async (u: string, i?: RequestInit) => (String(u).endsWith('/changes-feeds/lineage.json') ? new Response('nope', { status: 503 }) : f(u, i))) as typeof fetch);
@@ -80,6 +80,8 @@ describe('model_changes', () => {
     expect(awq.weights.note).toMatch(/cannot hash equal, so neither is evidence of an edit/);
     const vit = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
     expect(vit.weights.vsBase.unquantized).toBeNull();
+    const conv = await call({ hf_id: 'nvidia/MiniMax-M2.5-NVFP4' });
+    expect(conv.weights.vsBase.unquantized).toEqual({ direction: 'converted', layersReencoded: 47864, tensors: 375, identical: 251, cast: 124, changedSameDtype: 0 });
   });
 
   it('an untracked model is not "no change"', async () => {
