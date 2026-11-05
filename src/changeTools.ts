@@ -53,9 +53,13 @@ interface Releases { changelogUrl?: string; releases: Array<{ version: string; d
 
 interface WeightRow {
   id: string; sha: string; base: string; baseSha: string;
-  verdict: 'identical' | 'head-only' | 'sparse' | 'full' | 'different-structure';
+  verdict: 'identical' | 'head-only' | 'sparse' | 'full' | 'recast' | 'requantized' | 'different-structure';
   common: number; changed: number; onlyBase: number; onlyDerivative: number;
   changedElementShare: number; examples: string[]; sentence: string;
+  /** neurarch #463: changed tensors that also changed dtype, and the dtype pairs. */
+  recast?: number; casts?: string[];
+  /** neurarch #463: one side stores some layers quantized; those are counted apart. */
+  requant?: { direction: 'quantized' | 'dequantized'; layers: number; kept: number; keptChanged: number; keptRecast: number };
 }
 interface WeightsFile { models: WeightRow[] }
 
@@ -114,6 +118,8 @@ async function weightsFile(ctx: ToolContext): Promise<WeightsFile | null> {
 }
 
 const WEIGHTS_CAVEAT = 'Tensor hashes are equal or not: they say which tensors an edit touched, never what it does to behaviour. '
+  + 'A tensor cast to another dtype, or a layer re-encoded by quantization, cannot hash equal, so neither is evidence of an edit; '
+  + 'for a requantized model, unquantized counts what was left in the base encoding. '
   + 'changedElementShare counts whole changed tensors, so it is an upper bound. Compared at the two commits named, not at your pin.';
 
 /** What the weight record says about one model: as a derivative of its declared base, and as a base of tracked derivatives. */
@@ -128,6 +134,13 @@ export function weightsFor(id: string, w: WeightsFile | null) {
       base: self.base, verdict: self.verdict, sentence: self.sentence, sha: self.sha, baseSha: self.baseSha,
       changed: self.changed, common: self.common, added: self.onlyDerivative, dropped: self.onlyBase,
       changedElementShare: self.changedElementShare, examples: self.examples,
+      // Absent from feeds older than neurarch #463; null says "not stated", not zero.
+      casts: self.casts ?? null,
+      unquantized: self.requant ? {
+        direction: self.requant.direction, layersReencoded: self.requant.layers, tensors: self.requant.kept,
+        identical: self.requant.kept - self.requant.keptChanged, cast: self.requant.keptRecast,
+        changedSameDtype: self.requant.keptChanged - self.requant.keptRecast,
+      } : null,
     } : null,
     derivatives,
     note: self || derivatives.length
@@ -183,8 +196,8 @@ export const modelChangesTool: ToolDef = {
     + 'does mechanically, not that anything broke; an untracked model has no record, which is not the same as no '
     + 'change. lineage lists where the model\'s card disagrees with the base it declares (an edit declared as a '
     + 'quantization, a licence outside the base\'s family): statements about the card and tags. weights compares the '
-    + 'model\'s tensors to its declared base by sha256 fingerprint (identical, head-only, sparse, full, '
-    + 'different-structure, with counts) and lists tracked derivatives when the model is itself a base: which tensors '
+    + 'model\'s tensors to its declared base by sha256 fingerprint (identical, head-only, sparse, full, recast, '
+    + 'requantized, different-structure, with counts; a quantization is judged on the tensors it left unquantized) and lists tracked derivatives when the model is itself a base: which tensors '
     + 'changed, never what that does to behaviour. Not for scanning your code for unpinned downloads: use check_pins. '
     + 'Reaches the network: GETs public files from www.neurarch.com; no key, nothing about your code is sent.',
   modelOptional: true,

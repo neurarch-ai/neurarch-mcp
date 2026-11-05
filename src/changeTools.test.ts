@@ -59,14 +59,27 @@ describe('model_changes', () => {
     const b = await call({ hf_id: 'meta-llama/Llama-3.2-1B-Instruct' });
     expect(b.weights.vsBase).toBeNull();
     expect(b.weights.derivatives).toEqual([{ id: 'unsloth/Llama-3.2-1B-Instruct', verdict: 'identical', changed: 0, common: 146, sha: '5a8abab4a5d6f164389b1079fb721cfab8d7126c', baseSha: '9213176726f574b556790deb65791e0c5aa438b6' }]);
-    const none = await call({ hf_id: 'Qwen/Qwen3-8B' });
-    expect(none.weights).toEqual({ vsBase: null, derivatives: [], note: expect.stringMatching(/Not fingerprinted \(2 tracked derivatives are\)\. No comparison is not the same as identical weights/) });
+    const none = await call({ hf_id: 'acme/demo' });
+    expect(none.weights).toEqual({ vsBase: null, derivatives: [], note: expect.stringMatching(/Not fingerprinted \(4 tracked derivatives are\)\. No comparison is not the same as identical weights/) });
     clearChangeCache();
     const f = feedFetch();
     vi.stubGlobal('fetch', (async (u: string, i?: RequestInit) => (String(u).endsWith('/changes-feeds/lineage.json') ? new Response('nope', { status: 503 }) : f(u, i))) as typeof fetch);
     const down = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
     expect(down.weights).toBeNull();
     expect(down.tracked).toBe(false);
+  });
+
+  it('weights: a quantization is judged on what it left unquantized, and a cast is never an edit (neurarch #463)', async () => {
+    vi.stubGlobal('fetch', feedFetch());
+    const fp8 = await call({ hf_id: 'Qwen/Qwen3-8B-FP8' });
+    expect(fp8.weights.vsBase.verdict).toBe('requantized');
+    expect(fp8.weights.vsBase.unquantized).toEqual({ direction: 'quantized', layersReencoded: 252, tensors: 147, identical: 147, cast: 0, changedSameDtype: 0 });
+    const awq = await call({ hf_id: 'Qwen/Qwen2.5-7B-Instruct-AWQ' });
+    expect(awq.weights.vsBase.unquantized).toMatchObject({ tensors: 59, identical: 0, cast: 59, changedSameDtype: 0 });
+    expect(awq.weights.vsBase.casts).toEqual(['BF16>F16']);
+    expect(awq.weights.note).toMatch(/cannot hash equal, so neither is evidence of an edit/);
+    const vit = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
+    expect(vit.weights.vsBase.unquantized).toBeNull();
   });
 
   it('an untracked model is not "no change"', async () => {
