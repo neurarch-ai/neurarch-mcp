@@ -51,6 +51,24 @@ describe('model_changes', () => {
     expect(down.changes).toHaveLength(2); // the change list still answers
   });
 
+  it('weights: a derivative against its declared base, a base\'s tracked derivatives, and nothing claimed when unread', async () => {
+    vi.stubGlobal('fetch', feedFetch());
+    const d = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
+    expect(d.weights.vsBase).toMatchObject({ base: 'google/vit-base-patch16-224', verdict: 'head-only', changed: 2, common: 200, added: 0, dropped: 0, examples: ['classifier.bias', 'classifier.weight'] });
+    expect(d.weights.note).toMatch(/never what it does to behaviour/);
+    const b = await call({ hf_id: 'meta-llama/Llama-3.2-1B-Instruct' });
+    expect(b.weights.vsBase).toBeNull();
+    expect(b.weights.derivatives).toEqual([{ id: 'unsloth/Llama-3.2-1B-Instruct', verdict: 'identical', changed: 0, common: 146, sha: '5a8abab4a5d6f164389b1079fb721cfab8d7126c', baseSha: '9213176726f574b556790deb65791e0c5aa438b6' }]);
+    const none = await call({ hf_id: 'Qwen/Qwen3-8B' });
+    expect(none.weights).toEqual({ vsBase: null, derivatives: [], note: expect.stringMatching(/Not fingerprinted \(2 tracked derivatives are\)\. No comparison is not the same as identical weights/) });
+    clearChangeCache();
+    const f = feedFetch();
+    vi.stubGlobal('fetch', (async (u: string, i?: RequestInit) => (String(u).endsWith('/changes-feeds/lineage.json') ? new Response('nope', { status: 503 }) : f(u, i))) as typeof fetch);
+    const down = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
+    expect(down.weights).toBeNull();
+    expect(down.tracked).toBe(false);
+  });
+
   it('an untracked model is not "no change"', async () => {
     vi.stubGlobal('fetch', feedFetch());
     const r = await call({ hf_id: 'nobody/untracked' });

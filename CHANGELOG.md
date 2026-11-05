@@ -6,6 +6,26 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.7] - 2026-11-05
+
+### Added
+- **`model_changes` returns `weights`** (neurarch #459): the model's tensors
+  compared to the base it declares, by sha256 fingerprint of every tensor
+  (identical, head-only, sparse, full, different-structure, with counts and up
+  to five changed tensor names), and, when the model is itself a base, the
+  tracked derivatives fingerprinted against it. It says which tensors changed,
+  never what that does to behaviour; `changedElementShare` counts whole
+  tensors, so it is an upper bound. Read from
+  `www.neurarch.com/changes-feeds/lineage.json`; an unreachable file leaves
+  `weights` null and the change list still answers.
+
+### Changed
+- The `model_changes` description now opens with the question it answers and
+  states the network access last, so an agent choosing a tool reads the job
+  before the disclaimer.
+- Engine bundle refreshed (neurarch #458): rotary-gated encoder coupling is
+  decided by family membership only.
+
 ## [0.21.6] - 2026-11-04
 
 ### Changed
