@@ -59,7 +59,7 @@ interface WeightRow {
   /** neurarch #463: changed tensors that also changed dtype, and the dtype pairs. */
   recast?: number; casts?: string[];
   /** neurarch #463: one side stores some layers quantized; those are counted apart. */
-  requant?: { direction: 'quantized' | 'dequantized'; layers: number; kept: number; keptChanged: number; keptRecast: number };
+  requant?: { direction: 'quantized' | 'dequantized' | 'converted'; layers: number; kept: number; keptChanged: number; keptRecast: number };
 }
 interface WeightsFile { models: WeightRow[] }
 
@@ -197,7 +197,7 @@ export const modelChangesTool: ToolDef = {
     + 'change. lineage lists where the model\'s card disagrees with the base it declares (an edit declared as a '
     + 'quantization, a licence outside the base\'s family): statements about the card and tags. weights compares the '
     + 'model\'s tensors to its declared base by sha256 fingerprint (identical, head-only, sparse, full, recast, '
-    + 'requantized, different-structure, with counts; a quantization is judged on the tensors it left unquantized) and lists tracked derivatives when the model is itself a base: which tensors '
+    + 'requantized (including a conversion between two quantized encodings), different-structure, with counts; a quantization is judged on the tensors it left unquantized) and lists tracked derivatives when the model is itself a base: which tensors '
     + 'changed, never what that does to behaviour. Not for scanning your code for unpinned downloads: use check_pins. '
     + 'Reaches the network: GETs public files from www.neurarch.com; no key, nothing about your code is sent.',
   modelOptional: true,
