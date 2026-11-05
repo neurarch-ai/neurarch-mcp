@@ -11,8 +11,9 @@
  * nothing about the model itself.
  *
  * ── What leaves the machine ────────────────────────────────────────────────
- * Two GETs of public static files: the advisory index, and the one model's
- * revision list (whose path is the model id). No key, no graph, no repository
+ * GETs of public static files: the advisory index, the one model's revision
+ * list (whose path is the model id), the card lineage record and the weight
+ * fingerprint record. No key, no graph, no repository
  * content. That is why this is the third tool, after plan and history, marked
  * open-world: it reaches the network, and the description says so first.
  *
@@ -50,13 +51,22 @@ interface IndexRow {
 interface AdvisoryIndex { count: number; license?: string; breaking_rule?: string; advisories: IndexRow[] }
 interface Releases { changelogUrl?: string; releases: Array<{ version: string; digest: string; releaseTimestamp: string }> }
 
+interface WeightRow {
+  id: string; sha: string; base: string; baseSha: string;
+  verdict: 'identical' | 'head-only' | 'sparse' | 'full' | 'different-structure';
+  common: number; changed: number; onlyBase: number; onlyDerivative: number;
+  changedElementShare: number; examples: string[]; sentence: string;
+}
+interface WeightsFile { models: WeightRow[] }
+
 interface LineageFile { checked?: number; findings: Array<{ id: string; base: string; kinds: string[]; basis: string[] }> }
 
 let indexCache: { at: number; base: string; data: AdvisoryIndex } | null = null;
 let lineageCache: { at: number; url: string; data: LineageFile | null } | null = null;
+let weightsCache: { at: number; url: string; data: WeightsFile | null } | null = null;
 
 /** For tests: forget the cached index. */
-export function clearChangeCache(): void { indexCache = null; lineageCache = null; }
+export function clearChangeCache(): void { indexCache = null; lineageCache = null; weightsCache = null; }
 
 /** `/changes/lineage.json` on the same host as the feeds. */
 export function lineageUrl(): string {
@@ -81,6 +91,49 @@ async function lineageFile(ctx: ToolContext): Promise<LineageFile | null> {
   }
   lineageCache = { at: Date.now(), url, data };
   return data;
+}
+
+/**
+ * Tensor-fingerprint comparisons of tracked derivatives against the base they
+ * declare (`/changes-feeds/lineage.json`). Supplementary in the same way as the
+ * card lineage: unreachable leaves `weights` null, it never fails the call.
+ */
+async function weightsFile(ctx: ToolContext): Promise<WeightsFile | null> {
+  const url = `${feedsBase()}/lineage.json`;
+  if (weightsCache && weightsCache.url === url && Date.now() - weightsCache.at < INDEX_TTL_MS) return weightsCache.data;
+  let data: WeightsFile | null = null;
+  try {
+    data = await getJson<WeightsFile>(url, ctx, true);
+    if (data && !Array.isArray(data.models)) data = null;
+  } catch (e) {
+    if (ctx.signal?.aborted) throw e;
+    data = null;
+  }
+  weightsCache = { at: Date.now(), url, data };
+  return data;
+}
+
+const WEIGHTS_CAVEAT = 'Tensor hashes are equal or not: they say which tensors an edit touched, never what it does to behaviour. '
+  + 'changedElementShare counts whole changed tensors, so it is an upper bound. Compared at the two commits named, not at your pin.';
+
+/** What the weight record says about one model: as a derivative of its declared base, and as a base of tracked derivatives. */
+export function weightsFor(id: string, w: WeightsFile | null) {
+  if (w == null) return null;
+  const lower = id.toLowerCase();
+  const self = w.models.find(m => m.id.toLowerCase() === lower);
+  const derivatives = w.models.filter(m => m.base.toLowerCase() === lower)
+    .map(m => ({ id: m.id, verdict: m.verdict, changed: m.changed, common: m.common, sha: m.sha, baseSha: m.baseSha }));
+  return {
+    vsBase: self ? {
+      base: self.base, verdict: self.verdict, sentence: self.sentence, sha: self.sha, baseSha: self.baseSha,
+      changed: self.changed, common: self.common, added: self.onlyDerivative, dropped: self.onlyBase,
+      changedElementShare: self.changedElementShare, examples: self.examples,
+    } : null,
+    derivatives,
+    note: self || derivatives.length
+      ? WEIGHTS_CAVEAT
+      : `Not fingerprinted (${w.models.length} tracked derivatives are). No comparison is not the same as identical weights.`,
+  };
 }
 
 async function getJson<T>(url: string, ctx: ToolContext, allow404 = false): Promise<T | null> {
@@ -120,17 +173,20 @@ interface ChangeArgs {
 export const modelChangesTool: ToolDef = {
   name: 'model_changes',
   description:
-    'Reaches the network: GETs three public files from www.neurarch.com (no key, nothing about your code is sent). '
-    + 'What changed in a tracked open-weight model on the Hugging Face Hub, revision by revision: config, tokenizer, '
+    'What changed in a tracked open-weight model on the Hugging Face Hub, revision by revision: config, tokenizer, '
     + 'chat template, generation defaults or weights, with the keys that changed, whether the change touches memory, '
     + 'serving or the tokenizer, and whether it is breaking under the published rule. Call it before moving a pinned '
-    + 'revision, before redeploying an unpinned model, or when a job that used to work behaves differently. Pass '
+    + 'revision, before redeploying an unpinned model, when a job that used to work behaves differently, or to ask '
+    + 'what a fine-tune actually changed against the base it declares. Pass '
     + 'since_revision (a commit, 7+ hex characters) to list only changes after your pin. detail "full" adds each '
     + 'change\'s keys before and after (one extra GET per change on the page). A change record says what a revision '
     + 'does mechanically, not that anything broke; an untracked model has no record, which is not the same as no '
     + 'change. lineage lists where the model\'s card disagrees with the base it declares (an edit declared as a '
-    + 'quantization, a licence outside the base\'s family): statements about the card and tags, not the weights. '
-    + 'Not for scanning your code for unpinned downloads: use check_pins.',
+    + 'quantization, a licence outside the base\'s family): statements about the card and tags. weights compares the '
+    + 'model\'s tensors to its declared base by sha256 fingerprint (identical, head-only, sparse, full, '
+    + 'different-structure, with counts) and lists tracked derivatives when the model is itself a base: which tensors '
+    + 'changed, never what that does to behaviour. Not for scanning your code for unpinned downloads: use check_pins. '
+    + 'Reaches the network: GETs public files from www.neurarch.com; no key, nothing about your code is sent.',
   modelOptional: true,
   annotations: { openWorldHint: true, idempotentHint: true },
   inputSchema: {
@@ -155,8 +211,9 @@ export const modelChangesTool: ToolDef = {
     const index = await advisoryIndex(ctx);
     await ctx.progress?.(1, 3, `reading the revision list for ${id}`);
     const releases = await getJson<Releases>(`${feedsBase()}/renovate/${id}.json`, ctx, true);
-    await ctx.progress?.(2, 3, 'reading the lineage record');
-    const lin = await lineageFile(ctx);
+    await ctx.progress?.(2, 3, 'reading the lineage and weight records');
+    const [lin, wf] = await Promise.all([lineageFile(ctx), weightsFile(ctx)]);
+    const weights = weightsFor(id, wf);
     await ctx.progress?.(3, 3);
     const linHit = lin?.findings.find(f => f.id.toLowerCase() === id.toLowerCase());
     // null: the record could not be read, so nothing is claimed either way.
@@ -180,6 +237,7 @@ export const modelChangesTool: ToolDef = {
         total: 0,
         nextCursor: null,
         lineage,
+        weights,
         changelog,
         license: index.license ?? 'CC-BY-4.0',
         basis: 'Neurarch model change record. A model is recorded only once it is tracked.',
@@ -224,6 +282,7 @@ export const modelChangesTool: ToolDef = {
       total: page.total,
       nextCursor: page.nextCursor,
       lineage,
+      weights,
       changelog,
       license: index.license ?? 'CC-BY-4.0',
       basis: 'Neurarch model change record (OSV format). It says what a revision does mechanically, not that anything broke for anyone.',

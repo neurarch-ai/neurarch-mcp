@@ -12229,7 +12229,7 @@ function convertHFConfigToModel(modelId, config) {
     lastId = embeddingId;
     yPos += verticalSpacing;
     const encCfg = config;
-    const encRotary = ROTARY_GATED_ENCODERS.has(String(encCfg.model_type ?? "").toLowerCase()) && (encCfg.global_rope_theta != null || encCfg.rope_theta != null || encCfg.rotary_emb_base != null || encCfg.rotary_emb_fraction != null);
+    const encRotary = ROTARY_GATED_ENCODERS.has(String(encCfg.model_type ?? "").toLowerCase());
     const encHeads = Number(encCfg.num_attention_heads) || 12;
     const bertPosId = generateId();
     components.push({
@@ -12312,7 +12312,7 @@ function convertHFConfigToModel(modelId, config) {
         toPort: "top"
       });
       const ffId = generateId();
-      const gatedKind = ROTARY_GATED_ENCODERS.has(String(config.model_type ?? "").toLowerCase()) ? /silu|swish|swiglu/i.test(String(config.hidden_act ?? config.activation_function ?? "")) ? "swiglu" : "geglu" : null;
+      const gatedKind = encRotary ? /silu|swish|swiglu/i.test(String(config.hidden_act ?? config.activation_function ?? "")) ? "swiglu" : "geglu" : null;
       components.push({
         id: ffId,
         type: gatedKind ?? "feedForward",

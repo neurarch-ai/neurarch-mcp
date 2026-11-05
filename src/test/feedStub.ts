@@ -33,6 +33,16 @@ export const LINEAGE = {
   ],
 };
 
+/** Shape of /changes-feeds/lineage.json (neurarch #459); both rows copied from the live feed on 2026-11-04. */
+export const WEIGHTS = {
+  what: 'stub',
+  license: 'CC-BY-4.0',
+  models: [
+    { id: 'ISxOdin/vit-base-oxford-iiit-pets', sha: '6fcb4ce433d4b43a19bd9b4d2d906b2646858d45', base: 'google/vit-base-patch16-224', baseSha: '3f49326eb077187dfe1c2a2bb15fbd74e6ab91e3', verdict: 'head-only', common: 200, changed: 2, onlyBase: 0, onlyDerivative: 0, changedElementShare: 0.000332, examples: ['classifier.bias', 'classifier.weight'], sentence: 'Weights match google/vit-base-patch16-224 except the head: 2 head tensors changed, the other 198 identical.' },
+    { id: 'unsloth/Llama-3.2-1B-Instruct', sha: '5a8abab4a5d6f164389b1079fb721cfab8d7126c', base: 'meta-llama/Llama-3.2-1B-Instruct', baseSha: '9213176726f574b556790deb65791e0c5aa438b6', verdict: 'identical', common: 146, changed: 0, onlyBase: 0, onlyDerivative: 0, changedElementShare: 0, examples: [], sentence: 'Weights are byte-identical to meta-llama/Llama-3.2-1B-Instruct: all 146 tensors hash the same.' },
+  ],
+};
+
 const RELEASES: Record<string, unknown> = {
   'Qwen/Qwen3-8B': {
     changelogUrl: `${BASE}/models/Qwen/Qwen3-8B.html`,
@@ -73,6 +83,7 @@ export function feedFetch(opts: { delayMs?: number; fail?: boolean } = {}): Feed
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     if (url === `${BASE}/advisories/index.json`) return json(INDEX);
     if (url === 'https://www.neurarch.com/changes/lineage.json') return json(LINEAGE);
+    if (url === `${BASE}/lineage.json`) return json(WEIGHTS);
     const rel = /\/renovate\/(.+)\.json$/.exec(url);
     if (rel) return RELEASES[rel[1]] ? json(RELEASES[rel[1]]) : json({ error: 'not found' }, 404);
     const adv = /\/advisories\/(x_NXMC-[\d-]+)\.json$/.exec(url);
