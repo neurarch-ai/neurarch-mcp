@@ -6,6 +6,13 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `server.json` lists the hosted Streamable HTTP endpoint
+  (`https://neurarch-mcp.fly.dev/mcp`, serving 0.21.7) under `remotes`, so a
+  client that reads the MCP registry and cannot launch `npx` can find it. The
+  endpoint was already documented on neurarch.com/mcp but absent from the
+  registry entry.
+
 ## [0.21.7] - 2026-11-05
 
 ### Added

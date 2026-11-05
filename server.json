@@ -50,5 +50,11 @@
         }
       ]
     }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://neurarch-mcp.fly.dev/mcp"
+    }
   ]
 }
