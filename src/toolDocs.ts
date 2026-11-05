@@ -43,7 +43,7 @@ export const SHORT: Record<string, string> = {
   export_pytorch: 'The graph as a runnable nn.Module. save_to needs --write and never targets the source file.',
   list_architectures: 'Search 81 bundled reference architectures (DeepSeek-V3, Qwen2.5, Llama, Whisper, ViT, ResNet...); then model_path "zoo:<id>".',
   load_architecture: 'Open one reference architecture and describe it; save_to (with --write) writes it as .neurarch.json.',
-  load_hf_model: 'A Hugging Face repo as a graph from its config.json (the one network call; listed only under --hf). Says whether it used the real config or a family template.',
+  load_hf_model: 'A Hugging Face repo as a graph from its config.json (reaches huggingface.co; listed only under --hf). Says whether it used the real config or a family template.',
   find_models: 'Walk a directory for nn.Module definitions and saved graphs; says which parse fully, partially, or need a runtime trace.',
   suggest_fix: 'Lint findings as diffs against the .py: exact where a number or order is pinned, a proposal where a layer is missing.',
   trace_model: 'Run the model once in Python (neurarch-trace) for a graph with real shapes; needs input dims. The way in for a real repository (static parsing reads 41%).',

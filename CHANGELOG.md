@@ -6,6 +6,14 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Every statement of when this server opens a socket now names all three tools
+  that do (`plan`, `history`, `model_changes`): `--help`, the README condition
+  for "no network calls at all", and the `--hf` flag line. Two error messages
+  and a tool doc that called `--hf` "the one network call this server can make"
+  now say what it is: the Hugging Face switch. `networkClaims.test.ts` derives
+  the list from each tool's `openWorldHint` and fails if any of these drifts.
+
 ### Added
 - `server.json` lists the hosted Streamable HTTP endpoint
   (`https://neurarch-mcp.fly.dev/mcp`, serving 0.21.7) under `remotes`, so a

@@ -137,9 +137,9 @@ export async function loadHFModel(modelId: string): Promise<HFLoadResult> {
     const hit = await readHFCache(modelId);
     if (hit) return hit.result;
     throw new Error(
-      `hf:${modelId} needs the server started with --hf. That flag is the switch for the one `
-      + 'network call this server can make on your behalf (huggingface.co, to read config.json); '
-      + 'without it, no tool opens a socket. Set HF_TOKEN for gated repos.',
+      `hf:${modelId} needs the server started with --hf. That flag is the switch for `
+      + 'reading a Hugging Face config on your behalf (huggingface.co, config.json); without it, nothing '
+      + 'here reaches huggingface.co. Set HF_TOKEN for gated repos.',
     );
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(modelId)) {

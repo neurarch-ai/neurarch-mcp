@@ -102,12 +102,14 @@ Environment:
   the calibrated training peak at the batch, the smallest card, max batch per
   card, a two-card split and one run's cost. Offline.
 
-  Two tools reach the network when you call them, and they say so in their
+  Three tools reach the network when you call them, and they say so in their
   descriptions: plan POSTs the graph to /api/v1/plan for the same card the CI
-  bot posts, and history sends an 8-character structural fingerprint (never the
-  graph) to /api/v1/history. With --hf off, NEURARCH_REPORT unset and neither
-  of those called, this server makes no network calls at all: every other tool,
-  check_design included, runs locally against a vendored verifier.
+  bot posts, history sends an 8-character structural fingerprint (never the
+  graph) to /api/v1/history, and model_changes GETs public change-record files
+  from www.neurarch.com (nothing of yours is sent). With --hf off,
+  NEURARCH_REPORT unset and none of plan, history or model_changes called, this
+  server makes no network calls at all: every other tool, check_design
+  included, runs locally against a vendored verifier.
 
 Read tools (always available):
 ${TOOLS.filter(t => !EXTRA_TOOLS.includes(t) && !LEDGER_TOOLS.includes(t)).map(t => `  - ${t.name}: ${t.description.split('.')[0]}`).join('\n')}
