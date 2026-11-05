@@ -6,6 +6,16 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `model_changes.weights` understands the two verdicts neurarch #463 added:
+  `recast` (every changed tensor also changed dtype, so the hashes cannot
+  compare values) and `requantized` (one side stores some layers quantized).
+  `vsBase.unquantized` reports, for a quantization, what it left in the base
+  encoding: how many tensors, how many are byte-identical, how many were cast,
+  and how many changed at the same dtype. `vsBase.casts` lists the dtype pairs.
+  The note says a cast or a re-encoded layer cannot hash equal and is not
+  evidence of an edit.
+
 ### Fixed
 - Every statement of when this server opens a socket now names all three tools
   that do (`plan`, `history`, `model_changes`): `--help`, the README condition
