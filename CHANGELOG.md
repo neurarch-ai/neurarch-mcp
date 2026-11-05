@@ -6,6 +6,14 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.6] - 2026-11-04
+
+### Changed
+- **Nemotron-H Puzzle's MTP block** (neurarch #457): the draft block reads its
+  own expert width from `mtp_block_configs` instead of the dense
+  `intermediate_size`. NVIDIA-Nemotron-Labs-3-Puzzle-75B-A9B now reconstructs at
+  78.3B (it was 98.0B); Super-120B and Nano-30B are unchanged.
+
 ## [0.21.5] - 2026-11-04
 
 ### Changed

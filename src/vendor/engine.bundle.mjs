@@ -12626,6 +12626,10 @@ function convertHFConfigToModel(modelId, config) {
         const savedY = yPos;
         yPos = mtpY;
         const spec = { mixer: lastFullAttention?.mixer ?? "attention", ffn: lastMoE };
+        const mtpBlocks = Array.isArray(config.mtp_block_configs) ? config.mtp_block_configs : null;
+        const mtpMoe = mtpBlocks?.find((b) => b?.block_type === "moe");
+        const mtpW = posInt(mtpMoe?.moe_intermediate_size);
+        if (spec.ffn === "moe" && mtpW != null) spec.expertWidth = mtpW;
         const before = components.length;
         decoderBlock(spec, tag);
         for (let k = before; k < components.length; k++) {
