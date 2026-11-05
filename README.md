@@ -400,7 +400,7 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 
 - `--write`: expose the six mutation tools. Off by default.
 - `--watch`: reload the model file on change. Pair with the app.
-- `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The one network switch. `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
+- `--hf`: allow `hf:<org/name>` refs and list `load_hf_model`. The Hugging Face switch (the other network reach is the three tools listed under Network). `HF_TOKEN` is sent for gated repos; results are cached for a day under `~/.cache/neurarch-mcp`.
 - `--tools=full`: advertise every read tool. The default is the core nineteen, listed in the order they are meant to be reached for (`size_training_job`, `trace_model`, `plan`, `history`, `diagnose_oom`, `check_edit`, `check_parallel_layout`, `check_serving_config`, `check_pins`, `model_changes`, then the offline ladder); every tool stays callable by name either way, and `neurarch://docs/<tool>` has the full contract. The default listing costs the agent about 5.5k tokens per turn, the full one 7.8k, output schemas included.
 - `--toolsets=sizing,serving,...`: advertise only these groups (`sizing`, `parallel`, `serving`, `changes`, `design`, `models`, `write`). A team that only sizes training jobs loads six tools (about 1.6k tokens a turn). `write` is the same as `--write`, with the same startup refusals; an unknown group name stops the server at startup. Overrides `--tools`.
 - `--read-only`: never expose write tools, even with `--write` or `--toolsets=write`.
@@ -420,7 +420,7 @@ Same `command` + `args` shape; only the file location differs. For HTTP clients,
 
 Both switches are off by default and `NEURARCH_REPORT` has not changed: `plan` joins the three tools that already send a row so that opting in means one thing across every tool that grades, and `history` grades nothing and sends none. Nothing here is new default-on behaviour; the three tools reach out when they are called, which their descriptions and their `openWorldHint` annotation say out loud. Under `--hf` every read tool is annotated open-world too, because any of them can be handed an `hf:` model.
 
-With `--hf` off, `NEURARCH_REPORT` unset and neither `plan` nor `history` called, this server makes **no network calls at all**, and no other tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package, so your model never leaves the machine. `NEURARCH_API` (the same variable `neurarch-trace` uses) points the two ledger tools somewhere else. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
+With `--hf` off, `NEURARCH_REPORT` unset and none of `plan`, `history` or `model_changes` called, this server makes **no network calls at all**, and no other tool is an exception: the parser, the rule engine, the verifier, the ranker and the reference library are vendored into the package, so your model never leaves the machine. `NEURARCH_API` (the same variable `neurarch-trace` uses) points the two ledger tools somewhere else. Corpus policy: [neurarch.com/rules.html#data](https://neurarch.com/rules.html#data).
 
 ## Remote access
 

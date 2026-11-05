@@ -1,6 +1,7 @@
 /**
  * The two tools that make an organisation's memory visible inside a coding
- * agent, and the only two in this server that reach the network on purpose.
+ * agent, and two of the three in this server that reach the network on purpose
+ * (model_changes, in changeTools.ts, is the third).
  *
  *   plan      the front-door card: will it run, what it costs, where it fits,
  *             which of the repository's own rules it breaks, and what happened

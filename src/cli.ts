@@ -20,7 +20,7 @@ export interface ParsedFlags {
   httpPort?: number;
   /** Bind address from `--host=ADDR`; undefined falls back to loopback. */
   httpHost?: string;
-  /** Allow hf:<org/name> model refs and list load_hf_model: the one network switch. */
+  /** Allow hf:<org/name> model refs and list load_hf_model: the Hugging Face network switch. */
   hfEnabled: boolean;
   /** Which read tools to advertise: the 'core' dozen (default), 'full', or named groups from `--toolsets`. */
   toolSet: ToolSetName;
@@ -351,7 +351,7 @@ export function resolveToolCall(name: string, writeEnabled: boolean): ToolResolu
   const hint = isGatedWriteTool
     ? ' Restart the MCP server with --write to enable mutation tools.'
     : isGatedHfTool
-      ? ' Restart the MCP server with --hf to allow the Hugging Face lookup (the one network call this server can make).'
+      ? ' Restart the MCP server with --hf to allow the Hugging Face lookup (the only Hugging Face request this server makes).'
       : '';
   if (hint) return { errorText: `Unknown tool: ${name}.${hint}` };
   // A near miss (lint vs lint_model, check_serving vs check_serving_config)
