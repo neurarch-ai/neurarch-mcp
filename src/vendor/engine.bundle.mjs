@@ -12312,13 +12312,19 @@ function convertHFConfigToModel(modelId, config) {
         toPort: "top"
       });
       const ffId = generateId();
-      const gatedKind = encRotary ? /silu|swish|swiglu/i.test(String(config.hidden_act ?? config.activation_function ?? "")) ? "swiglu" : "geglu" : null;
+      const encAct = String(config.hidden_act ?? config.activation_function ?? "");
+      const encSwish = /silu|swish|swiglu/i.test(encAct);
+      const encFamily = String(encCfg.model_type ?? "").toLowerCase();
+      const gatedKind = encRotary ? encSwish ? "swiglu" : encFamily === "nomic_bert" ? null : "geglu" : null;
+      const encExperts = Number(encCfg.num_experts) || 0;
+      const encMoeEvery = Number(encCfg.moe_every_n_layers) || 0;
+      const encMoe = encExperts > 1 && encMoeEvery > 0 && i % encMoeEvery === 1;
       components.push({
         id: ffId,
-        type: gatedKind ?? "feedForward",
-        name: `FFN_${i + 1}`,
+        type: encMoe ? "moeLayer" : gatedKind ?? "feedForward",
+        name: encMoe ? `MoE_${i + 1}` : `FFN_${i + 1}`,
         position: { x: xPos, y: layerStartY + componentSpacing * 3 },
-        params: gatedKind === "swiglu" ? { embedDim: hiddenSize, dim: hiddenSize, intermediateSize } : gatedKind === "geglu" ? { dim: hiddenSize, hiddenDim: intermediateSize } : {
+        params: encMoe ? { embedDim: hiddenSize, numExperts: encExperts, expertDim: intermediateSize, topK: Number(encCfg.moe_top_k) || 2, gatedExperts: gatedKind != null } : gatedKind === "swiglu" ? { embedDim: hiddenSize, dim: hiddenSize, intermediateSize } : gatedKind === "geglu" ? { dim: hiddenSize, hiddenDim: intermediateSize } : {
           hiddenDim: hiddenSize,
           ffDim: intermediateSize
         },
