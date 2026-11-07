@@ -73,7 +73,7 @@ describe('model_changes', () => {
     vi.stubGlobal('fetch', feedFetch());
     const fp8 = await call({ hf_id: 'Qwen/Qwen3-8B-FP8' });
     expect(fp8.weights.vsBase.verdict).toBe('requantized');
-    expect(fp8.weights.vsBase.unquantized).toEqual({ direction: 'quantized', layersReencoded: 252, tensors: 147, identical: 147, cast: 0, changedSameDtype: 0 });
+    expect(fp8.weights.vsBase.unquantized).toEqual({ direction: 'quantized', layersReencoded: 252, tensors: 147, identical: 147, cast: 0, changedSameDtype: 0, changedKinds: null });
     const awq = await call({ hf_id: 'Qwen/Qwen2.5-7B-Instruct-AWQ' });
     expect(awq.weights.vsBase.unquantized).toMatchObject({ tensors: 59, identical: 0, cast: 59, changedSameDtype: 0 });
     expect(awq.weights.vsBase.casts).toEqual(['BF16>F16']);
@@ -81,7 +81,8 @@ describe('model_changes', () => {
     const vit = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });
     expect(vit.weights.vsBase.unquantized).toBeNull();
     const conv = await call({ hf_id: 'nvidia/MiniMax-M2.5-NVFP4' });
-    expect(conv.weights.vsBase.unquantized).toEqual({ direction: 'converted', layersReencoded: 47864, tensors: 375, identical: 251, cast: 124, changedSameDtype: 0 });
+    expect(conv.weights.vsBase.unquantized).toEqual({ direction: 'converted', layersReencoded: 47864, tensors: 375, identical: 251, cast: 124, changedSameDtype: 0, changedKinds: null });
+    expect(awq.weights.vsBase.unquantized.changedKinds).toEqual({});
   });
 
   it('an untracked model is not "no change"', async () => {

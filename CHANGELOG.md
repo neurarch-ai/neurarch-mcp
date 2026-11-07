@@ -6,6 +6,12 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `weights.vsBase.unquantized.changedKinds`: the kinds, read from tensor names, of
+  the unquantized tensors that changed at the same dtype (neurarch #487), e.g.
+  `{ "norm": 72 }` for an AWQ build whose scales were folded into the norms.
+  `null` on feeds that predate it.
+
 ### Changed
 - `check_serving_config` reads the thinking flag and `presence_penalty`
   (neurarch #472, #474). `--default-chat-template-kwargs` is no longer ignored,
