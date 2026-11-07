@@ -59,7 +59,7 @@ interface WeightRow {
   /** neurarch #463: changed tensors that also changed dtype, and the dtype pairs. */
   recast?: number; casts?: string[];
   /** neurarch #463: one side stores some layers quantized; those are counted apart. */
-  requant?: { direction: 'quantized' | 'dequantized' | 'converted'; layers: number; kept: number; keptChanged: number; keptRecast: number };
+  requant?: { direction: 'quantized' | 'dequantized' | 'converted'; layers: number; kept: number; keptChanged: number; keptRecast: number; keptChangedKinds?: Record<string, number> };
 }
 interface WeightsFile { models: WeightRow[] }
 
@@ -140,6 +140,8 @@ export function weightsFor(id: string, w: WeightsFile | null) {
         direction: self.requant.direction, layersReencoded: self.requant.layers, tensors: self.requant.kept,
         identical: self.requant.kept - self.requant.keptChanged, cast: self.requant.keptRecast,
         changedSameDtype: self.requant.keptChanged - self.requant.keptRecast,
+        // By tensor name (norm, embedding, head, bias, router, other); null on feeds before neurarch #487.
+        changedKinds: self.requant.keptChangedKinds ?? null,
       } : null,
     } : null,
     derivatives,
