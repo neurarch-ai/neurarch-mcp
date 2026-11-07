@@ -7,6 +7,11 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- Engine refreshed from neurarch main (#492): nomic-embed-text-v2-moe is a plain
+  gelu MLP with 8 experts on every second layer, 305.3M to 475.3M against
+  475.29M published.
+
+### Changed
 - Engine and plan bundles refreshed from neurarch main (#488): a rotary-gated
   encoder whose attention is not hidden-wide (jina-embeddings-v5-text-small, a
   Qwen3 backbone) is sized from heads, head_dim and KV heads, 537.4M to 596.0M
