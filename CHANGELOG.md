@@ -6,6 +6,12 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Engine and plan bundles refreshed from neurarch main (#488): a rotary-gated
+  encoder whose attention is not hidden-wide (jina-embeddings-v5-text-small, a
+  Qwen3 backbone) is sized from heads, head_dim and KV heads, 537.4M to 596.0M
+  against 596.05M published.
+
 ### Added
 - `weights.vsBase.unquantized.changedKinds`: the kinds, read from tensor names, of
   the unquantized tensors that changed at the same dtype (neurarch #487), e.g.
