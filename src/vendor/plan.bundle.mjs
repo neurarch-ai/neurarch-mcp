@@ -14436,21 +14436,35 @@ var TOOL = {
   type: "function",
   function: { name: "get_weather", description: "Current weather for a city.", parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] } }
 };
+var TOOL_RESULT = '{"temp_c": 18}';
+var TOOL_MARK = "temp_c";
+var USER_TEXT = "Hello from parts.";
 var CASES = [
   { name: "user", messages: [{ role: "user", content: "Hello." }], tools: null },
+  { name: "user-parts", messages: [{ role: "user", content: [{ type: "text", text: USER_TEXT }] }], tools: null },
   { name: "system+multi-turn", messages: [{ role: "system", content: "Be brief." }, { role: "user", content: "Name a prime." }, { role: "assistant", content: "Seven." }, { role: "user", content: "Another." }], tools: null },
   {
     name: "tools",
     messages: [
       { role: "user", content: "Weather in Paris?" },
       { role: "assistant", content: "", tool_calls: [{ id: "call00001", type: "function", function: { name: "get_weather", arguments: { city: "Paris" } } }] },
-      { role: "tool", tool_call_id: "call00001", name: "get_weather", content: '{"temp_c": 18}' }
+      { role: "tool", tool_call_id: "call00001", name: "get_weather", content: TOOL_RESULT }
+    ],
+    tools: [TOOL]
+  },
+  {
+    name: "tools-parts",
+    messages: [
+      { role: "user", content: "Weather in Paris?" },
+      { role: "assistant", content: "", tool_calls: [{ id: "call00001", type: "function", function: { name: "get_weather", arguments: { city: "Paris" } } }] },
+      { role: "tool", tool_call_id: "call00001", name: "get_weather", content: [{ type: "text", text: TOOL_RESULT }] }
     ],
     tools: [TOOL]
   }
 ];
 function checkTemplatePortability(template, specials = {}) {
-  const out = { renderer: PORTABILITY_RENDERER, parsed: true, undefinedCalls: undefinedCalls(template), cases: [] };
+  const out = { renderer: PORTABILITY_RENDERER, parsed: true, undefinedCalls: undefinedCalls(template), cases: [], toolResultDropped: null };
+  const rendered = {};
   let t;
   try {
     t = new Template(template);
@@ -14459,7 +14473,7 @@ function checkTemplatePortability(template, specials = {}) {
   }
   for (const c of CASES) {
     try {
-      t.render({
+      rendered[c.name] = t.render({
         messages: structuredClone(c.messages),
         tools: c.tools ? structuredClone(c.tools) : null,
         documents: null,
@@ -14474,6 +14488,9 @@ function checkTemplatePortability(template, specials = {}) {
       out.cases.push({ case: c.name, ok: false, raised, message });
     }
   }
+  const partsAware = rendered["user-parts"]?.includes(USER_TEXT) ?? false;
+  if (partsAware && rendered.tools?.includes(TOOL_MARK) && rendered["tools-parts"] !== void 0) out.toolResultDropped = !rendered["tools-parts"].includes(TOOL_MARK);
+  else if (rendered["user-parts"] !== void 0 && rendered.tools !== void 0 && rendered["tools-parts"] !== void 0 && rendered.tools.includes(TOOL_MARK)) out.toolResultDropped = false;
   return out;
 }
 function specialTokenText(v) {
@@ -15263,7 +15280,7 @@ var SERVE_VALIDATION = {
   mmLogs: 10,
   mmKvMedian: 5.96
 };
-var SERVE_BASIS = `Predicted from config.json, the engine flags and the card, not measured. Memory follows each engine's own arithmetic, ported from its source (vLLM's KV cache groups and blocks, SGLang's mem_fraction_static formula, llama.cpp's sliding-window cells); the terms an engine measures at startup (vLLM's activation peak, non-torch memory and CUDA graph pool) are estimates and are marked as such. Checked against vLLM's own logged numbers: ${SERVE_VALIDATION.llmdRuns} llm-d-planner H100 runs, KV memory mean absolute error ${SERVE_VALIDATION.llmdKvMae}% (in-sample for one fitted factor); given the KV memory vLLM logged, ${SERVE_VALIDATION.poolLogs} public logs, token count ${SERVE_VALIDATION.poolTokensMae}% and concurrency ${SERVE_VALIDATION.poolConcMae}%; end to end on ${SERVE_VALIDATION.e2eLogs} public logs, median ${SERVE_VALIDATION.e2eKvMedian}% with outliers past 100%; vision-language launches end to end on ${SERVE_VALIDATION.mmLogs} public logs, median ${SERVE_VALIDATION.mmKvMedian}%; the CUDA graph term against the estimate vLLM printed, ${SERVE_VALIDATION.graphLogs} held-out public logs, mean absolute error ${SERVE_VALIDATION.graphMaeGib} GiB (scripts/serve-check-validation.ts). Template checks read files and render three fixed conversations with @huggingface/jinja to find calls the template never defines; they cannot prove two stacks produce the same prompt.`;
+var SERVE_BASIS = `Predicted from config.json, the engine flags and the card, not measured. Memory follows each engine's own arithmetic, ported from its source (vLLM's KV cache groups and blocks, SGLang's mem_fraction_static formula, llama.cpp's sliding-window cells); the terms an engine measures at startup (vLLM's activation peak, non-torch memory and CUDA graph pool) are estimates and are marked as such. Checked against vLLM's own logged numbers: ${SERVE_VALIDATION.llmdRuns} llm-d-planner H100 runs, KV memory mean absolute error ${SERVE_VALIDATION.llmdKvMae}% (in-sample for one fitted factor); given the KV memory vLLM logged, ${SERVE_VALIDATION.poolLogs} public logs, token count ${SERVE_VALIDATION.poolTokensMae}% and concurrency ${SERVE_VALIDATION.poolConcMae}%; end to end on ${SERVE_VALIDATION.e2eLogs} public logs, median ${SERVE_VALIDATION.e2eKvMedian}% with outliers past 100%; vision-language launches end to end on ${SERVE_VALIDATION.mmLogs} public logs, median ${SERVE_VALIDATION.mmKvMedian}%; the CUDA graph term against the estimate vLLM printed, ${SERVE_VALIDATION.graphLogs} held-out public logs, mean absolute error ${SERVE_VALIDATION.graphMaeGib} GiB (scripts/serve-check-validation.ts). Template checks read files and render four fixed conversations with @huggingface/jinja (one passes the tool result as content parts, the form vLLM and SGLang use) to find calls the template never defines and tool results it drops; they cannot prove two stacks produce the same prompt.`;
 var SERVE_BASIS_UPPER_BOUND = "The config gave no layer geometry, so memory was sized from the graph alone: the engine's reserve (activation profiling, CUDA graphs, communication buffers) is not counted and the card's nominal GB is used, so every KV capacity and concurrency here is an upper bound.";
 var CARD_SM = {
   "b200": 100,
@@ -17679,6 +17696,17 @@ function checkServeConfig(input) {
           title: port.parsed ? `A non-Python Jinja renderer (${port.renderer}) could not render the ${bad.map((c) => c.case).join(", ")} case` : `A non-Python Jinja renderer (${port.renderer}) could not parse the template`,
           detail: `${port.parsed ? bad.map((c) => `${c.case}: ${c.message}`).join("; ") : port.parseError}. llama.cpp's --jinja renderer is another Jinja subset; this is a sign the template leans on a Python-only filter or construct, not proof llama.cpp fails.`,
           fix: "Render a request of this shape once against the llama.cpp server before routing traffic, or pass --chat-template-file with a template that avoids the construct."
+        });
+      }
+      if (!lc && port.toolResultDropped) {
+        add({
+          rule: "template-tool-parts-dropped",
+          area: "template",
+          severity: "warn",
+          title: "The template drops a tool result that arrives as a list of content parts",
+          detail: `This template reads content parts for user turns, so vLLM's content-format auto-detection hands it parts, and SGLang does the same; its tool branch only writes a string. Rendered with ${port.renderer}, the tool result appears in the string form and is missing in the parts form, so the model never sees tool output and re-issues the same call. GLM-5.1 shipped this way until its 2026-04-16 template commit, which Z.ai asked every vLLM and SGLang deployment to pull; the Qwen3 family's 2025-05-19 tokenizer_config.json commit made the parts form render empty.`,
+          fix: engine === "vllm" ? "Pass --chat-template-content-format string so vLLM hands the template a string, or pin a template revision whose tool branch handles content parts." : "Pin a template revision whose tool branch handles content parts, or configure the engine to pass tool content as a string.",
+          source: "huggingface.co/zai-org/GLM-5.1/discussions/26"
         });
       }
       const thinking = /<think>|enable_thinking|reasoning_content/.test(effTemplate);
