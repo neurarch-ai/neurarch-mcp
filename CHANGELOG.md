@@ -6,6 +6,19 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.8] - 2026-11-12
+
+### Added
+- `check_serving_config` (and the pre-launch hook) flag a chat template that
+  drops a tool result arriving as a list of content parts, the form vLLM and
+  SGLang pass (`warn:template-tool-parts-dropped`, neurarch #506). The check
+  renders the template on four fixed conversations; it fires only when the
+  template reads parts for user turns (so vLLM's auto-detection hands it parts),
+  shows the tool result as a string and loses it as parts. Verified on
+  zai-org/GLM-5.1: the 2026-04-04 template is flagged, the 2026-04-16 fix that
+  Z.ai asked every vLLM and SGLang deployment to pull is clear. Fix text names
+  `--chat-template-content-format string` for vLLM.
+
 ### Changed
 - Engine refreshed from neurarch main (#492): nomic-embed-text-v2-moe is a plain
   gelu MLP with 8 experts on every second layer, 305.3M to 475.3M against
