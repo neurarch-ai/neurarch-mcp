@@ -51,6 +51,22 @@ describe('model_changes', () => {
     expect(down.changes).toHaveLength(2); // the change list still answers
   });
 
+  it('conformance: the engine verdict for the model, not-checked when absent, null when the feed cannot be read', async () => {
+    vi.stubGlobal('fetch', feedFetch());
+    const glm = await call({ hf_id: 'zai-org/GLM-5' });
+    expect(glm.conformance.verdict).toBe('different');
+    expect(glm.conformance.different[0].case).toBe('tool-call');
+    expect(glm.conformance.note).toMatch(/not run on an engine/);
+    const qwen = await call({ hf_id: 'Qwen/Qwen3-8B' });
+    expect(qwen.conformance.verdict).toBe('same');
+    const demo = await call({ hf_id: 'acme/demo' });
+    expect(demo.conformance.verdict).toBeNull();
+    expect(demo.conformance.sentence).toMatch(/^Not checked/);
+    clearChangeCache();
+    vi.stubGlobal('fetch', feedFetch({ fail: true }));
+    await expect(call({ hf_id: 'acme/demo' })).rejects.toThrow();
+  });
+
   it('weights: a derivative against its declared base, a base\'s tracked derivatives, and nothing claimed when unread', async () => {
     vi.stubGlobal('fetch', feedFetch());
     const d = await call({ hf_id: 'ISxOdin/vit-base-oxford-iiit-pets' });

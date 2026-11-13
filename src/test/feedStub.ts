@@ -46,6 +46,15 @@ export const WEIGHTS = {
   ],
 };
 
+/** Shape of /changes-feeds/conformance.json (neurarch #514); the GLM-5 row is copied from the live feed on 2026-11-13. */
+export const CONFORMANCE = {
+  what: 'stub',
+  models: [
+    { id: 'zai-org/GLM-5', sha: 'g', form: 'parts', verdict: 'different', different: [{ case: 'tool-call', at: 811, reference: '"|><tool_response>{\\"temp_c\\": 18}</tool_response><|assistant|>"', engine: '"|><tool_response>{\\"type\\": \\"text\\", \\"text\\": \\"{\\\\\\"temp_c"' }], readAt: '2026-11-13T00:00:00.000Z', sentence: 'vLLM and SGLang hand this template message content as text parts, and the prompt it renders differs from the reference on: tool-call.' },
+    { id: 'Qwen/Qwen3-8B', sha: 'b968826d9c46dd6066d109eabc6255188de91218', form: 'string', verdict: 'same', different: [], readAt: '2026-11-13T00:00:00.000Z', sentence: 'This template reads message content as a string, so vLLM and SGLang hand it strings and send the reference prompt on the three fixed conversations.' },
+  ],
+};
+
 const RELEASES: Record<string, unknown> = {
   'Qwen/Qwen3-8B': {
     changelogUrl: `${BASE}/models/Qwen/Qwen3-8B.html`,
@@ -87,6 +96,7 @@ export function feedFetch(opts: { delayMs?: number; fail?: boolean } = {}): Feed
     if (url === `${BASE}/advisories/index.json`) return json(INDEX);
     if (url === 'https://www.neurarch.com/changes/lineage.json') return json(LINEAGE);
     if (url === `${BASE}/lineage.json`) return json(WEIGHTS);
+    if (url === `${BASE}/conformance.json`) return json(CONFORMANCE);
     const rel = /\/renovate\/(.+)\.json$/.exec(url);
     if (rel) return RELEASES[rel[1]] ? json(RELEASES[rel[1]]) : json({ error: 'not found' }, 404);
     const adv = /\/advisories\/(x_NXMC-[\d-]+)\.json$/.exec(url);

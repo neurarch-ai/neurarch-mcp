@@ -6,6 +6,19 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.10] - 2026-11-13
+
+### Added
+- `model_changes.conformance`: whether the prompt vLLM and SGLang send (message
+  content as text parts when the template reads parts) matches the reference
+  prompt at the head the record read, with the first difference per
+  conversation (neurarch #514, #515). Checked against vLLM 0.33.0 on
+  2026-11-13 for every model then marked different. `null` when the feed cannot
+  be read; `verdict: null` for a model with no template or GGUF only.
+- `check_serving_config` notes a template that writes a fixed date unless
+  `date_string` is passed, as Llama 3.1's does (`info:template-date-fallback`,
+  neurarch #512).
+
 ## [0.21.9] - 2026-11-13
 
 ### Added
