@@ -15681,6 +15681,8 @@ function parseServeCommand(cmd, engineHint) {
       setNum("maxNumBatchedTokens", get("--max-num-batched-tokens"), readTokenCount);
       if (has("--enforce-eager")) args.enforceEager = true;
       setNum("blockSize", get("--block-size"));
+      const pins = { revision: get("--revision"), codeRevision: get("--code-revision"), tokenizerRevision: get("--tokenizer-revision") };
+      if (pins.revision || pins.codeRevision || pins.tokenizerRevision) args.revisionPins = Object.fromEntries(Object.entries(pins).filter(([, v]) => v));
       setNum("kvCacheMemoryBytes", get("--kv-cache-memory-bytes"), readHumanBytes);
       const lim = get("--limit-mm-per-prompt");
       if (lim != null) {
@@ -17720,6 +17722,32 @@ function checkServeConfig(input) {
           fix: `Add --reasoning-parser ${/qwen3/i.test(ident) ? "qwen3" : /deepseek/i.test(ident) ? "deepseek_r1" : "<family>"}.`
         });
       }
+    }
+  }
+  if (engine === "vllm" && args.revisionPins && givenVersion) {
+    checked.push("revision-pin");
+    const archs = Array.isArray(input.config?.architectures) ? input.config.architectures.map(String) : [];
+    const residualArch = archs.find((a) => /^(FunAudioChat|Tarsier2)/.test(a));
+    if (!vAtLeast(givenVersion, [0, 22, 0])) {
+      add({
+        rule: "revision-pin-leak",
+        area: "template",
+        severity: "warn",
+        title: `${versionLabel} does not apply the --revision pin to every file it loads`,
+        detail: "Before 0.22.0, vLLM resolved dynamic code, image processors, GGUF files, side weights and same-repository subfolder config from the repository's default revision even when --revision or --code-revision was set. A later push to the default branch can change what this deployment loads without changing the pin, so the pin is not an audit record of what runs.",
+        fix: "Upgrade to vLLM 0.22.0 or newer, or serve from a local snapshot downloaded at the pinned revision (hf download <repo> --revision <sha> --local-dir ...).",
+        source: "github.com/vllm-project/vllm/security/advisories/GHSA-3ww4-5jv9-j5gm"
+      });
+    } else if (residualArch && vAtLeast(givenVersion, [0, 22, 1]) && !vAtLeast(givenVersion, [0, 28, 0])) {
+      add({
+        rule: "revision-pin-leak",
+        area: "template",
+        severity: "warn",
+        title: `${versionLabel} loads part of ${residualArch} outside the --revision pin`,
+        detail: "From 0.22.1 to before 0.28.0 the FunAudioChat processor and tokenizer and the Tarsier2 config are still read from the repository's default revision, so a later default-branch change can alter preprocessing or config under a pinned deployment.",
+        fix: "Upgrade to vLLM 0.28.0 or newer, or serve from a local snapshot downloaded at the pinned revision.",
+        source: "github.com/vllm-project/vllm/security/advisories/GHSA-hhv2-872h-628q"
+      });
     }
   }
   if (!lc && args.enableAutoToolChoice && !args.toolCallParser) {

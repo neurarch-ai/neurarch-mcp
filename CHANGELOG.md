@@ -6,6 +6,16 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.21.9] - 2026-11-13
+
+### Added
+- `check_serving_config` (and the pre-launch hook) warn `revision-pin-leak` when
+  a vLLM launch pins `--revision`, `--code-revision` or `--tokenizer-revision`
+  on a version that does not honour the pin for every file it loads (neurarch
+  #511): before 0.22.0 per GHSA-3ww4-5jv9-j5gm (CVE-2026-47155), and from
+  0.22.1 to before 0.28.0 for FunAudioChat and Tarsier2 per GHSA-hhv2-872h-628q
+  (CVE-2026-100653). Only when an engine version is given.
+
 ## [0.21.8] - 2026-11-12
 
 ### Added
