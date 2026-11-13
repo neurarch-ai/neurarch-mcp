@@ -17711,6 +17711,19 @@ function checkServeConfig(input) {
           source: "huggingface.co/zai-org/GLM-5.1/discussions/26"
         });
       }
+      const dateFallback = effTemplate.match(/set\s+date_string\s*=\s*["']([^"']{4,40})["']/);
+      const datePassed = args.chatTemplateKwargs && "date_string" in args.chatTemplateKwargs;
+      if (dateFallback && !datePassed) {
+        const usesClock = /strftime_now/.test(effTemplate);
+        add({
+          rule: "template-date-fallback",
+          area: "template",
+          severity: "info",
+          title: `The template writes a fixed date ("${dateFallback[1]}") unless date_string is passed`,
+          detail: usesClock ? `It calls strftime_now when the renderer provides it and falls back to "${dateFallback[1]}" when it does not, so the date the model sees depends on the engine.` : `It never reads the clock: every request that does not pass date_string tells the model today is ${dateFallback[1]}.`,
+          fix: lc ? "Pass date_string in the request's chat template kwargs, or --chat-template-file with a template that reads the date." : `Pass date_string per request in chat_template_kwargs${engine === "vllm" ? ", or set it with --default-chat-template-kwargs" : ""}.`
+        });
+      }
       const thinking = /<think>|enable_thinking|reasoning_content/.test(effTemplate);
       if (thinking && !lc && !args.reasoningParser) {
         add({

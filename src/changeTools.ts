@@ -70,7 +70,10 @@ let lineageCache: { at: number; url: string; data: LineageFile | null } | null =
 let weightsCache: { at: number; url: string; data: WeightsFile | null } | null = null;
 
 /** For tests: forget the cached index. */
-export function clearChangeCache(): void { indexCache = null; lineageCache = null; weightsCache = null; }
+interface ConformanceRow { id: string; sha: string; form: 'string' | 'parts'; verdict: 'same' | 'different' | 'unrendered'; different: { case: string; at: number; reference: string; engine: string }[]; readAt: string; sentence: string }
+interface ConformanceFeed { what?: string; models: ConformanceRow[] }
+let conformanceCache: { at: number; url: string; data: ConformanceFeed | null } | null = null;
+export function clearChangeCache(): void { indexCache = null; lineageCache = null; weightsCache = null; conformanceCache = null; }
 
 /** `/changes/lineage.json` on the same host as the feeds. */
 export function lineageUrl(): string {
@@ -95,6 +98,37 @@ async function lineageFile(ctx: ToolContext): Promise<LineageFile | null> {
   }
   lineageCache = { at: Date.now(), url, data };
   return data;
+}
+
+
+/**
+ * Engine conformance (`/changes-feeds/conformance.json`, neurarch #514): does
+ * the prompt vLLM and SGLang send match the reference prompt at the head the
+ * record read. Supplementary like weights: unreachable leaves it null.
+ */
+async function conformanceFile(ctx: ToolContext): Promise<ConformanceFeed | null> {
+  const url = `${feedsBase()}/conformance.json`;
+  if (conformanceCache && conformanceCache.url === url && Date.now() - conformanceCache.at < INDEX_TTL_MS) return conformanceCache.data;
+  let data: ConformanceFeed | null = null;
+  try {
+    data = await getJson<ConformanceFeed>(url, ctx, true);
+    if (data && !Array.isArray(data.models)) data = null;
+  } catch (e) {
+    if (ctx.signal?.aborted) throw e;
+    data = null;
+  }
+  conformanceCache = { at: Date.now(), url, data };
+  return data;
+}
+
+const CONFORMANCE_CAVEAT = 'Rendered from the template at the head named, not run on an engine: the engine side is the template given message content as text parts, which is what vLLM\'s auto content-format detection passes to a template that reads parts. same holds for a system+user turn, a multi-turn chat and a tool call, not every input. Reproduce: npx neurarch template-check <id> --engine vllm.';
+
+/** The engine-conformance verdict for one model, or null when the feed is unreachable. */
+export function conformanceFor(id: string, c: ConformanceFeed | null) {
+  if (c == null) return null;
+  const hit = c.models.find(m => m.id.toLowerCase() === id.toLowerCase());
+  if (!hit) return { verdict: null, sentence: 'Not checked: no chat template at the head the record read, a GGUF-only repository, or an untracked model.', note: CONFORMANCE_CAVEAT };
+  return { verdict: hit.verdict, sentence: hit.sentence, sha: hit.sha, form: hit.form, different: hit.different, readAt: hit.readAt, note: CONFORMANCE_CAVEAT };
 }
 
 /**
@@ -200,7 +234,9 @@ export const modelChangesTool: ToolDef = {
     + 'quantization, a licence outside the base\'s family): statements about the card and tags. weights compares the '
     + 'model\'s tensors to its declared base by sha256 fingerprint (identical, head-only, sparse, full, recast, '
     + 'requantized (including a conversion between two quantized encodings), different-structure, with counts; a quantization is judged on the tensors it left unquantized) and lists tracked derivatives when the model is itself a base: which tensors '
-    + 'changed, never what that does to behaviour. Not for scanning your code for unpinned downloads: use check_pins. '
+    + 'changed, never what that does to behaviour. conformance says whether the prompt vLLM and SGLang send (message content as '
+    + 'text parts when the template reads parts) matches the reference prompt at the head the record read, with the first difference per '
+    + 'conversation. Not for scanning your code for unpinned downloads: use check_pins. '
     + 'Reaches the network: GETs public files from www.neurarch.com; no key, nothing about your code is sent.',
   modelOptional: true,
   annotations: { openWorldHint: true, idempotentHint: true },
@@ -227,8 +263,9 @@ export const modelChangesTool: ToolDef = {
     await ctx.progress?.(1, 3, `reading the revision list for ${id}`);
     const releases = await getJson<Releases>(`${feedsBase()}/renovate/${id}.json`, ctx, true);
     await ctx.progress?.(2, 3, 'reading the lineage and weight records');
-    const [lin, wf] = await Promise.all([lineageFile(ctx), weightsFile(ctx)]);
+    const [lin, wf, cf] = await Promise.all([lineageFile(ctx), weightsFile(ctx), conformanceFile(ctx)]);
     const weights = weightsFor(id, wf);
+    const conformance = conformanceFor(id, cf);
     await ctx.progress?.(3, 3);
     const linHit = lin?.findings.find(f => f.id.toLowerCase() === id.toLowerCase());
     // null: the record could not be read, so nothing is claimed either way.
@@ -253,6 +290,7 @@ export const modelChangesTool: ToolDef = {
         nextCursor: null,
         lineage,
         weights,
+        conformance,
         changelog,
         license: index.license ?? 'CC-BY-4.0',
         basis: 'Neurarch model change record. A model is recorded only once it is tracked.',
@@ -298,6 +336,7 @@ export const modelChangesTool: ToolDef = {
       nextCursor: page.nextCursor,
       lineage,
       weights,
+      conformance,
       changelog,
       license: index.license ?? 'CC-BY-4.0',
       basis: 'Neurarch model change record (OSV format). It says what a revision does mechanically, not that anything broke for anyone.',
