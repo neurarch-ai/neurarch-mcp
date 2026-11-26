@@ -13,6 +13,7 @@ import { LEDGER_TOOLS } from './ledgerTools.js';
 import { PROMPTS } from './prompts.js';
 import { runLintCommand, runCheckCommand } from './commands.js';
 import { runHookCommand, readStdin } from './hook.js';
+import { runEditHook } from './editHook.js';
 import { flushCorpusReports } from './lib/corpusReport.js';
 import {
   startHttpServer,
@@ -34,6 +35,9 @@ Usage:
   npx neurarch-mcp check <model>    [--json]     print the full verdict, exit 1 on a block
   npx neurarch-mcp hook [--hf]                   Claude Code PreToolUse hook: reads the hook JSON on stdin,
                                                  exit 2 when a training launch will not fit its card
+  npx neurarch-mcp hook --edit                   Claude Code PostToolUse hook: after an edit to a file that
+                                                 names a model or a serving launch, runs \`neurarch gate\` on
+                                                 it; exit 2 with the reasons when the gate refuses
   npx neurarch-mcp --http [--host=0.0.0.0]       serve with no model; callers pass model_path or model_source
   npx neurarch-mcp --hosted                      the same over stdio (a container with nothing mounted)
 
@@ -174,7 +178,9 @@ async function main(): Promise<void> {
     console.error = () => undefined;
     let code = 0;
     try {
-      code = await runHookCommand(await readStdin(), { out: () => undefined, err: (t: string) => process.stderr.write(t) });
+      code = process.argv.includes('--edit')
+        ? await runEditHook(await readStdin(), { out: (t: string) => process.stdout.write(t), err: (t: string) => process.stderr.write(t) })
+        : await runHookCommand(await readStdin(), { out: () => undefined, err: (t: string) => process.stderr.write(t) });
     } catch {
       code = 0;
     }
