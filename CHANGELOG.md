@@ -6,6 +6,18 @@ All notable changes to `neurarch-mcp` are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-11-26
+
+### Added
+- `hook --edit`: a Claude Code PostToolUse hook for Edit, MultiEdit and Write.
+  When the edited file names a Hugging Face model or a serving launch, it runs
+  `neurarch gate` on that file (the same command a pull request runs): a refusal
+  comes back to the agent as exit 2 with the findings that decided it, a review
+  as `additionalContext`, an admit as silence. Fails open on everything;
+  `NEURARCH_ALLOW_EDIT=1` turns it off. The plugin's `hooks/hooks.json` installs
+  it next to the Bash hook (#69). The refusal of a launch with no card needs
+  `neurarch` 0.5.1 or later.
+
 ## [0.21.10] - 2026-11-13
 
 ### Added
