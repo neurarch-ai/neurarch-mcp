@@ -42,7 +42,7 @@ export interface ParsedFlags {
   unknownFlags: string[];
 }
 
-const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--toolsets', '--read-only', '--json', '--hosted']);
+const KNOWN_FLAGS = new Set(['--version', '-v', '--help', '-h', '--edit', '--write', '--watch', '--http', '--host', '--hf', '--tools', '--toolsets', '--read-only', '--json', '--hosted']);
 
 /**
  * Groups `--toolsets=` can name, the way the GitHub and Sentry servers split

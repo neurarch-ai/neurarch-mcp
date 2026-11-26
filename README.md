@@ -320,6 +320,38 @@ neurarch: this vLLM launch has 2 blocking findings for Qwen/Qwen3-8B.
   TP 3 does not divide 32 attention heads.
 ```
 
+### A Claude Code hook: check the file the agent just edited
+
+`neurarch-mcp hook --edit` is a [PostToolUse hook](https://docs.claude.com/en/docs/claude-code/hooks) for file edits. After an Edit, MultiEdit or Write to a file that names a Hugging Face model or a serving launch (a `from_pretrained` call, a `vllm serve` line, a KServe `storageUri`, an `hf://` address), it runs [`neurarch gate`](https://www.npmjs.com/package/neurarch) on that one file, the same command a pull request runs, and hands the verdict back while the agent still has the file open:
+
+- **refuse**: exit 2 with the reasons, which Claude Code shows the agent as feedback, so it fixes the file in the same turn;
+- **review**: the findings to read, as context, without stopping anything;
+- **admit**: nothing.
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          { "type": "command", "command": "npx -y neurarch-mcp hook --edit", "timeout": 120 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+```text
+(agent edits serve.sh to: vllm serve Qwen/Qwen2.5-7B-Instruct -tp 8 --max-model-len 131072)
+neurarch gate refuses serve.sh as edited (2 launch blockers). The pull request's gate will refuse it too:
+- vllm serve Qwen/Qwen2.5-7B-Instruct -tp 8 --max-model-len 131072: TP 8 does not divide 28 attention heads
+- vllm serve Qwen/Qwen2.5-7B-Instruct -tp 8 --max-model-len 131072: Served length 131072 is past the model's 32768-token context
+```
+
+The refusal above needs `neurarch` 0.5.1 or later, which checks a launch's layout and context when no card is given; `npx -y neurarch` fetches the newest. It fails open like the Bash hook: a file that names no model, a gate it cannot run, a timeout or any error is silence. `NEURARCH_ALLOW_EDIT=1` turns it off. The plugin below installs it.
+
 ### Claude Code plugin
 
 The server, the hook above and the [skill](./skills/neurarch-skill/SKILL.md) install together as one Claude Code plugin. This repository is its marketplace:
